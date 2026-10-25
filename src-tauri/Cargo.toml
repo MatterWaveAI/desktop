@@ -1,0 +1,48 @@
+[package]
+name = "matterwave-desktop"
+version = "0.1.0"
+description = "MatterWave desktop: the web app in a native window, signed in through the system browser"
+edition = "2021"
+publish = false
+
+[lib]
+# The staticlib/cdylib pair is what Tauri's mobile targets link; rlib is what
+# `cargo test` and main.rs use.
+name = "matterwave_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-deep-link = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-notification = "2"
+# On Windows and Linux a deep link starts a second process; this hands its URL
+# to the running one, which is the one waiting for the sign-in callback.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Native stores only: Keychain, Credential Manager, Secret Service. Without a
+# platform feature keyring 3 falls back to an in-memory mock, which would
+# silently sign the person out on every restart.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+# Native roots, not a bundled list: the dev gateway signs with its own CA,
+# which is trusted by installing it in the OS store, not by a code change.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+url = "2"
+open = "5"
+tokio = { version = "1", features = ["net", "io-util", "time", "sync", "macros"] }
+
+[dev-dependencies]
+# The sign-in test runs a fake issuer on loopback inside its own runtime.
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
