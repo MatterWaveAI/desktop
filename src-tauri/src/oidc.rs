@@ -1,7 +1,7 @@
 //! The native OIDC client: discovery from the API, then the token endpoint.
 //!
 //! The client id and endpoints come from `/api/auth-config` rather than the
-//! build, so a Zitadel re-provision changes nothing on installed machines.
+//! build, so a the identity provider re-provision changes nothing on installed machines.
 
 use crate::tokens::{parse_token_response, TokenError, TokenSet};
 use serde::Deserialize;
@@ -66,7 +66,7 @@ impl NativeClient {
     }
 }
 
-/// Zitadel serves revoke beside token (`/oauth/v2/token` -> `/oauth/v2/revoke`);
+/// the identity provider serves revoke beside token (`/oauth/v2/token` -> `/oauth/v2/revoke`);
 /// the API's auth-config does not list it yet, and a sign-out that cannot
 /// revoke leaves a live refresh token behind.
 fn sibling_revoke(token_endpoint: &str) -> Option<String> {

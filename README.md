@@ -22,7 +22,7 @@ All platforms: Rust (stable, `rustup`), Node 22, pnpm 10.
 ```
 cd clients/desktop
 pnpm install
-MW_DESKTOP_BASE_URL=https://app.example.com pnpm tauri dev   # the API to sign in against
+MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri dev   # the API to sign in against
 ```
 
 `tauri dev` starts the web dev server (`pnpm --dir ../../web dev`) and points the window at it, so
@@ -49,8 +49,8 @@ policy is refusing to run what it just produced.
 ## Build
 
 ```
-MW_DESKTOP_BASE_URL=https://app.example.com pnpm build          # release bundle for this OS
-MW_DESKTOP_BASE_URL=https://app.example.com pnpm tauri build --debug
+MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm build          # release bundle for this OS
+MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri build --debug
 ```
 
 `build:web` runs first (`pnpm --dir ../../web build`) and the bundle takes `web/dist`. Output:
@@ -68,19 +68,19 @@ native client refuses the webview rather than half-working.
 1. The SPA's `/login` page, inside the shell, offers "Sign in with your browser" and calls
    `sign_in` (`web/src/shell/LoginPage.tsx`); it never starts the browser redirect the web app
    uses, because the webview has no cookie jar for that callback to fill. The native side reads
-   `/api/auth-config` for the native Zitadel client (`native_client_id`, `authorization_endpoint`,
+   `/api/auth-config` for the native the identity provider client (`native_client_id`, `authorization_endpoint`,
    `token_endpoint`).
 2. It makes a PKCE verifier and a `state`, and opens the authorize URL in the **system browser**
    (never an embedded page: password managers and passkeys live there).
-3. Zitadel redirects to `matterwave://auth/callback`. The deep-link plugin hands the URL to the
+3. the identity provider redirects to `matterwave://auth/callback`. The deep-link plugin hands the URL to the
    running app (a second launch on Windows and Linux is folded into the first by the
    single-instance plugin). Where the scheme is not registered (a dev build on macOS, a Linux
    desktop without the `.desktop` entry), the redirect is `http://127.0.0.1:<port>/callback`
    instead, served once by a listener bound to loopback only. Both redirects are registered on
    the native client the gateway play provisions (`matterwave-desktop`,
-   `deploy/ansible/roles/zitadel/tasks/provision.yml`): the scheme as is, and the loopback as
+   `deploy/ansible/roles/the identity provider/tasks/provision.yml`): the scheme as is, and the loopback as
    `http://127.0.0.1/callback` without a port, because the port is picked by the OS per sign-in
-   and Zitadel matches loopback redirects of a native app on host and path only (RFC 8252 7.3).
+   and the identity provider matches loopback redirects of a native app on host and path only (RFC 8252 7.3).
 4. The callback's `state` is checked before its code is used; the code is exchanged with the
    verifier; access and refresh tokens go to the OS keychain (Keychain, Credential Manager,
    Secret Service). Nothing is written to a file.
@@ -88,9 +88,9 @@ native client refuses the webview rather than half-working.
    and once more when the SPA reports a 401 (one retry). A refused refresh (`invalid_grant`, for
    example a device revoked in Settings -> Sessions) clears the keychain and the app is signed out.
 
-`sign_out` revokes the refresh and access tokens at Zitadel (best effort) and clears the keychain
+`sign_out` revokes the refresh and access tokens at the identity provider (best effort) and clears the keychain
 whether or not the revoke reached it. The shell's Sign out (`web/src/shell/signOut.ts`) calls it
-and reloads the page into Boot; it never sends the webview to Zitadel's end_session, which is the
+and reloads the page into Boot; it never sends the webview to the identity provider's end_session, which is the
 browser's path and would leave the window on the IdP. `open_external` opens http(s) and mailto
 links in the system browser and refuses any other scheme.
 
