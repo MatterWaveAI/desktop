@@ -1,7 +1,7 @@
-//! The native OIDC client: discovery from the API, then the token endpoint.
+﻿//! The native OIDC client: discovery from the API, then the token endpoint.
 //!
 //! The client id and endpoints come from `/api/auth-config` rather than the
-//! build, so a the identity provider re-provision changes nothing on installed machines.
+//! build, so an identity provider re-provision changes nothing on installed machines.
 
 use crate::tokens::{parse_token_response, TokenError, TokenSet};
 use serde::Deserialize;
