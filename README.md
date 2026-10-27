@@ -1,11 +1,13 @@
 # MatterWave desktop
 
-The web app (`web/`) in a native window, built with Tauri 2. The SPA is bundled, not loaded from
-the server; the native side adds what a browser tab cannot: a sign-in that survives restarts with
-the tokens in the OS keychain, deep links (`matterwave://`), OS notifications and updates.
-Tauri rather than Electron: the installer is about 10 MB because it uses the OS webview instead
-of shipping Chromium, the renderer has no Node and its IPC is allow-listed per command, and the
-native layer (sign-in, keychain, updater, notifications, deep links) is a few hundred lines of Rust.
+The web app (`web/`, bundled in this repo) in a native window, built with Tauri 2. The SPA is
+bundled, not loaded from the server; the native side adds what a browser tab cannot: a sign-in
+that survives restarts with the tokens in the OS keychain, deep links (`matterwave://`), an OS
+notification when a reply lands while the window is unfocused, a check for updates the SPA can
+run, and a window whose size and position survive a restart. Tauri rather than Electron: the
+installer is about 10 MB because it uses the OS webview instead of shipping Chromium, the
+renderer has no Node and its IPC is allow-listed per command, and the native layer (sign-in,
+keychain, updater, notifications, deep links) is a few hundred lines of Rust.
 
 ## Prerequisites
 
@@ -20,12 +22,12 @@ All platforms: Rust (stable, `rustup`), Node 22, pnpm 10.
 ## Develop
 
 ```
-cd clients/desktop
-pnpm install
+pnpm install            # the Tauri CLI at the root
+pnpm --dir web install  # the SPA's dependencies
 MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri dev   # the API to sign in against
 ```
 
-`tauri dev` starts the web dev server (`pnpm --dir ../../web dev`) and points the window at it, so
+`tauri dev` starts the web dev server (`pnpm --dir web dev`) and points the window at it, so
 `/api` goes through Vite's proxy exactly as in a browser (`API_PROXY_TARGET` picks the API). The
 native side still signs in against the API named by `MW_DESKTOP_BASE_URL`, which is read **at
 build time**: change it and the Rust side rebuilds. A build without it starts, but sign-in says
@@ -34,17 +36,21 @@ the build has no base URL.
 Unit tests: `cd src-tauri && cargo test` (PKCE, callback state check, token parsing, refresh
 decision, loopback parsing, the keychain's save/load rules against an in-memory store, and the
 whole sign-in flow -- discovery, authorize URL, loopback callback, PKCE exchange, refresh, revoke --
-against a fake issuer on 127.0.0.1 with a closure standing in for the browser). The SPA side:
-`cd web && npx vitest run src/lib/desktopAuth.test.ts src/shell/LoginPage.desktop.test.tsx src/shell/signOut.test.ts`.
+against a fake issuer on 127.0.0.1 with a closure standing in for the browser). The SPA side,
+inside `web/`: `pnpm vitest run src/lib/desktopAuth.test.ts src/lib/desktopAuth.notify.test.ts
+src/apps/chat/chatAdapter.test.ts` (the desktop bearer path, the reply-ready notification, the
+streaming adapter).
 
 What the tests do not cover: the real OS keychain (the `Store` seam in `keychain.rs` is what the
 tests drive; the keyring-backed one needs a desktop session), the deep-link delivery (a Tauri
-`AppHandle`), the webview itself, and the updater's launch check (it needs a signed manifest).
+`AppHandle`), the webview itself, the focus-gated notification (it needs a real window), and the
+updater's checks (they need a signed manifest).
 
 On Windows, `cargo test` needs the MSVC build tools; the WebView2 SDK is pulled by the `tauri`
 crate and links without the runtime installed. A machine whose application-control policy blocks
 freshly built executables will see `os error 4551` on build scripts -- the build is fine, the
-policy is refusing to run what it just produced.
+policy is refusing to run what it just produced. Where the policy is path-scoped, building
+somewhere else works: `CARGO_TARGET_DIR=<an allowed path> cargo test`.
 
 ## Build
 
@@ -53,9 +59,10 @@ MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm build          # release bund
 MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri build --debug
 ```
 
-`build:web` runs first (`pnpm --dir ../../web build`) and the bundle takes `web/dist`. Output:
-`src-tauri/target/{release,debug}/bundle/` (MSI and NSIS on Windows, `.app`/DMG on macOS,
-AppImage and `.deb` on Linux). Signing and notarisation belong to the release job.
+`build:web` runs first (`pnpm --dir web build`: `tsc --noEmit` then the Vite build) and the bundle
+takes `web/dist`. Output: `src-tauri/target/{release,debug}/bundle/` (MSI and NSIS on Windows,
+`.app`/DMG on macOS, AppImage and `.deb` on Linux). Signing and notarisation belong to the
+release job.
 
 In the bundled app the page's origin is the webview's (`tauri://localhost`, or
 `http://tauri.localhost` on Windows), so API calls are sent to `MW_DESKTOP_BASE_URL` with a
@@ -94,22 +101,37 @@ and reloads the page into Boot; it never sends the webview to the identity provi
 browser's path and would leave the window on the IdP. `open_external` opens http(s) and mailto
 links in the system browser and refuses any other scheme.
 
-The webview may call only the app's own five commands (`src-tauri/capabilities/default.json`);
-no filesystem, shell or HTTP plugin is exposed to it.
+The webview may call only the app's own seven commands (`src-tauri/capabilities/default.json`);
+no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
+(`tauri.conf.json`): no remote script (one hash, for the theme boot script inlined to avoid a
+flash), `wasm-unsafe-eval` for the syntax highlighter, and network access only to the page's own
+origin plus https for the API.
+
+## Notifications
+
+One OS notification, and one case for it: a generation finished while the window was not
+focused. The SPA tells the native side when a stream ends in `done`
+(`web/src/apps/chat/chatAdapter.ts`); the native side checks focus and shows the notification
+only when the window is unfocused (`notify_generation_complete` in `src-tauri/src/lib.rs`) --
+a focused window already shows the reply land. The copy is fixed ("Your reply is ready.");
+reply text never goes into a notification. Clicking it does nothing (no notification actions
+are wired), and an error or a cancellation sends none: the in-app notices cover those when the
+person comes back.
 
 ## Updates and channels
 
 **Off by default.** `tauri.conf.json` names no update endpoint, and a build made without
 `MW_DESKTOP_UPDATER=1` does not register the updater plugin at all: no request leaves the app,
-and nothing is exposed to the webview. The `pubkey` in the committed config is a placeholder the
-release job overwrites; it is harmless on its own because nothing reads it until the plugin is on.
+and the one exposed entry point, the SPA's `check_for_updates` command, fails. The `pubkey` in
+the committed config is a placeholder the release job overwrites; it is harmless on its own
+because nothing reads it until the plugin is on.
 
 A build made with `MW_DESKTOP_UPDATER=1` (read at build time, like `MW_DESKTOP_BASE_URL`)
-registers the plugin and runs **one check at launch** (`src-tauri/src/updater.rs`). The check
-reports and stops: a newer version is announced to the SPA as an `update-available` event with
-the version string, and nothing is downloaded or installed on its own. With the flag on but no
-endpoint (a dev build), the check logs that it is not checking and the app behaves as if the
-flag were off.
+registers the plugin and runs **one check at launch** (`src-tauri/src/updater.rs`). The SPA can
+run the same check itself with `check_for_updates`, which answers with the newer version string
+(or nothing) and emits the same `update-available` event. Both paths report and stop: nothing is
+downloaded or installed on its own, and there is no in-app install step -- applying an update is
+the person running the new installer.
 
 The endpoint and key come from the release job. `pnpm build:release` runs
 `scripts/release-config.mjs`, which writes `src-tauri/tauri.release.json` (ignored by git) from:

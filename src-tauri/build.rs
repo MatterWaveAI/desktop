@@ -12,6 +12,8 @@ fn main() {
             "sign_out",
             "open_external",
             "app_info",
+            "check_for_updates",
+            "notify_generation_complete",
         ]),
     ))
     .expect("tauri build script failed")

@@ -1,0 +1,16 @@
+node_modules
+dist
+*.local
+
+# Playwright run artefacts (traces, screenshots). Each suite writes its own:
+# e2e/playwright.config.ts has outputDir test-results, the mobile config has
+# test-results-mobile and the states config test-results-states. None belongs
+# in the tree.
+e2e/test-results/
+e2e/test-results-mobile/
+e2e/test-results-states/
+
+# The repo installs with pnpm; pnpm-lock.yaml is the committed lockfile. An
+# `npm install` in a fresh worktree drops one of these beside it, and
+# committing it would leave the project with two disagreeing lockfiles.
+package-lock.json

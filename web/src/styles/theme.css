@@ -1,0 +1,430 @@
+/*
+ * The token layers. This file is the ONLY place in web/src where colour
+ * literals live (hex-literal drift test enforces that). Three layers:
+ *
+ *   1. Primitives — ramps, spacing, radii, type scale, weights, shadows —
+ *      in the Tailwind 4 `@theme` block, so they also generate utilities
+ *      (`bg-mw-neutral-100`, `rounded-lg`, `text-sm`, …) and are emitted
+ *      as CSS vars on `:root`.
+ *   2. Semantic layer — `--mw-color-*` names that components reference.
+ *      Light values on `:root`, dark values on `.dark`. Primitives never
+ *      flip per theme; semantics do.
+ *   3. Bridge — `@theme inline` maps each semantic token to a Tailwind
+ *      colour utility (`bg-mw-surface`, `text-mw-text`, …). `inline` makes
+ *      utilities emit `var(--mw-color-…)` directly, so the `.dark` swap is
+ *      one CSS block, not a find-and-replace.
+ */
+
+/* ------------------------------------------------------------------ */
+/* 1. Primitives                                                       */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  /* Neutral ramp: the brand's cool inks. The dark theme lives at the top of
+     the ramp (950 page, 925 panel, 900 raised, 850/825/800 hairlines), the
+     light theme at the bottom. Odd steps (75, 150, 350, 550, 825, 925) are
+     the brand's own values, kept rather than rounded to a stock ramp. */
+  --color-mw-neutral-0: #ffffff;
+  --color-mw-neutral-50: #f7f8fa;
+  --color-mw-neutral-75: #f3f4f6;
+  --color-mw-neutral-100: #eef0f3;
+  --color-mw-neutral-150: #e3e6eb;
+  --color-mw-neutral-200: #d5d9e0;
+  --color-mw-neutral-300: #d1d5db;
+  --color-mw-neutral-350: #b4bac4;
+  --color-mw-neutral-400: #9ca3af;
+  --color-mw-neutral-500: #7c828d;
+  --color-mw-neutral-550: #646a75;
+  --color-mw-neutral-600: #5b616e;
+  --color-mw-neutral-700: #4b5260;
+  --color-mw-neutral-750: #374151;
+  --color-mw-neutral-800: #2a2d35;
+  --color-mw-neutral-825: #23252b;
+  --color-mw-neutral-850: #1f2127;
+  --color-mw-neutral-900: #17181c;
+  --color-mw-neutral-925: #111215;
+  --color-mw-neutral-950: #0b0c0e;
+
+  /* Brand ramp (blue). 600 is the logo's blue; 650 is the same hue a step
+     deeper, the darkest change that holds white button text at 4.5:1 (600
+     gives 4.29:1). 500 is the selection and focus blue, 400/300 the link
+     pair on dark. 900-930 are the navy fills: selected row, user bubble. */
+  --color-mw-brand-50: #eef4ff;
+  --color-mw-brand-100: #e0ecff;
+  --color-mw-brand-200: #c6d8fb;
+  --color-mw-brand-300: #8ec2ff;
+  --color-mw-brand-400: #5aa6ff;
+  --color-mw-brand-500: #2f8fff;
+  --color-mw-brand-600: #1d72fe;
+  --color-mw-brand-650: #1c6ef8;
+  --color-mw-brand-700: #1959d0;
+  --color-mw-brand-800: #144bb0;
+  --color-mw-brand-850: #1e3a66;
+  --color-mw-brand-875: #0f1b2e;
+  --color-mw-brand-900: #1a2333;
+  --color-mw-brand-925: #17233a;
+  --color-mw-brand-930: #22355a;
+
+  /* Sky: the light end of the logo's blue wave. */
+  --color-mw-sky-400: #38bdf8;
+
+  /* Emerald ramp: success, positive, live. 400 is the logo's green; 300 is
+     positive text on dark; 700 the darker emerald that holds 4.5:1 on white.
+     `logo` is the W highlight's first stop, used nowhere else. */
+  --color-mw-emerald-50: #e7f8f1;
+  --color-mw-emerald-200: #b5e8d3;
+  --color-mw-emerald-300: #34e8ae;
+  --color-mw-emerald-400: #00e599;
+  --color-mw-emerald-500: #10b981;
+  --color-mw-emerald-600: #059669;
+  --color-mw-emerald-700: #047857;
+  --color-mw-emerald-800: #1b4a3b;
+  --color-mw-emerald-900: #0f2a22;
+  --color-mw-emerald-logo: #00c853;
+
+  /* Danger ramp (red). 400 is the text red on dark; 600/700 the solid
+     fills that carry white text. */
+  --color-mw-danger-50: #fef2f2;
+  --color-mw-danger-200: #fecaca;
+  --color-mw-danger-300: #fca5a5;
+  --color-mw-danger-400: #ff8a8a;
+  --color-mw-danger-500: #ef4444;
+  --color-mw-danger-600: #dc2626;
+  --color-mw-danger-700: #b91c1c;
+  --color-mw-danger-850: #5c1f24;
+  --color-mw-danger-950: #2a1012;
+
+  /* Warning ramp (amber). The dark notice: 950 fill, 850 edge, 300 title,
+     350 body, 400 bar on a 900 track. */
+  --color-mw-warning-50: #fff5eb;
+  --color-mw-warning-200: #f5c894;
+  --color-mw-warning-300: #ffd3a8;
+  --color-mw-warning-350: #f0c59a;
+  --color-mw-warning-400: #ff9f43;
+  --color-mw-warning-600: #d97706;
+  --color-mw-warning-700: #b45309;
+  --color-mw-warning-800: #8a4b0f;
+  --color-mw-warning-850: #5c3a1a;
+  --color-mw-warning-900: #3d2814;
+  --color-mw-warning-950: #2a1a0e;
+
+  /* Spacing: the 0.25rem base unit every numeric spacing utility
+     (p-*, gap-*, m-*, …) is a multiple of. */
+  --spacing: 0.25rem;
+
+  /* Radii. */
+  --radius-xs: 0.125rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --radius-3xl: 1.5rem;
+
+  /* Focus ring width. One value, so a keyboard focus ring is the same
+     thickness on every control instead of a [3px] repeated per component. */
+  --ring-width: 3px;
+
+  /* Two UI faces and one display face, one fixed scale. Inter carries the
+     UI; Instrument Serif is display only (the wordmark, page titles, the
+     landing's big headings) and so has its own `display-*` steps above the
+     UI scale. The `initial` reset removes Tailwind's larger steps (4xl-9xl):
+     nothing outside this scale exists, so nothing arbitrary can be reached
+     either. */
+  --text-*: initial;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.25rem;
+  /* Display steps, for font-display only: an app page title, a section
+     title, the landing's headings. Tight leading, because a serif at this
+     size reads as one shape. */
+  --text-display-sm: 1.625rem;
+  --text-display-sm--line-height: 1.1;
+  --text-display-md: 2rem;
+  --text-display-md--line-height: 1.1;
+  --text-display-lg: 3rem;
+  --text-display-lg--line-height: 1.05;
+  --text-display-xl: 4.5rem;
+  --text-display-xl--line-height: 1;
+
+  /* Three weights only. Same reset trick. */
+  --font-weight-*: initial;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Shadows: few, and dark enough to read on a near-black page. */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.12);
+  --shadow-md: 0 2px 6px -1px rgb(0 0 0 / 0.18), 0 1px 2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 12px 32px -4px rgb(0 0 0 / 0.35), 0 2px 6px -2px rgb(0 0 0 / 0.16);
+
+  /* Typefaces, self-hosted from @fontsource (all three are OFL): Inter for
+     the UI, Instrument Serif for display, JetBrains Mono for code. The
+     serif fallback is Georgia, so a display title that loads before its
+     face still reads as a serif. */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-heading: "Inter Variable", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. Semantic layer                                                   */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Light values live on `:root, .mw-theme-light`, dark values on
+ * `.dark, .mw-theme-dark`. The second selector of each list exists for the
+ * /dev/tokens page, which renders both themes side by side: a wrapper with
+ * `mw-theme-dark` re-scopes the whole semantic layer to that subtree
+ * regardless of the class on <html>.
+ *
+ * Dark is the brand's default (theme.ts resolves an unset preference to
+ * dark); light is the same brand on near-white: ink text, the same action
+ * blue, a darker emerald and amber so the positive and warning text hold
+ * 4.5:1 on white. tokens.test.ts proves every pair, in both themes.
+ */
+:root,
+.mw-theme-light {
+  /* Surfaces: page, panel (sidebar, cards, popovers, composer), hover fill,
+     pressed / secondary fill. */
+  --mw-color-surface: var(--color-mw-neutral-50);
+  --mw-color-surface-raised: var(--color-mw-neutral-0);
+  --mw-color-surface-hover: var(--color-mw-neutral-100);
+  --mw-color-surface-active: var(--color-mw-neutral-150);
+
+  /* Text: primary; secondary (nav items, quieter labels); subtle (body
+     copy under a title); muted (meta, placeholders, captions). */
+  --mw-color-text: var(--color-mw-neutral-925);
+  --mw-color-text-secondary: var(--color-mw-neutral-750);
+  --mw-color-text-subtle: var(--color-mw-neutral-700);
+  --mw-color-text-muted: var(--color-mw-neutral-600);
+
+  /* Lines. `border` is the hairline for dividers and card edges.
+     `border-emphasis` is the slightly firmer hairline of an outline button,
+     a pill or a raised card. `border-strong` is the edge that IS the
+     control -- an input, a select, a checkbox -- and holds 3:1 against
+     every surface (1.4.11), which the hairlines do not. */
+  --mw-color-border: var(--color-mw-neutral-150);
+  --mw-color-border-emphasis: var(--color-mw-neutral-200);
+  --mw-color-border-strong: var(--color-mw-neutral-500);
+
+  /* Action blue: the primary button's fill and its white text, and its hover.
+     The same blue in both themes. `accent` is a fill, not a text colour:
+     text and icons in the brand blue take `link`. */
+  --mw-color-accent: var(--color-mw-brand-650);
+  --mw-color-accent-hover: var(--color-mw-brand-700);
+  --mw-color-accent-foreground: var(--color-mw-neutral-0);
+
+  /* Links and accent text/icons, and their hover. */
+  --mw-color-link: var(--color-mw-brand-700);
+  --mw-color-link-hover: var(--color-mw-brand-800);
+
+  /* The focus ring, and the selected item's indicator (the 2px inset bar on
+     the active nav row); `selection` is that row's fill. */
+  --mw-color-focus: var(--color-mw-brand-600);
+  --mw-color-selection: var(--color-mw-brand-50);
+  --mw-color-selection-foreground: var(--color-mw-neutral-925);
+
+  /* The logo's blue, for fills that carry no text: a meter, a dot. */
+  --mw-color-brand-strong: var(--color-mw-brand-600);
+
+  /* Positive: success, live, done. `positive` is text, `positive-strong` the
+     dot or bar, `positive-subtle`/`positive-border` the tinted notice. */
+  --mw-color-positive: var(--color-mw-emerald-700);
+  --mw-color-positive-strong: var(--color-mw-emerald-600);
+  --mw-color-positive-subtle: var(--color-mw-emerald-50);
+  --mw-color-positive-border: var(--color-mw-emerald-200);
+
+  /* Info notice: tinted fill, edge, text. */
+  --mw-color-info: var(--color-mw-brand-800);
+  --mw-color-info-subtle: var(--color-mw-brand-50);
+  --mw-color-info-border: var(--color-mw-brand-200);
+
+  /* Danger: `danger` is text/icons on surfaces, `danger-subtle` the tinted
+     banner fill and `danger-border` its edge, `danger-strong` the solid fill
+     a destructive button uses with `danger-foreground` text. */
+  --mw-color-danger: var(--color-mw-danger-700);
+  --mw-color-danger-subtle: var(--color-mw-danger-50);
+  --mw-color-danger-border: var(--color-mw-danger-200);
+  --mw-color-danger-strong: var(--color-mw-danger-700);
+  --mw-color-danger-foreground: var(--color-mw-neutral-0);
+
+  /* Warning (degraded states, seat limits): `warning` is text/icons on a
+     surface; the notice is `warning-subtle` with a `warning-border` edge,
+     `warning-foreground` for its title and `warning-body` for its copy;
+     `warning-strong` is a meter on a `warning-track`. */
+  --mw-color-warning: var(--color-mw-warning-700);
+  --mw-color-warning-subtle: var(--color-mw-warning-50);
+  --mw-color-warning-border: var(--color-mw-warning-200);
+  --mw-color-warning-foreground: var(--color-mw-warning-800);
+  --mw-color-warning-body: var(--color-mw-warning-800);
+  --mw-color-warning-strong: var(--color-mw-warning-700);
+  --mw-color-warning-track: var(--color-mw-warning-200);
+
+  /* The emphasis pair: the person's own chat message (the navy bubble on
+     dark, a pale blue one on light) and the account avatar. */
+  --mw-color-inverse: var(--color-mw-brand-100);
+  --mw-color-inverse-foreground: var(--color-mw-neutral-925);
+  --mw-color-inverse-border: var(--color-mw-brand-200);
+
+  /* Scrims: black in both themes by design -- they dim what is behind,
+     they do not re-theme. Dark's are denser (below). */
+  --mw-color-scrim: rgb(0 0 0 / 0.4);        /* sheets, mobile overlays */
+  --mw-color-scrim-subtle: rgb(0 0 0 / 0.1); /* modal backdrop */
+
+  /* Z-index scale. 10 scrim < 20 sidebar < 30 inline menu < 50 modal.
+     50 matches the z-50 the Base UI portals use. */
+  --mw-z-scrim: 10;
+  --mw-z-sidebar: 20;
+  --mw-z-menu: 30;
+  --mw-z-modal: 50;
+
+  color-scheme: light;
+}
+
+.dark,
+.mw-theme-dark {
+  --mw-color-surface: var(--color-mw-neutral-950);
+  --mw-color-surface-raised: var(--color-mw-neutral-925);
+  --mw-color-surface-hover: var(--color-mw-neutral-900);
+  --mw-color-surface-active: var(--color-mw-neutral-850);
+
+  --mw-color-text: var(--color-mw-neutral-75);
+  --mw-color-text-secondary: var(--color-mw-neutral-300);
+  --mw-color-text-subtle: var(--color-mw-neutral-350);
+  --mw-color-text-muted: var(--color-mw-neutral-400);
+
+  --mw-color-border: var(--color-mw-neutral-850);
+  --mw-color-border-emphasis: var(--color-mw-neutral-800);
+  --mw-color-border-strong: var(--color-mw-neutral-550);
+
+  --mw-color-accent: var(--color-mw-brand-650);
+  --mw-color-accent-hover: var(--color-mw-brand-700);
+  --mw-color-accent-foreground: var(--color-mw-neutral-0);
+
+  --mw-color-link: var(--color-mw-brand-400);
+  --mw-color-link-hover: var(--color-mw-brand-300);
+
+  --mw-color-focus: var(--color-mw-brand-500);
+  --mw-color-selection: var(--color-mw-brand-900);
+  --mw-color-selection-foreground: var(--color-mw-neutral-0);
+
+  --mw-color-brand-strong: var(--color-mw-brand-600);
+
+  --mw-color-positive: var(--color-mw-emerald-300);
+  --mw-color-positive-strong: var(--color-mw-emerald-400);
+  --mw-color-positive-subtle: var(--color-mw-emerald-900);
+  --mw-color-positive-border: var(--color-mw-emerald-800);
+
+  --mw-color-info: var(--color-mw-brand-300);
+  --mw-color-info-subtle: var(--color-mw-brand-875);
+  --mw-color-info-border: var(--color-mw-brand-850);
+
+  --mw-color-danger: var(--color-mw-danger-400);
+  --mw-color-danger-subtle: var(--color-mw-danger-950);
+  --mw-color-danger-border: var(--color-mw-danger-850);
+  --mw-color-danger-strong: var(--color-mw-danger-600);
+  --mw-color-danger-foreground: var(--color-mw-neutral-0);
+
+  --mw-color-warning: var(--color-mw-warning-400);
+  --mw-color-warning-subtle: var(--color-mw-warning-950);
+  --mw-color-warning-border: var(--color-mw-warning-850);
+  --mw-color-warning-foreground: var(--color-mw-warning-300);
+  --mw-color-warning-body: var(--color-mw-warning-350);
+  --mw-color-warning-strong: var(--color-mw-warning-400);
+  --mw-color-warning-track: var(--color-mw-warning-900);
+
+  --mw-color-inverse: var(--color-mw-brand-925);
+  --mw-color-inverse-foreground: var(--color-mw-neutral-75);
+  --mw-color-inverse-border: var(--color-mw-brand-930);
+
+  /* Darker than light's: on a near-black page a 0.4 scrim barely shows. */
+  --mw-color-scrim: rgb(0 0 0 / 0.6);
+  --mw-color-scrim-subtle: rgb(0 0 0 / 0.35);
+
+  /* Native controls (a <select>'s list, scrollbars, the date picker) follow. */
+  color-scheme: dark;
+}
+
+/*
+ * The logo's wave colours, for the WaveMark and AssistantMark components
+ * (components/brand). The same in both themes: the logo does not re-theme.
+ */
+:root {
+  --mw-wave-blue: var(--color-mw-brand-500);
+  --mw-wave-sky: var(--color-mw-sky-400);
+  --mw-wave-green: var(--color-mw-emerald-400);
+  --mw-wave-emerald: var(--color-mw-emerald-500);
+  --mw-wave-m: var(--color-mw-brand-600);
+  --mw-wave-w: var(--color-mw-emerald-logo);
+}
+
+/* ------------------------------------------------------------------ */
+/* 3. Bridge: semantic tokens → Tailwind colour utilities              */
+/* ------------------------------------------------------------------ */
+
+@theme inline {
+  --color-mw-surface: var(--mw-color-surface);
+  --color-mw-surface-raised: var(--mw-color-surface-raised);
+  --color-mw-surface-hover: var(--mw-color-surface-hover);
+  --color-mw-surface-active: var(--mw-color-surface-active);
+  --color-mw-text: var(--mw-color-text);
+  --color-mw-text-secondary: var(--mw-color-text-secondary);
+  --color-mw-text-subtle: var(--mw-color-text-subtle);
+  --color-mw-text-muted: var(--mw-color-text-muted);
+  --color-mw-border: var(--mw-color-border);
+  --color-mw-border-emphasis: var(--mw-color-border-emphasis);
+  --color-mw-border-strong: var(--mw-color-border-strong);
+  --color-mw-accent: var(--mw-color-accent);
+  --color-mw-accent-hover: var(--mw-color-accent-hover);
+  --color-mw-accent-foreground: var(--mw-color-accent-foreground);
+  --color-mw-link: var(--mw-color-link);
+  --color-mw-link-hover: var(--mw-color-link-hover);
+  --color-mw-focus: var(--mw-color-focus);
+  --color-mw-selection: var(--mw-color-selection);
+  --color-mw-selection-foreground: var(--mw-color-selection-foreground);
+  --color-mw-brand-strong: var(--mw-color-brand-strong);
+  --color-mw-positive: var(--mw-color-positive);
+  --color-mw-positive-strong: var(--mw-color-positive-strong);
+  --color-mw-positive-subtle: var(--mw-color-positive-subtle);
+  --color-mw-positive-border: var(--mw-color-positive-border);
+  --color-mw-info: var(--mw-color-info);
+  --color-mw-info-subtle: var(--mw-color-info-subtle);
+  --color-mw-info-border: var(--mw-color-info-border);
+  --color-mw-danger: var(--mw-color-danger);
+  --color-mw-danger-subtle: var(--mw-color-danger-subtle);
+  --color-mw-danger-border: var(--mw-color-danger-border);
+  --color-mw-danger-strong: var(--mw-color-danger-strong);
+  --color-mw-danger-foreground: var(--mw-color-danger-foreground);
+  --color-mw-warning: var(--mw-color-warning);
+  --color-mw-warning-subtle: var(--mw-color-warning-subtle);
+  --color-mw-warning-border: var(--mw-color-warning-border);
+  --color-mw-warning-foreground: var(--mw-color-warning-foreground);
+  --color-mw-warning-body: var(--mw-color-warning-body);
+  --color-mw-warning-strong: var(--mw-color-warning-strong);
+  --color-mw-warning-track: var(--mw-color-warning-track);
+  --color-mw-inverse: var(--mw-color-inverse);
+  --color-mw-inverse-foreground: var(--mw-color-inverse-foreground);
+  --color-mw-inverse-border: var(--mw-color-inverse-border);
+  --color-mw-scrim: var(--mw-color-scrim);
+  --color-mw-scrim-subtle: var(--mw-color-scrim-subtle);
+
+  /* The selected nav row's marker: a 2px bar of the focus blue on the
+     row's leading edge, drawn as an inset shadow so it takes no layout. */
+  --shadow-selected: inset 2px 0 0 var(--mw-color-focus);
+}

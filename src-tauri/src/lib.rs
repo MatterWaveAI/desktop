@@ -306,6 +306,39 @@ fn app_info(app: AppHandle) -> AppInfo {
     }
 }
 
+/// The OS notification for a finished answer: the one signal that reaches
+/// somebody in another window while the model streams. Shown only when the
+/// main window is not focused -- a focused window already shows the reply
+/// land. `title` and `body` are the SPA's fixed copy; reply text never goes
+/// into a notification.
+#[tauri::command]
+fn notify_generation_complete(app: AppHandle, title: String, body: String) -> Result<bool, String> {
+    let focused = app
+        .get_webview_window("main")
+        .and_then(|w| w.is_focused().ok())
+        .unwrap_or(true);
+    if focused {
+        return Ok(false);
+    }
+    use tauri_plugin_notification::NotificationExt;
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+/// The SPA's "check for updates": one check, the newer version as the answer
+/// and as `update-available` for listeners (updater.rs). Reporting only:
+/// nothing downloads or installs. A build without the updater has no plugin,
+/// so the call fails there.
+#[tauri::command]
+async fn check_for_updates(app: AppHandle) -> Result<Option<String>, String> {
+    updater::check(&app).await
+}
+
 fn focus_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
@@ -351,7 +384,10 @@ pub fn run() {
             focus_main(app)
         }))
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_notification::init());
+        .plugin(tauri_plugin_notification::init())
+        // Size and position persist: saved when the window closes, restored
+        // at launch, with the config's numbers as the first-run default.
+        .plugin(tauri_plugin_window_state::Builder::default().build());
     // Only a build that asked for updates carries the plugin (updater.rs).
     if updater::enabled() {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -380,7 +416,9 @@ pub fn run() {
             sign_in,
             sign_out,
             open_external,
-            app_info
+            app_info,
+            check_for_updates,
+            notify_generation_complete
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MatterWave desktop app");

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>MatterWave ai</title>
+  <defs>
+    <linearGradient id="blueWaveGrad" x1="97" y1="0" x2="276" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2f8fff" stop-opacity="0"/>
+      <stop offset="30%" stop-color="#2f8fff" stop-opacity="0.85"/>
+      <stop offset="85%" stop-color="#38bdf8" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </linearGradient>
+
+    <linearGradient id="greenWaveGrad" x1="244" y1="0" x2="418" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00e599" stop-opacity="0"/>
+      <stop offset="15%" stop-color="#00e599" stop-opacity="1"/>
+      <stop offset="70%" stop-color="#10b981" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="mHighlight" x1="197" y1="0" x2="244" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1d72fe"/>
+      <stop offset="50%" stop-color="#2f8fff"/>
+      <stop offset="100%" stop-color="#1d72fe"/>
+    </linearGradient>
+    <linearGradient id="wHighlight" x1="259" y1="0" x2="306" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00c853"/>
+      <stop offset="50%" stop-color="#00e599"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="edgeFade" x1="2" y1="0" x2="62" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+      <stop offset="0.18" stop-color="#fff"/>
+      <stop offset="0.82" stop-color="#fff"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="edges" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect x="2" y="0" width="60" height="64" fill="url(#edgeFade)"/>
+    </mask>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0B0C0E"/>
+  <g mask="url(#edges)">
+  <g transform="translate(-89.655 -8.552) scale(0.4828)">
+    <path d="M 97.0,84.0 C 99.5,84.0 102.0,80.0 105.0,80.0 C 109.5,80.0 114.0,88.0 119.0,88.0 C 124.0,88.0 129.5,75.0 135.5,75.0 C 141.5,75.0 146.5,93.0 152.5,93.0 C 158.5,93.0 164.0,69.0 170.0,69.0 C 176.0,69.0 181.5,99.0 187.5,99.0 C 193.0,99.0 199.0,65.0 205.0,65.0 C 211.0,65.0 214.5,103.0 220.5,103.0 C 226.5,103.0 230.0,65.0 236.0,65.0 C 242.0,65.0 245.5,103.0 251.5,103.0 C 257.5,103.0 261.0,66.0 267.0,66.0 C 271.0,66.0 274.0,84.0 276.0,84.0" fill="none" stroke="url(#blueWaveGrad)" stroke-width="6.48" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 244.0,84.0 C 246.0,84.0 248.5,66.0 251.5,66.0 C 257.5,66.0 261.0,103.0 267.0,103.0 C 273.0,103.0 276.5,65.0 282.5,65.0 C 288.5,65.0 292.0,103.0 298.0,103.0 C 304.0,103.0 307.5,65.0 313.5,65.0 C 319.5,65.0 324.0,98.0 330.0,98.0 C 336.0,98.0 341.0,70.0 347.0,70.0 C 353.0,70.0 359.0,92.0 365.0,92.0 C 371.0,92.0 377.0,76.0 383.0,76.0 C 389.0,76.0 395.0,87.5 401.0,87.5 C 406.0,87.5 412.0,84.0 418.0,84.0" fill="none" stroke="url(#greenWaveGrad)" stroke-width="6.48" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 197.0,84.0 C 199.5,84.0 201.5,65.0 205.0,65.0 C 211.0,65.0 214.5,103.0 220.5,103.0 C 226.5,103.0 230.0,65.0 236.0,65.0 C 239.5,65.0 242.0,84.0 244.0,84.0" fill="none" stroke="url(#mHighlight)" stroke-width="8.64" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 259.0,84.0 C 261.0,84.0 263.5,103.0 267.0,103.0 C 273.0,103.0 276.5,65.0 282.5,65.0 C 288.5,65.0 292.0,103.0 298.0,103.0 C 301.5,103.0 304.0,84.0 306.0,84.0" fill="none" stroke="url(#wHighlight)" stroke-width="8.64" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  </g>
+</svg>

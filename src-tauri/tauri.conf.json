@@ -1,13 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MatterWave",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "dev.matterwave.desktop",
   "build": {
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm --dir ../../web dev",
+    "beforeDevCommand": "pnpm --dir web dev",
     "beforeBuildCommand": "pnpm build:web",
-    "frontendDist": "../../../web/dist"
+    "frontendDist": "../web/dist"
   },
   "app": {
     "windows": [
@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-85xKhsK7IauNKI/aYKVegAwviW1EyL+LzqZwmV7/wYc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https: ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'"
     }
   },
   "bundle": {

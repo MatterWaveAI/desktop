@@ -1,0 +1,1279 @@
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-10-24 20:49-0600\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: es-ES\n"
+"X-Translation-Status: draft\n"
+"X-Translation-Note: Machine-drafted from en-GB; not yet reviewed by a native speaker. See docs/i18n.md.\n"
+
+#: src/apps/billing/PricingPage.tsx
+msgid " / month"
+msgstr " / mes"
+
+#: src/apps/billing/PricingPage.tsx
+msgid " / year"
+msgstr " / año"
+
+#: src/apps/billing/PricingPage.tsx
+msgid " per seat"
+msgstr " por puesto"
+
+#. placeholder {0}: accountLabel(account)
+#: src/shell/LoginPage.tsx
+msgid "{0} is no longer signed in on this browser. Sign in again."
+msgstr "{0} ya no tiene la sesión iniciada en este navegador. Vuelve a iniciar sesión."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "{conversations, plural, one {# conversation} other {# conversations}}"
+msgstr "{conversations, plural, one {# conversación} other {# conversaciones}}"
+
+#: src/shell/authForms.ts
+msgid "{count, plural, one {enter at least # character} other {enter at least # characters}}"
+msgstr "{count, plural, one {introduce al menos # carácter} other {introduce al menos # caracteres}}"
+
+#: src/components/AppError.tsx
+msgid "{name} stopped working"
+msgstr "{name} ha dejado de funcionar"
+
+#: src/shell/UserMenu.tsx
+msgid "{planName} plan"
+msgstr "Plan {planName}"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "{seats, plural, one {# seat} other {# seats}}"
+msgstr "{seats, plural, one {# puesto} other {# puestos}}"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "{tokens} / month"
+msgstr "{tokens} / mes"
+
+#: src/shell/LandingPage.tsx
+msgid "/v1 speaks the OpenAI chat-completions format, so any OpenAI client works with a MatterWave key. Python and TypeScript SDKs, and your conversations as MCP tools."
+msgstr "/v1 habla el formato chat-completions de OpenAI, así que cualquier cliente de OpenAI funciona con una clave de MatterWave. SDK de Python y TypeScript, y tus conversaciones como herramientas MCP."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "← Back to Settings › Billing"
+msgstr "← Volver a Ajustes › Facturación"
+
+#: src/shell/CommandPalette.tsx
+msgid "<0>↑↓</0> to choose, <1>Enter</1> to run, <2>Esc</2> to close."
+msgstr "<0>↑↓</0> para elegir, <1>Intro</1> para ejecutar, <2>Esc</2> para cerrar."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "<0>Accept the updated terms</0> to subscribe."
+msgstr "<0>Acepta los términos actualizados</0> para suscribirte."
+
+#: src/shell/HelpPage.tsx
+msgid "<0>Contact support</0> — quote the request id shown with an error, and never paste an API key."
+msgstr "<0>Contactar con soporte</0> — cita el id de solicitud que aparece junto a un error y nunca pegues una clave de API."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "<0>Finish setting up</0> to subscribe."
+msgstr "<0>Termina la configuración</0> para suscribirte."
+
+#: src/shell/HelpPage.tsx
+msgid "<0>Plans</0> — what each plan includes and what it costs."
+msgstr "<0>Planes</0> — qué incluye cada plan y cuánto cuesta."
+
+#: src/shell/HelpPage.tsx
+msgid "<0>Service status</0> — whether MatterWave is up, and any incident in progress."
+msgstr "<0>Estado del servicio</0> — si MatterWave está operativo y cualquier incidencia en curso."
+
+#: src/shell/HelpPage.tsx
+msgid "<0>Settings › Billing</0> — the plan your organisation is on, the card, and the invoices."
+msgstr "<0>Ajustes › Facturación</0> — el plan de tu organización, la tarjeta y las facturas."
+
+#: src/shell/HelpPage.tsx
+msgid "<0>Settings › Usage</0> — the tokens used this period, when they reset, the cost by model, and the day-by-day history."
+msgstr "<0>Ajustes › Uso</0> — los tokens usados este periodo, cuándo se reinician, el coste por modelo y el historial día a día."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "<0>Verify your email</0> to subscribe."
+msgstr "<0>Verifica tu correo</0> para suscribirte."
+
+#: src/components/AppError.tsx
+msgid "A newer version of MatterWave is available. Reload to pick it up."
+msgstr "Hay una versión más reciente de MatterWave. Recarga para usarla."
+
+#: src/shell/HelpPage.tsx
+msgid "A report is stored with the conversation and answered with a reference you can quote to support. It does not change the conversation, suspend anyone or tell the model anything. If a report could not be stored you are told so, because a report that was never filed must not look like one that was."
+msgstr "Un informe se guarda junto a la conversación y se responde con una referencia que puedes citar a soporte. No cambia la conversación, no suspende a nadie ni le dice nada al modelo. Si un informe no pudo guardarse, se te avisa, porque un informe que nunca se presentó no debe parecer uno que sí."
+
+#: src/shell/LandingPage.tsx
+msgid "A terminal client, a VS Code extension and a desktop app share the same conversations as the web."
+msgstr "Un cliente de terminal, una extensión de VS Code y una aplicación de escritorio comparten las mismas conversaciones que la web."
+
+#: src/shell/FrontDoorChrome.tsx
+msgid "About MatterWave"
+msgstr "Acerca de MatterWave"
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "Accept and continue"
+msgstr "Aceptar y continuar"
+
+#: src/shell/SignupPage.tsx
+msgid "Accept the terms to continue."
+msgstr "Acepta los términos para continuar."
+
+#: src/shell/FrontDoorChrome.tsx
+msgid "Acceptable use"
+msgstr "Uso aceptable"
+
+#: src/shell/UserMenu.tsx
+msgid "Account and organisation"
+msgstr "Cuenta y organización"
+
+#: src/shell/UserMenu.tsx
+msgid "Account menu"
+msgstr "Menú de la cuenta"
+
+#: src/shell/CommandPalette.tsx
+msgid "Actions"
+msgstr "Acciones"
+
+#: src/shell/UserMenu.tsx
+msgid "Add account"
+msgstr "Añadir cuenta"
+
+#: src/shell/LandingPage.tsx
+msgid "Administrators invite members and set roles and spending limits. The Team plan is sold per seat, with every seat's tokens in one shared pool, and is the plan that adds single sign-on."
+msgstr "Los administradores invitan a miembros y asignan roles y límites de gasto. El plan Team se vende por puesto, con los tokens de todos los puestos en un fondo común, y es el plan que añade el inicio de sesión único."
+
+#: src/shell/LandingPage.tsx
+msgid "Allowance weight"
+msgstr "Peso en la asignación"
+
+#: src/shell/SignupPage.tsx
+msgid "Already have an account? Sign in"
+msgstr "¿Ya tienes una cuenta? Inicia sesión"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Always dark."
+msgstr "Siempre oscuro."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Always light."
+msgstr "Siempre claro."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Always sent: receipts are part of the transaction, not marketing."
+msgstr "Siempre se envían: los recibos forman parte de la transacción, no son marketing."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "An allowance counts weighted tokens: every prompt and completion token times the model's multiplier, so an allowance buys the same dollars of list price whichever model spends it. Paid monthly plans keep going past the allowance at each model's list price, up to an overage cap that starts at the plan's monthly price and that an administrator can raise or lower."
+msgstr "Una cuota cuenta tokens ponderados: cada token de entrada y de salida multiplicado por el multiplicador del modelo, de modo que una cuota compra los mismos dólares de precio de lista sea cual sea el modelo que la gaste. Los planes mensuales de pago continúan más allá de la cuota al precio de lista de cada modelo, hasta un tope de exceso que empieza en el precio mensual del plan y que un administrador puede subir o bajar."
+
+#: src/shell/LandingPage.tsx
+msgid "An illustration of a MatterWave conversation: a request for five bullets and the start of the reply."
+msgstr "Una ilustración de una conversación en MatterWave: una petición de cinco puntos y el comienzo de la respuesta."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Annual"
+msgstr "Anual"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "API keys"
+msgstr "Claves de API"
+
+#: src/shell/LandingPage.tsx
+msgid "API, SDKs and MCP"
+msgstr "API, SDK y MCP"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Applies on this device. “System” follows your OS setting live."
+msgstr "Se aplica en este dispositivo. «Sistema» sigue en directo el ajuste de tu sistema operativo."
+
+#: src/shell/Shell.tsx
+msgid "Apps"
+msgstr "Aplicaciones"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Ask an organisation admin to subscribe"
+msgstr "Pide a un administrador de la organización que se suscriba"
+
+#: src/shell/authForms.ts
+msgid "At least {min} characters."
+msgstr "Al menos {min} caracteres."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Billing period"
+msgstr "Periodo de facturación"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Billing receipts"
+msgstr "Recibos de facturación"
+
+#: src/shell/LandingPage.tsx
+msgid "Branches, attachments, custom instructions, dictation, and compaction when a thread runs long, on {onModels}. The model that wrote each reply is named under it."
+msgstr "Ramas, adjuntos, instrucciones personalizadas, dictado y compactación cuando un hilo se alarga, con {onModels}. Bajo cada respuesta figura el modelo que la escribió."
+
+#: src/shell/LandingPage.tsx
+msgid "Branches, attachments, custom instructions, dictation, and compaction when a thread runs long. The model that wrote each reply is named under it."
+msgstr "Ramas, adjuntos, instrucciones personalizadas, dictado y compactación cuando un hilo se alarga. Bajo cada respuesta figura el modelo que la escribió."
+
+#: src/shell/LandingPage.tsx
+msgid "Bring ChatGPT and Claude history in; export a conversation or everything on your account. Nothing you write is used to train models."
+msgstr "Trae tu historial de ChatGPT y Claude; exporta una conversación o todo lo de tu cuenta. Nada de lo que escribes se usa para entrenar modelos."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Budget warnings"
+msgstr "Avisos de presupuesto"
+
+#: src/shell/LandingPage.tsx
+msgid "BUILD"
+msgstr "CREA"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Can I cancel or change plans?"
+msgstr "¿Puedo cancelar o cambiar de plan?"
+
+#: src/shell/Shell.tsx
+msgid "Chat"
+msgstr "Chat"
+
+#: src/shell/LandingPage.tsx
+msgid "CHAT"
+msgstr "CHAT"
+
+#: src/shell/productCopy.ts
+msgid "Chat with hosted language models on the web, in the terminal, in VS Code or on the desktop, and build on the same OpenAI-compatible API with the Python and TypeScript SDKs."
+msgstr "Chatea con modelos de lenguaje alojados en la web, en la terminal, en VS Code o en el escritorio, y construye sobre la misma API compatible con OpenAI con los SDK de Python y TypeScript."
+
+#: src/shell/AuthForm.tsx
+msgid "Check the form"
+msgstr "Revisa el formulario"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Checking billing…"
+msgstr "Comprobando la facturación…"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Checkout was cancelled, so nothing was charged. Pick a plan whenever you are ready."
+msgstr "El pago se canceló, así que no se cobró nada. Elige un plan cuando quieras."
+
+#: src/shell/Shell.tsx
+msgid "Close sidebar"
+msgstr "Cerrar la barra lateral"
+
+#: src/shell/CommandPalette.tsx
+msgid "Command palette"
+msgstr "Paleta de comandos"
+
+#: src/shell/CommandPalette.tsx
+#: src/shell/UserMenu.tsx
+msgid "Commands"
+msgstr "Comandos"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Compare the plans"
+msgstr "Compara los planes"
+
+#: src/shell/LandingPage.tsx
+msgid "Completion"
+msgstr "Respuesta"
+
+#: src/shell/SignupPage.tsx
+msgid "Confirm my email"
+msgstr "Confirmar mi correo"
+
+#: src/shell/SignupPage.tsx
+msgid "Confirm password"
+msgstr "Confirmar contraseña"
+
+#: src/shell/frontDoorLinks.ts
+msgid "Contact"
+msgstr "Contacto"
+
+#: src/shell/NotFoundPage.tsx
+msgid "Contact support"
+msgstr "Contactar con soporte"
+
+#: src/shell/LoginPage.tsx
+msgid "Continue"
+msgstr "Continuar"
+
+#. placeholder {0}: accountLabel(account)
+#: src/shell/LoginPage.tsx
+msgid "Continue as {0}"
+msgstr "Continuar como {0}"
+
+#. placeholder {0}: lastProvider.providerName
+#: src/shell/LoginPage.tsx
+msgid "Continue with {0}"
+msgstr "Continuar con {0}"
+
+#: src/shell/CommandPalette.tsx
+#: src/shell/Shell.tsx
+msgid "Conversations"
+msgstr "Conversaciones"
+
+#: src/shell/LandingPage.tsx
+msgid "Conversations that keep up"
+msgstr "Conversaciones que siguen tu ritmo"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Could not check your subscription: {statusError}"
+msgstr "No se pudo comprobar tu suscripción: {statusError}"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Could not load plans"
+msgstr "No se pudieron cargar los planes"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Could not load your email preferences."
+msgstr "No se pudieron cargar tus preferencias de correo."
+
+#: src/shell/authForms.ts
+msgid "Could not reach MatterWave. Check your connection and try again."
+msgstr "No se pudo conectar con MatterWave. Comprueba tu conexión e inténtalo de nuevo."
+
+#: src/boot.tsx
+msgid "Could not reach the MatterWave API."
+msgstr "No se pudo conectar con la API de MatterWave."
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "Could not record your acceptance."
+msgstr "No se pudo registrar tu aceptación."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Could not save your preferences."
+msgstr "No se pudieron guardar tus preferencias."
+
+#: src/shell/UserMenu.tsx
+msgid "Could not sign that account out."
+msgstr "No se pudo cerrar la sesión de esa cuenta."
+
+#: src/shell/UserMenu.tsx
+msgid "Could not switch accounts. That account may have been signed out."
+msgstr "No se pudo cambiar de cuenta. Puede que la sesión de esa cuenta se haya cerrado."
+
+#: src/apps/billing/PricingPage.tsx
+#: src/shell/FrontDoorChrome.tsx
+#: src/shell/SignupPage.tsx
+msgid "Create account"
+msgstr "Crear cuenta"
+
+#: src/shell/LandingPage.tsx
+#: src/shell/SignupPage.tsx
+msgid "Create your account"
+msgstr "Crea tu cuenta"
+
+#: src/shell/SignupPage.tsx
+msgid "Creating account…"
+msgstr "Creando la cuenta…"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Custom instructions"
+msgstr "Instrucciones personalizadas"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+#: src/shell/UserMenu.tsx
+msgid "Dark"
+msgstr "Oscuro"
+
+#: src/shell/UserMenu.tsx
+msgid "Default model: {modelLabel}"
+msgstr "Modelo predeterminado: {modelLabel}"
+
+#: src/shell/UserMenu.tsx
+msgid "Developers"
+msgstr "Desarrolladores"
+
+#: src/shell/FrontDoorChrome.tsx
+msgid "Docs"
+msgstr "Documentación"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Does a free trial need a card?"
+msgstr "¿Una prueba gratuita necesita tarjeta?"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+#: src/shell/LoginPage.tsx
+#: src/shell/SignupPage.tsx
+msgid "Email"
+msgstr "Correo electrónico"
+
+#: src/shell/authForms.ts
+msgid "Enter a password."
+msgstr "Introduce una contraseña."
+
+#: src/shell/authForms.ts
+msgid "enter a valid {kind}"
+msgstr "introduce un valor válido ({kind})"
+
+#: src/shell/authForms.ts
+msgid "Enter an email address like name@example.com."
+msgstr "Introduce una dirección de correo como nombre@ejemplo.com."
+
+#: src/shell/authForms.ts
+msgid "Enter the code from the email."
+msgstr "Introduce el código del correo."
+
+#: src/shell/LoginPage.tsx
+msgid "Enter the email and password for your MatterWave account, and you will be taken on to the page you opened."
+msgstr "Introduce el correo y la contraseña de tu cuenta de MatterWave y te llevaremos a la página que abriste."
+
+#: src/shell/LoginPage.tsx
+msgid "Enter the email and password for your MatterWave account."
+msgstr "Introduce el correo y la contraseña de tu cuenta de MatterWave."
+
+#: src/shell/SignupPage.tsx
+msgid "Enter the phone number with its country code, like +1 406 555 0100."
+msgstr "Introduce el número de teléfono con su prefijo de país, como +34 600 000 000."
+
+#: src/shell/authForms.ts
+msgid "Enter your email address."
+msgstr "Introduce tu dirección de correo."
+
+#: src/shell/LoginPage.tsx
+msgid "Enter your email, then use your passkey."
+msgstr "Escribe tu correo y luego usa tu llave de acceso."
+
+#: src/shell/SignupPage.tsx
+msgid "Enter your first name."
+msgstr "Introduce tu nombre."
+
+#: src/shell/SignupPage.tsx
+msgid "Enter your last name."
+msgstr "Introduce tus apellidos."
+
+#: src/shell/authForms.ts
+msgid "Enter your password again."
+msgstr "Introduce tu contraseña de nuevo."
+
+#: src/shell/LoginPage.tsx
+msgid "Enter your password."
+msgstr "Introduce tu contraseña."
+
+#: src/shell/LoginPage.tsx
+msgid "Enter your work email. If your organisation uses single sign-on, you will be taken to its identity provider."
+msgstr "Escribe tu correo del trabajo. Si tu organización usa inicio de sesión único, te llevaremos a su proveedor de identidad."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Every plan includes a monthly allowance of tokens. Pick monthly or annual billing, compare the plans below, and read how the allowance works under the cards."
+msgstr "Cada plan incluye una cuota mensual de tokens. Elige facturación mensual o anual, compara los planes más abajo y lee cómo funciona la cuota bajo las tarjetas."
+
+#: src/shell/HelpPage.tsx
+msgid "Every reply is generated by a language model, and the model that wrote it is named under the reply. A model can state things confidently that are wrong, invented or out of date, and it has no memory beyond this conversation and the instructions in force for it. Check anything that matters before you act on it. Nobody is reading your messages as you send them; the Instructions control above the transcript shows exactly what shapes the answers."
+msgstr "Cada respuesta la genera un modelo de lenguaje, y el modelo que la escribió se indica debajo de la respuesta. Un modelo puede afirmar con seguridad cosas erróneas, inventadas o desactualizadas, y no tiene memoria más allá de esta conversación y de las instrucciones vigentes para ella. Comprueba todo lo que importe antes de actuar. Nadie lee tus mensajes mientras los envías; el control de Instrucciones sobre la transcripción muestra exactamente qué da forma a las respuestas."
+
+#: src/shell/LandingPage.tsx
+msgid "EVERYWHERE"
+msgstr "EN TODAS PARTES"
+
+#: src/shell/HelpPage.tsx
+msgid "Exporting a conversation"
+msgstr "Exportar una conversación"
+
+#: src/shell/LoginPage.tsx
+msgid "Finish signing in in the browser window that opened, then come back here."
+msgstr "Termina de iniciar sesión en la ventana del navegador que se abrió y vuelve aquí."
+
+#: src/shell/SignupPage.tsx
+msgid "First name"
+msgstr "Nombre"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Following your device, which is currently {locale}."
+msgstr "Siguiendo tu dispositivo, que ahora está en {locale}."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Following your device, which is currently dark."
+msgstr "Siguiendo tu dispositivo, que ahora está en modo oscuro."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Following your device, which is currently light."
+msgstr "Siguiendo tu dispositivo, que ahora está en modo claro."
+
+#: src/shell/LoginPage.tsx
+msgid "Forgot password?"
+msgstr "¿Has olvidado la contraseña?"
+
+#: src/shell/LandingPage.tsx
+msgid "Free plan, no card. Nothing you write trains a model."
+msgstr "Plan gratuito, sin tarjeta. Nada de lo que escribes entrena un modelo."
+
+#: src/components/AppError.tsx
+#: src/shell/NotFoundPage.tsx
+msgid "Go home"
+msgstr "Ir al inicio"
+
+#: src/shell/CommandPalette.tsx
+#: src/shell/HelpPage.tsx
+#: src/shell/NotFoundPage.tsx
+#: src/shell/palette.ts
+#: src/shell/UserMenu.tsx
+msgid "Help"
+msgstr "Ayuda"
+
+#: src/shell/LandingPage.tsx
+msgid "Here it is, ready to paste: revenue finished ahead of plan, the Team plan launched, two roles remain open…"
+msgstr "Aquí lo tienes, listo para pegar: los ingresos cerraron por encima del plan, se lanzó el plan Team, quedan dos puestos abiertos…"
+
+#: src/shell/AuthForm.tsx
+msgid "Hide"
+msgstr "Ocultar"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "How am I billed?"
+msgstr "¿Cómo se me factura?"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "How do seats work?"
+msgstr "¿Cómo funcionan los puestos?"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "How the allowance works"
+msgstr "Cómo funciona la cuota"
+
+#: src/shell/SignupPage.tsx
+msgid "I accept the <0>Terms of Service</0> and <1>Privacy Policy</1>"
+msgstr "Acepto los <0>Términos del servicio</0> y la <1>Política de privacidad</1>"
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "I have read and accept the <0>Terms of Service</0> and <1>Privacy Policy</1>"
+msgstr "He leído y acepto los <0>Términos del servicio</0> y la <1>Política de privacidad</1>"
+
+#: src/shell/LandingPage.tsx
+msgid "Import and export"
+msgstr "Importa y exporta"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "In the app"
+msgstr "En la aplicación"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Included with every account"
+msgstr "Incluido con todas las cuentas"
+
+#: src/shell/SignupPage.tsx
+msgid "Join {orgName}"
+msgstr "Unirse a {orgName}"
+
+#: src/shell/HelpPage.tsx
+#: src/shell/palette.ts
+msgid "Keyboard shortcuts"
+msgstr "Atajos de teclado"
+
+#: src/shell/Shell.tsx
+msgid "Keyboard shortcuts and help"
+msgstr "Atajos de teclado y ayuda"
+
+#: src/shell/Shell.tsx
+msgid "Keyboard shortcuts and help (?)"
+msgstr "Atajos de teclado y ayuda (?)"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Language"
+msgstr "Idioma"
+
+#: src/shell/SignupPage.tsx
+msgid "Last name"
+msgstr "Apellidos"
+
+#. placeholder {0}: lastProvider.providerName
+#: src/shell/LoginPage.tsx
+msgid "Last time you signed in with {0}."
+msgstr "La última vez iniciaste sesión con {0}."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+#: src/shell/UserMenu.tsx
+msgid "Light"
+msgstr "Claro"
+
+#: src/boot.tsx
+msgid "Loading MatterWave…"
+msgstr "Cargando MatterWave…"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Loading preferences…"
+msgstr "Cargando las preferencias…"
+
+#: src/components/AppError.tsx
+msgid "Loading…"
+msgstr "Cargando…"
+
+#: src/shell/LoginPage.tsx
+msgid "Looking up your organisation…"
+msgstr "Buscando tu organización…"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Mail when your organisation nears its budget or plan allowance."
+msgstr "Correo cuando tu organización se acerque a su presupuesto o a la cuota del plan."
+
+#: src/shell/UserMenu.tsx
+msgid "Manage billing"
+msgstr "Gestionar la facturación"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Match device"
+msgstr "Igual que el dispositivo"
+
+#: src/shell/LoginPage.tsx
+msgid "MatterWave signs you in through your web browser."
+msgstr "MatterWave inicia tu sesión a través del navegador web."
+
+#: src/components/AppError.tsx
+msgid "MatterWave was updated"
+msgstr "MatterWave se ha actualizado"
+
+#: src/shell/LandingPage.tsx
+msgid "Model"
+msgstr "Modelo"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Model prices"
+msgstr "Precios de los modelos"
+
+#: src/shell/LandingPage.tsx
+msgid "Models"
+msgstr "Modelos"
+
+#: src/shell/LandingPage.tsx
+msgid "Models that <0>move</0> with you."
+msgstr "Modelos que se <0>mueven</0> contigo."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Monthly"
+msgstr "Mensual"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Monthly or annually, in advance, at the price shown on the card, by card when you subscribe. A plan sold per seat is charged for each member of the organisation. Organisations that need invoices on net terms with a PO number can ask sales below."
+msgstr "Mensual o anualmente, por adelantado, al precio que muestra la tarjeta, con tarjeta al suscribirte. Un plan vendido por puesto se cobra por cada miembro de la organización. Las organizaciones que necesiten facturas a plazo con número de pedido pueden pedirlo a ventas más abajo."
+
+#: src/shell/palette.ts
+#: src/shell/Shell.tsx
+msgid "New chat"
+msgstr "Nuevo chat"
+
+#: src/shell/LoginPage.tsx
+msgid "New to MatterWave? <0>Create account</0>"
+msgstr "¿Nuevo en MatterWave? <0>Crear cuenta</0>"
+
+#: src/lib/loginMemory.ts
+msgid "No single sign-on is set up for {detail}. Sign in with your password, or ask an administrator of your organisation to set it up."
+msgstr "No hay inicio de sesión único configurado para {detail}. Inicia sesión con tu contraseña o pide a un administrador de tu organización que lo configure."
+
+#: src/components/AppError.tsx
+#: src/shell/NotFoundPage.tsx
+msgid "Nothing lives at this address. It may have moved, or the link may be mistyped."
+msgstr "No hay nada en esta dirección. Puede haberse movido, o el enlace puede estar mal escrito."
+
+#: src/shell/CommandPalette.tsx
+msgid "Nothing matches."
+msgstr "Nada coincide."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Notifications"
+msgstr "Notificaciones"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Occasional mail about new models and features."
+msgstr "Correo ocasional sobre nuevos modelos y funciones."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "On the Free plan and on any annual plan, requests stop until the month resets. On a paid monthly plan, requests keep going at each model's list price, billed as overage on the next invoice, up to the overage cap."
+msgstr "En el plan Free y en cualquier plan anual, las solicitudes se detienen hasta que el mes se reinicia. En un plan mensual de pago, las solicitudes continúan al precio de lista de cada modelo, facturadas como exceso en la siguiente factura, hasta el tope de exceso."
+
+#: src/shell/LandingPage.tsx
+msgid "One platform, <0>every surface</0>"
+msgstr "Una plataforma, <0>en todas partes</0>"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "One seat per member, added and removed as they join and leave"
+msgstr "Un puesto por miembro, añadido y retirado a medida que entran y salen"
+
+#: src/shell/HelpPage.tsx
+msgid "Open the conversation actions menu (the three dots beside the model picker) and choose <0>Report conversation</0>, or use the <1>Report</1> action under a reply to report just that reply. You will be asked which kind of problem it is:"
+msgstr "Abre el menú de acciones de la conversación (los tres puntos junto al selector de modelo) y elige <0>Denunciar conversación</0>, o usa la acción <1>Denunciar</1> bajo una respuesta para denunciar solo esa respuesta. Se te preguntará qué tipo de problema es:"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Opening checkout…"
+msgstr "Abriendo el pago…"
+
+#: src/shell/SignupPage.tsx
+msgid "Optional. With the country code, like +1 406 555 0100."
+msgstr "Opcional. Con el prefijo de país, como +34 600 000 000."
+
+#: src/shell/HelpPage.tsx
+msgid "or"
+msgstr "o"
+
+#: src/shell/NotFoundPage.tsx
+msgid "Page <0>not found</0>"
+msgstr "Página <0>no encontrada</0>"
+
+#: src/components/AppError.tsx
+msgid "Page not found"
+msgstr "Página no encontrada"
+
+#: src/components/AppError.tsx
+#: src/shell/NotFoundPage.tsx
+msgid "Page not found · MatterWave"
+msgstr "Página no encontrada · MatterWave"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Partner model prices"
+msgstr "Precios de los modelos asociados"
+
+#: src/shell/LandingPage.tsx
+msgid "Passkeys and sign-on"
+msgstr "Llaves de acceso e inicio de sesión"
+
+#: src/shell/LandingPage.tsx
+msgid "Passkeys, two-step sign-in, your organisation's single sign-on, and attachments scanned before a model reads them."
+msgstr "Llaves de acceso, verificación en dos pasos, el inicio de sesión único de tu organización y adjuntos analizados antes de que un modelo los lea."
+
+#: src/shell/LoginPage.tsx
+#: src/shell/SignupPage.tsx
+msgid "Password"
+msgstr "Contraseña"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Past the allowance, a paid monthly plan is billed at these list prices."
+msgstr "Más allá de la cuota, un plan mensual de pago se factura a estos precios de lista."
+
+#: src/shell/SignupPage.tsx
+msgid "Phone (optional)"
+msgstr "Teléfono (opcional)"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Plan comparison"
+msgstr "Comparativa de planes"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Plans"
+msgstr "Planes"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Preferences saved."
+msgstr "Preferencias guardadas."
+
+#: src/shell/LandingPage.tsx
+msgid "Priced per million tokens. Each model spends your plan's allowance at its own weight, so an allowance buys the same dollars of list price whichever model you pick. Paid plans add the dearer models; <0>the Plans page</0> says which."
+msgstr "Precios por millón de tokens. Cada modelo consume la asignación de tu plan con su propio peso, así que una asignación compra los mismos dólares de precio de lista sea cual sea el modelo. Los planes de pago añaden los modelos más caros; <0>la página de planes</0> indica cuáles."
+
+#: src/shell/FrontDoorChrome.tsx
+msgid "Pricing"
+msgstr "Precios"
+
+#: src/shell/FrontDoorChrome.tsx
+msgid "Privacy"
+msgstr "Privacidad"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Pro and Pro Plus are one seat. The Team plan is sold per seat: the seats are the members, added and removed as they join and leave, and every seat's tokens go into one pool the whole organisation draws on. Pending invites are not billed."
+msgstr "Pro y Pro Plus son un solo puesto. El plan Team se vende por puesto: los puestos son los miembros, añadidos y retirados a medida que entran y salen, y los tokens de todos los puestos van a un fondo común del que dispone toda la organización. Las invitaciones pendientes no se facturan."
+
+#: src/shell/LandingPage.tsx
+msgid "Product preview"
+msgstr "Vista previa del producto"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Product updates"
+msgstr "Novedades del producto"
+
+#: src/shell/LandingPage.tsx
+msgid "Prompt"
+msgstr "Prompt"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Questions"
+msgstr "Preguntas"
+
+#: src/shell/LandingPage.tsx
+msgid "Read the docs"
+msgstr "Leer la documentación"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Recommended"
+msgstr "Recomendado"
+
+#: src/components/AppError.tsx
+msgid "Reload"
+msgstr "Recargar"
+
+#: src/shell/HelpPage.tsx
+msgid "Reporting a conversation or a reply"
+msgstr "Denunciar una conversación o una respuesta"
+
+#: src/boot.tsx
+#: src/components/AppError.tsx
+#: src/shell/SignupPage.tsx
+msgid "Retry"
+msgstr "Reintentar"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Save preferences"
+msgstr "Guardar preferencias"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Saved on this device only; the account could not be updated."
+msgstr "Guardado solo en este dispositivo; no se pudo actualizar la cuenta."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Saved to your account."
+msgstr "Guardado en tu cuenta."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+#: src/shell/AcceptTermsNotice.tsx
+msgid "Saving…"
+msgstr "Guardando…"
+
+#: src/shell/palette.ts
+msgid "Search conversations for “{q}”"
+msgstr "Buscar «{q}» en las conversaciones"
+
+#: src/shell/LandingPage.tsx
+msgid "Seats, roles and budgets"
+msgstr "Puestos, roles y presupuestos"
+
+#: src/shell/LandingPage.tsx
+msgid "SECURE"
+msgstr "SEGURO"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Self-serve subscriptions are not open on this deployment yet. <0>Contact sales</0>"
+msgstr "Las suscripciones de autoservicio aún no están abiertas en este despliegue. <0>Contactar con ventas</0>"
+
+#: src/shell/NotFoundPage.tsx
+msgid "Service status"
+msgstr "Estado del servicio"
+
+#: src/shell/CommandPalette.tsx
+#: src/shell/UserMenu.tsx
+msgid "Settings"
+msgstr "Ajustes"
+
+#: src/shell/palette.ts
+msgid "Settings: {title}"
+msgstr "Ajustes: {title}"
+
+#: src/shell/AuthForm.tsx
+msgid "Show"
+msgstr "Mostrar"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Show a notice in the app when the organisation's budget is nearly spent."
+msgstr "Mostrar un aviso en la aplicación cuando el presupuesto de la organización esté casi agotado."
+
+#: src/shell/FrontDoorChrome.tsx
+#: src/shell/LoginPage.tsx
+msgid "Sign in"
+msgstr "Iniciar sesión"
+
+#: src/shell/SignupPage.tsx
+msgid "Sign in instead"
+msgstr "Iniciar sesión en su lugar"
+
+#: src/shell/LoginPage.tsx
+msgid "Sign in to continue"
+msgstr "Inicia sesión para continuar"
+
+#: src/shell/LoginPage.tsx
+msgid "Sign in with {ssoName}"
+msgstr "Iniciar sesión con {ssoName}"
+
+#: src/shell/LoginPage.tsx
+msgid "Sign in with a password instead"
+msgstr "Iniciar sesión con contraseña"
+
+#: src/shell/LoginPage.tsx
+msgid "Sign in with your browser"
+msgstr "Iniciar sesión con el navegador"
+
+#: src/shell/LoginPage.tsx
+msgid "Sign in with your organisation"
+msgstr "Iniciar sesión con tu organización"
+
+#: src/shell/UserMenu.tsx
+msgid "Sign out"
+msgstr "Cerrar sesión"
+
+#. placeholder {0}: accountLabel(account)
+#: src/shell/UserMenu.tsx
+msgid "Sign out {0}"
+msgstr "Cerrar la sesión de {0}"
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "Sign out instead"
+msgstr "Cerrar sesión en su lugar"
+
+#: src/shell/UserMenu.tsx
+msgid "Sign out of all accounts"
+msgstr "Cerrar sesión en todas las cuentas"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Sign up to subscribe"
+msgstr "Regístrate para suscribirte"
+
+#: src/shell/UserMenu.tsx
+msgid "Signed in as"
+msgstr "Sesión iniciada como"
+
+#: src/shell/LoginPage.tsx
+msgid "Signed in on this browser"
+msgstr "Con sesión iniciada en este navegador"
+
+#: src/shell/LoginPage.tsx
+msgid "Signing in…"
+msgstr "Iniciando sesión…"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Single sign-on"
+msgstr "Inicio de sesión único"
+
+#: src/shell/Shell.tsx
+msgid "Skip to composer"
+msgstr "Saltar al compositor"
+
+#: src/components/AppError.tsx
+msgid "Something went wrong"
+msgstr "Algo ha salido mal"
+
+#: src/shell/LandingPage.tsx
+msgid "Start free"
+msgstr "Empieza gratis"
+
+#: src/shell/LandingPage.tsx
+msgid "Start on <0>Free</0>."
+msgstr "Empieza en <0>Free</0>."
+
+#: src/shell/SignupPage.tsx
+msgid "Start with your email: we will send a code there to confirm it."
+msgstr "Empieza con tu correo: te enviaremos un código para confirmarlo."
+
+#: src/shell/LoginPage.tsx
+msgid "Starting sign-in…"
+msgstr "Iniciando el acceso…"
+
+#: src/shell/frontDoorLinks.ts
+msgid "Status"
+msgstr "Estado"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Subscribe"
+msgstr "Suscribirse"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Subscribing is unavailable until billing loads."
+msgstr "No es posible suscribirse hasta que se cargue la facturación."
+
+#: src/shell/LandingPage.tsx
+msgid "Summarise the board update in five bullets."
+msgstr "Resume la actualización para el consejo en cinco puntos."
+
+#: src/shell/HelpPage.tsx
+msgid "Support and status"
+msgstr "Soporte y estado"
+
+#: src/shell/Shell.tsx
+msgid "Support sessions are read only"
+msgstr "Las sesiones de soporte son de solo lectura"
+
+#: src/shell/UserMenu.tsx
+msgid "Switch account"
+msgstr "Cambiar de cuenta"
+
+#. placeholder {0}: accountLabel(account)
+#: src/shell/UserMenu.tsx
+msgid "Switch to {0}"
+msgstr "Cambiar a {0}"
+
+#: src/shell/UserMenu.tsx
+msgid "Switching…"
+msgstr "Cambiando…"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+#: src/shell/UserMenu.tsx
+msgid "System"
+msgstr "Sistema"
+
+#: src/shell/LandingPage.tsx
+msgid "TEAMS"
+msgstr "EQUIPOS"
+
+#: src/shell/FrontDoorChrome.tsx
+msgid "Terms"
+msgstr "Términos"
+
+#: src/shell/LandingPage.tsx
+msgid "The {family} <0>family</0>"
+msgstr "La <0>familia</0> {family}"
+
+#: src/shell/LandingPage.tsx
+msgid "The <0>models</0>"
+msgstr "Los <0>modelos</0>"
+
+#: src/boot.tsx
+msgid "The API may be down, or this origin may not be allowed by CORS."
+msgstr "Puede que la API esté caída o que este origen no esté permitido por CORS."
+
+#: src/shell/authForms.ts
+msgid "The code is the six characters from the email."
+msgstr "El código son los seis caracteres del correo."
+
+#: src/shell/authForms.ts
+msgid "The form could not be read. Reload the page and try again."
+msgstr "No se pudo leer el formulario. Recarga la página e inténtalo de nuevo."
+
+#: src/shell/SignupPage.tsx
+msgid "The invitation is for this address."
+msgstr "La invitación es para esta dirección."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "The language of the app's own text. Conversations are never translated."
+msgstr "El idioma de los textos de la aplicación. Las conversaciones nunca se traducen."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "The most overage a month can add. It starts at the plan's monthly price (per seat on a plan sold per seat), so a runaway key can bill at most what you already agreed to pay once; an administrator can raise or lower it in Settings. When the cap is reached, requests are refused until the month resets. A spending budget can stop requests sooner."
+msgstr "El exceso máximo que puede añadir un mes. Empieza en el precio mensual del plan (por puesto en un plan vendido por puesto), de modo que una clave descontrolada puede facturar como mucho lo que ya aceptaste pagar una vez; un administrador puede subirlo o bajarlo en Ajustes. Cuando se alcanza el tope, las solicitudes se rechazan hasta que el mes se reinicia. Un presupuesto de gasto puede detener las solicitudes antes."
+
+#: src/shell/authForms.ts
+#: src/shell/SignupPage.tsx
+msgid "The passwords do not match."
+msgstr "Las contraseñas no coinciden."
+
+#: src/shell/productCopy.ts
+msgid "The platform your AI apps run on."
+msgstr "La plataforma en la que funcionan tus aplicaciones de IA."
+
+#: src/shell/HelpPage.tsx
+msgid "The same menu offers <0>Export as Markdown</0> and <1>Export as JSON</1>. Both are built in your browser from the conversation already on screen, so nothing is sent anywhere and it works offline. Markdown is the branch you are reading, one section per turn, with attachments and tool calls named rather than embedded. JSON carries the same messages as the API sent them, plus every other branch of the conversation. The file is named after the conversation’s title. Everything on your account at once is under <2>Settings › Data</2>."
+msgstr "El mismo menú ofrece <0>Exportar como Markdown</0> y <1>Exportar como JSON</1>. Ambos se generan en tu navegador a partir de la conversación que ya está en pantalla, así que no se envía nada a ningún sitio y funciona sin conexión. Markdown es la rama que estás leyendo, una sección por turno, con los adjuntos y las llamadas a herramientas nombrados en lugar de incrustados. JSON contiene los mismos mensajes tal como los envió la API, más todas las demás ramas de la conversación. El archivo toma el nombre del título de la conversación. Todo lo de tu cuenta de una vez está en <2>Ajustes › Datos</2>."
+
+#: src/shell/HelpPage.tsx
+msgid "The same models are reachable from your own code: the API speaks the OpenAI chat-completions format, so any OpenAI client works with a MatterWave key from <0>Settings › API keys</0>. The <1>developer portal</1> has the quickstart, the reference and the SDKs."
+msgstr "Los mismos modelos están disponibles desde tu propio código: la API habla el formato chat-completions de OpenAI, así que cualquier cliente de OpenAI funciona con una clave de MatterWave de <0>Ajustes › Claves de API</0>. El <1>portal de desarrolladores</1> tiene la guía rápida, la referencia y los SDK."
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "The terms have <0>changed</0>"
+msgstr "Las condiciones han <0>cambiado</0>"
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+#: src/shell/UserMenu.tsx
+msgid "Theme"
+msgstr "Tema"
+
+#: src/shell/authForms.ts
+msgid "this is not in the expected format"
+msgstr "no tiene el formato esperado"
+
+#: src/shell/authForms.ts
+msgid "this is required"
+msgstr "es obligatorio"
+
+#: src/shell/SignupPage.tsx
+msgid "This is the name of your account."
+msgstr "Este es el nombre de tu cuenta."
+
+#: src/components/AppError.tsx
+msgid "This page could not load"
+msgstr "Esta página no se pudo cargar"
+
+#: src/components/AppError.tsx
+msgid "This page hit an error it could not recover from. Retry."
+msgstr "Esta página encontró un error del que no pudo recuperarse. Reintenta."
+
+#: src/components/AppError.tsx
+msgid "This section could not be shown. Retry."
+msgstr "Esta sección no se pudo mostrar. Reintenta."
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "To keep using MatterWave, read and accept the current Terms of Service{current}."
+msgstr "Para seguir usando MatterWave, lee y acepta los Términos del servicio actuales{current}."
+
+#: src/shell/Shell.tsx
+msgid "Toggle sidebar"
+msgstr "Mostrar u ocultar la barra lateral"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Try again"
+msgstr "Inténtalo de nuevo"
+
+#: src/shell/CommandPalette.tsx
+msgid "Type a command or a conversation title"
+msgstr "Escribe un comando o el título de una conversación"
+
+#: src/shell/CommandPalette.tsx
+msgid "Type a command or a conversation title…"
+msgstr "Escribe un comando o el título de una conversación…"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Unlimited conversations"
+msgstr "Conversaciones ilimitadas"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Unlimited seats"
+msgstr "Puestos ilimitados"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Up to {maxSaving} on annual billing"
+msgstr "Hasta {maxSaving} con facturación anual"
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "Updated wording."
+msgstr "Redacción actualizada."
+
+#: src/shell/UserMenu.tsx
+msgid "Upgrade"
+msgstr "Mejorar el plan"
+
+#: src/shell/LandingPage.tsx
+msgid "Upgrade for more models, more tokens or a team."
+msgstr "Mejora tu plan para tener más modelos, más tokens o un equipo."
+
+#: src/shell/LandingPage.tsx
+msgid "Upgrade for more models, more tokens or a team. Paid plans from {fromPrice} a month."
+msgstr "Mejora tu plan para tener más modelos, más tokens o un equipo. Planes de pago desde {fromPrice} al mes."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Usage alerts"
+msgstr "Alertas de uso"
+
+#: src/shell/HelpPage.tsx
+msgid "Usage, plans and billing"
+msgstr "Uso, planes y facturación"
+
+#: src/shell/authForms.ts
+msgid "Use {min} characters or more for your password."
+msgstr "Usa {min} caracteres o más para tu contraseña."
+
+#: src/shell/authForms.ts
+msgid "use a number greater than {bound}"
+msgstr "usa un número mayor que {bound}"
+
+#: src/shell/authForms.ts
+msgid "use a number greater than or equal to {bound}"
+msgstr "usa un número mayor o igual que {bound}"
+
+#: src/shell/authForms.ts
+msgid "use a number less than {bound}"
+msgstr "usa un número menor que {bound}"
+
+#: src/shell/authForms.ts
+msgid "use a number less than or equal to {bound}"
+msgstr "usa un número menor o igual que {bound}"
+
+#: src/shell/LoginPage.tsx
+msgid "Use a passkey"
+msgstr "Usar una llave de acceso"
+
+#: src/shell/authForms.ts
+msgid "use at most {count} characters"
+msgstr "usa como máximo {count} caracteres"
+
+#: src/shell/HelpPage.tsx
+msgid "Using the API"
+msgstr "Usar la API"
+
+#: src/shell/LoginPage.tsx
+msgid "Verify your email"
+msgstr "Verifica tu correo"
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "Version {version}"
+msgstr "Versión {version}"
+
+#: src/shell/LoginPage.tsx
+msgid "Waiting for your browser…"
+msgstr "Esperando a tu navegador…"
+
+#: src/shell/LoginPage.tsx
+msgid "Waiting for your passkey…"
+msgstr "Esperando tu llave de acceso…"
+
+#: src/shell/LandingPage.tsx
+msgid "Web, terminal, VS Code, desktop"
+msgstr "Web, terminal, VS Code, escritorio"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "What"
+msgstr "Qué"
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "What changed"
+msgstr "Qué ha cambiado"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "What happens when I reach my allowance?"
+msgstr "¿Qué pasa cuando alcanzo mi cuota?"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "What is the overage cap?"
+msgstr "¿Qué es el tope de exceso?"
+
+#: src/shell/HelpPage.tsx
+msgid "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
+msgstr "Lo que hace el chat y no está escrito en sus botones: los atajos, qué significa aquí hablar con una IA, y cómo denunciar, exportar y seguir el uso."
+
+#: src/apps/settings/panes/PreferencesPane.tsx
+msgid "Which mail this account receives, and what the app warns you about. Receipts and security mail are always sent."
+msgstr "Qué correos recibe esta cuenta y de qué te avisa la aplicación. Los recibos y los correos de seguridad se envían siempre."
+
+#: src/shell/LoginPage.tsx
+msgid "Work account?"
+msgstr "¿Cuenta del trabajo?"
+
+#: src/shell/LoginPage.tsx
+msgid "Work email"
+msgstr "Correo del trabajo"
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Yes. An organisation owner or admin can cancel or change the plan from Settings, Billing; a member cannot. A cancelled subscription runs to the end of the period already paid for. An upgrade takes effect on the next request. A downgrade never deletes anything: if the organisation holds more conversations than the new plan allows, the existing ones stay readable and exportable and creating new ones waits until you upgrade or remove some."
+msgstr "Sí. Un propietario o administrador de la organización puede cancelar o cambiar el plan desde Ajustes, Facturación; un miembro no. Una suscripción cancelada sigue hasta el final del periodo ya pagado. Una mejora surte efecto en la siguiente solicitud. Una rebaja nunca borra nada: si la organización tiene más conversaciones de las que permite el nuevo plan, las existentes siguen pudiendo leerse y exportarse, y la creación de nuevas espera hasta que mejores el plan o elimines algunas."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Yes. Where a plan offers a free trial, the payment method collected when subscribing is charged when the trial ends unless the subscription is cancelled first."
+msgstr "Sí. Cuando un plan ofrece una prueba gratuita, el método de pago recogido al suscribirse se cobra al terminar la prueba, salvo que la suscripción se cancele antes."
+
+#: src/shell/AcceptTermsNotice.tsx
+msgid "You accepted version <0>{accepted}</0>. To keep using MatterWave, read and accept the current version{current}."
+msgstr "Aceptaste la versión <0>{accepted}</0>. Para seguir usando MatterWave, lee y acepta la versión actual{current}."
+
+#: src/shell/HelpPage.tsx
+msgid "You are talking to an AI"
+msgstr "Estás hablando con una IA"
+
+#: src/shell/SignupPage.tsx
+msgid "You have been invited to {orgName} as {role}. Create your account to join; we will email you a code to confirm your address."
+msgstr "Te han invitado a {orgName} como {role}. Crea tu cuenta para unirte; te enviaremos por correo un código para confirmar tu dirección."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Your current plan"
+msgstr "Tu plan actual"
+
+#: src/shell/LoginPage.tsx
+msgid "Your organisation signs in with {ssoName}."
+msgstr "Tu organización inicia sesión con {ssoName}."
+
+#: src/lib/loginMemory.ts
+msgid "Your organisation's identity provider did not complete the sign-in ({detail}). Try again, or sign in with your password."
+msgstr "El proveedor de identidad de tu organización no completó el inicio de sesión ({detail}). Inténtalo de nuevo o inicia sesión con tu contraseña."
+
+#: src/lib/loginMemory.ts
+msgid "Your organisation's identity provider did not complete the sign-in. Try again, or sign in with your password."
+msgstr "El proveedor de identidad de tu organización no completó el inicio de sesión. Inténtalo de nuevo o inicia sesión con tu contraseña."
+
+#: src/lib/loginMemory.ts
+msgid "Your organisation's identity provider signed in {detail}, which is not on the domain you entered. Use the work email that provider knows you by, or sign in with your password."
+msgstr "El proveedor de identidad de tu organización inició sesión como {detail}, que no pertenece al dominio que escribiste. Usa el correo del trabajo con el que te conoce ese proveedor o inicia sesión con tu contraseña."
+
+#: src/lib/loginMemory.ts
+msgid "Your organisation's sign-in could not be reached. Try again in a moment, or sign in with your password."
+msgstr "No se pudo contactar con el inicio de sesión de tu organización. Inténtalo de nuevo en un momento o inicia sesión con tu contraseña."
+
+#: src/apps/billing/PricingPage.tsx
+msgid "Your plan"
+msgstr "Tu plan"
+
+#: src/boot.tsx
+msgid "Your session has expired."
+msgstr "Tu sesión ha caducado."
+
+#: src/shell/LandingPage.tsx
+msgid "YOURS"
+msgstr "TUYO"

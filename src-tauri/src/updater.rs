@@ -6,7 +6,7 @@
 //! real endpoint and public key (scripts/release-config.mjs) and builds with
 //! `MW_DESKTOP_UPDATER=1`, which is what registers the plugin and runs the
 //! launch-time check. A build without the flag has no updater at all: no
-//! plugin, no request, nothing for the webview to call.
+//! plugin, no request, and the SPA's check command fails.
 
 use tauri::{AppHandle, Emitter};
 
@@ -26,27 +26,29 @@ fn flag_is_on(value: Option<&str>) -> bool {
     matches!(value.map(str::trim), Some("1") | Some("true"))
 }
 
-/// One check at launch, in the background. It reports and stops: the SPA is
-/// told through `update-available`, and downloading or installing stays a
-/// deliberate step rather than something that happens under a person's
-/// open conversation. A build with the flag but no endpoint (a dev build)
-/// logs that it is not checking and otherwise behaves as if off.
+/// One check, shared by the launch path and the SPA's `check_for_updates`
+/// command. It reports and stops: a newer version is announced to the SPA as
+/// `update-available` with the version string and returned to the caller, and
+/// downloading or installing stays a deliberate step rather than something
+/// that happens under a person's open conversation. With the flag on but no
+/// endpoint (a dev build) there is no plugin to ask, which surfaces as the
+/// returned error.
+pub async fn check(app: &AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app.updater().map_err(|e| format!("not checking: {e}"))?;
+    let Some(update) = updater.check().await.map_err(|e| format!("check failed: {e}"))? else {
+        return Ok(None);
+    };
+    let version = update.version.clone();
+    let _ = app.emit(UPDATE_AVAILABLE_EVENT, version.clone());
+    Ok(Some(version))
+}
+
+/// One check at launch, in the background; failures are logged, never shown.
 pub fn check_on_launch(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        use tauri_plugin_updater::UpdaterExt;
-        let updater = match app.updater() {
-            Ok(u) => u,
-            Err(e) => {
-                eprintln!("updater: not checking: {e}");
-                return;
-            }
-        };
-        match updater.check().await {
-            Ok(Some(update)) => {
-                let _ = app.emit(UPDATE_AVAILABLE_EVENT, update.version.clone());
-            }
-            Ok(None) => {}
-            Err(e) => eprintln!("updater: check failed: {e}"),
+        if let Err(e) = check(&app).await {
+            eprintln!("updater: {e}");
         }
     });
 }

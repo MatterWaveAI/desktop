@@ -1,0 +1,394 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+/* The three faces, self-hosted: the CSP's font-src is 'self', so a font
+   CDN is not an option, and the bundle is what ships them anyway. Each
+   @font-face carries a unicode-range, so a page downloads only the subsets
+   its text uses (latin, in practice). Instrument Serif has one weight; the
+   italic is the wordmark's "Wave" and the one accent word in a display
+   heading. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "./styles/theme.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* visualViewport-driven height; 100dvh is the no-JS fallback. 100vh
+     intentionally unused: it ignores the on-screen keyboard. */
+  --vvh: 100dvh;
+
+  /*
+   * shadcn/Base UI bridge. The vendored components in src/components/ui/
+   * speak shadcn's variable names; every one of them aliases a
+   * semantic token — no colour value is defined here. theme.css owns
+   * colour.
+   */
+  --background: var(--mw-color-surface);
+  --foreground: var(--mw-color-text);
+  --card: var(--mw-color-surface-raised);
+  --card-foreground: var(--mw-color-text);
+  --popover: var(--mw-color-surface-raised);
+  --popover-foreground: var(--mw-color-text);
+  --primary: var(--mw-color-accent);
+  --primary-foreground: var(--mw-color-accent-foreground);
+  --primary-hover: var(--mw-color-accent-hover);
+  --secondary: var(--mw-color-surface-hover);
+  --secondary-foreground: var(--mw-color-text);
+  --muted: var(--mw-color-surface-hover);
+  --muted-foreground: var(--mw-color-text-muted);
+  --accent: var(--mw-color-surface-hover);
+  --accent-foreground: var(--mw-color-text);
+  --destructive: var(--mw-color-danger);
+  --border: var(--mw-color-border);
+  --border-emphasis: var(--mw-color-border-emphasis);
+  /* Inputs take the strong border: a field has to be findable against its
+     surface (1.4.11, 3:1). Dividers keep the light --border. */
+  --input: var(--mw-color-border-strong);
+  /* The focus ring is the brand's selection blue, not the button fill: a
+     ring around a primary button has to differ from the button. */
+  --ring: var(--mw-color-focus);
+}
+
+html,
+body,
+#root {
+  height: var(--vvh);
+}
+
+/*
+ * The mobile rules, grouped so the reasoning stays with them.
+ */
+
+/* 1.4.10 Reflow: the PAGE never scrolls sideways. Anything too wide for the
+   viewport has to scroll inside its own box (the code/table rules below), and
+   a long token has to wrap (the prose rule). Without this a single unbroken
+   URL in a model answer drags the whole app sideways on a phone. */
+html,
+body {
+  overflow-x: hidden;
+  /* iOS inflates text in landscape unless this is pinned, which breaks a
+     layout measured in rem. */
+  -webkit-text-size-adjust: 100%;
+}
+
+/*
+ * The composer's safe-area padding. On a notched iPhone in
+ * standalone mode the home indicator sits over the bottom ~34px; without this
+ * the Send button is under it. `max()` rather than a bare `env()` so the
+ * normal 12px padding still applies on a device with no inset, where
+ * env() resolves to 0.
+ *
+ * It is a variable rather than a utility class because the composer is not
+ * the only thing that can be bottom-anchored.
+ */
+:root {
+  --mw-safe-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  --mw-safe-left: env(safe-area-inset-left);
+  --mw-safe-right: env(safe-area-inset-right);
+}
+
+/*
+ * Message prose. Model output contains URLs, hashes and base64 that
+ * have no break opportunity, and the default `overflow-wrap: normal` lets
+ * them overflow their container. Measured at 320px before this rule: a
+ * 662px-wide <a> inside a 288px message box, and a 498px <p> holding a hex
+ * hash — the text was simply CUT OFF, because an ancestor clipped it rather
+ * than scrolling. Cut off is worse than scrolling, and `anywhere` is the
+ * value that breaks mid-token when and only when there is no alternative.
+ */
+.prose-mw {
+  overflow-wrap: anywhere;
+  /* `anywhere` alone still leaves <pre> alone, which is what we want: code
+     scrolls, it does not reflow. */
+}
+
+/* Tables scroll within the message, never the page. react-markdown
+   emits a bare <table> with no wrapper, so the scroll container is declared
+   here rather than in a component. `display: block` on the wrapper is what
+   makes overflow apply to a table at all. */
+.prose-mw table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.prose-mw th,
+.prose-mw td {
+  border: 1px solid var(--mw-color-border);
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+  /* A cell is the one place `anywhere` is wrong: it would shred short words
+     to avoid a scroll the table is already able to do. */
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+/* Long inline code and link text still wrap rather than overflow. */
+.prose-mw :not(pre) > code {
+  overflow-wrap: anywhere;
+}
+
+/* Prose rhythm. Tailwind's preflight strips every margin and list marker,
+   so without these an answer's headings, lists and quotes rendered as one
+   undifferentiated run of text: a numbered list lost its numbers. Spacing is
+   in `em` so it follows the message's own text size. */
+.prose-mw > :first-child {
+  margin-top: 0;
+}
+.prose-mw > :last-child {
+  margin-bottom: 0;
+}
+.prose-mw p,
+.prose-mw ul,
+.prose-mw ol,
+.prose-mw blockquote,
+.prose-mw table,
+.prose-mw .katex-display {
+  margin-block: 0.75em;
+}
+.prose-mw h1,
+.prose-mw h2,
+.prose-mw h3,
+.prose-mw h4,
+.prose-mw h5,
+.prose-mw h6 {
+  margin-block: 1.25em 0.5em;
+  font-family: var(--font-heading, inherit);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.prose-mw h1 {
+  font-size: 1.375em;
+}
+.prose-mw h2 {
+  font-size: 1.25em;
+}
+.prose-mw h3 {
+  font-size: 1.125em;
+}
+.prose-mw h4,
+.prose-mw h5,
+.prose-mw h6 {
+  font-size: 1em;
+}
+.prose-mw ul,
+.prose-mw ol {
+  padding-inline-start: 1.5em;
+}
+.prose-mw ul {
+  list-style: disc;
+}
+.prose-mw ol {
+  list-style: decimal;
+}
+.prose-mw ul ul {
+  list-style: circle;
+}
+.prose-mw li + li,
+.prose-mw li > ul,
+.prose-mw li > ol {
+  margin-top: 0.25em;
+}
+.prose-mw li > p {
+  margin-block: 0.25em;
+}
+/* GFM task lists carry their own checkbox. */
+.prose-mw li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-inline-start: -1.25em;
+}
+.prose-mw blockquote {
+  border-inline-start: 3px solid var(--mw-color-border);
+  padding-inline-start: 0.875em;
+  color: var(--mw-color-text-muted);
+}
+.prose-mw hr {
+  margin-block: 1.25em;
+  border: 0;
+  border-top: 1px solid var(--mw-color-border);
+}
+/* Display math scrolls inside the message like a table, never the page. */
+.prose-mw .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 0.125em;
+}
+
+/*
+ * The sideways-scroll fade: the TabStrip (components/ui/tab-strip.tsx) and
+ * the ScrollFade wrapper (components/ui/scroll-fade.tsx) the plan
+ * comparison grid sits in. Both scroll sideways rather than wrapping; the
+ * component sets data-fade-start and data-fade-end while there is more to
+ * scroll that way, and the mask fades that edge so a clipped tab or column
+ * reads as "more", not as a cut-off word. A mask rather than a gradient
+ * overlay: it fades to whatever surface the strip sits on, so no colour is
+ * involved. The strip hides its scrollbar; the grid keeps its, since a
+ * table of prices is scrolled on purpose and the bar says how far.
+ */
+.mw-tabstrip,
+.mw-scroll-fade {
+  --mw-tabstrip-fade: 1.5rem;
+}
+.mw-tabstrip {
+  scrollbar-width: none;
+}
+.mw-tabstrip::-webkit-scrollbar {
+  display: none;
+}
+.mw-tabstrip[data-fade-start],
+.mw-scroll-fade[data-fade-start] {
+  mask-image: linear-gradient(to right, transparent, black var(--mw-tabstrip-fade));
+}
+.mw-tabstrip[data-fade-end],
+.mw-scroll-fade[data-fade-end] {
+  mask-image: linear-gradient(to left, transparent, black var(--mw-tabstrip-fade));
+}
+.mw-tabstrip[data-fade-start][data-fade-end],
+.mw-scroll-fade[data-fade-start][data-fade-end] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--mw-tabstrip-fade),
+    black calc(100% - var(--mw-tabstrip-fade)),
+    transparent
+  );
+}
+
+/*
+ * Touch targets. A pointer that is not fine — a finger — gets the
+ * message and row toolbars permanently visible rather than on hover, because
+ * there is no hover to reveal them with. `group-hover:block` alone leaves
+ * pin, archive and delete unreachable on a phone.
+ *
+ * `any-hover: none` rather than a width query: a touch laptop at 1280px still
+ * needs this and a mouse on a small window does not.
+ */
+@media (any-hover: none) {
+  .group .group-hover\:block {
+    display: block;
+  }
+}
+
+/* Shiki dual themes: switch to the dark palette when the html.dark class is
+   set (shiki emits --shiki-dark vars alongside the light ones). */
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+/*
+ * Reduced motion: collapse every animation and transition to
+ * a no-op, and pin scroll-behavior to auto. This is also the gate for the
+ * chat autoscroll: assistant-ui scrolls with behavior "instant" while
+ * content streams and "auto" on run start — both are instant positioning
+ * unless CSS says otherwise, and this rule says otherwise never.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* shadcn utility names → the same bridge variables above. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-border-emphasis: var(--border-emphasis);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  code,
+  kbd,
+  samp,
+  pre {
+    @apply font-mono;
+  }
+  /* Links outside a component that colours its own: the brand's link blue,
+     the lighter hover. */
+  a:not([class]) {
+    color: var(--mw-color-link);
+  }
+  a:not([class]):hover {
+    color: var(--mw-color-link-hover);
+  }
+  /*
+   * Native <select>, until each one moves to the styled Select
+   * (components/ui/select.tsx): a panel fill, the control's strong edge and
+   * the brand's focus ring, so the ones still native read as part of the
+   * same set. `color-scheme` on the theme block (theme.css) makes the open
+   * list follow the theme. A select that sets its own classes still wins:
+   * these are base-layer rules, so any utility overrides them.
+   */
+  select {
+    background-color: var(--mw-color-surface-raised);
+    color: var(--mw-color-text);
+    border-color: var(--mw-color-border-strong);
+  }
+  select:focus-visible {
+    outline: var(--ring-width) solid var(--mw-color-focus);
+    outline-offset: 1px;
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--mw-color-focus) 35%, transparent);
+  }
+}
+
+/* The wordmark's "ai": the logo sets it at 27px against a 38px name. */
+.mw-wordmark-ai {
+  font-size: 0.71em;
+  font-style: normal;
+}
+
+/*
+ * The display face as a utility: `font-display` sets Instrument Serif at its
+ * one weight, with the slight negative tracking the mockups use. A display
+ * title never takes font-semibold: the face has no bold, and a synthesised
+ * one smears.
+ */
+@utility font-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  font-synthesis: none;
+}

@@ -1,6 +1,6 @@
 [package]
 name = "matterwave-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "MatterWave desktop: the web app in a native window, signed in through the system browser"
 edition = "2021"
 publish = false
@@ -19,6 +19,9 @@ tauri = { version = "2", features = [] }
 tauri-plugin-deep-link = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-notification = "2"
+# Size and position survive a restart: saved when the window closes,
+# restored at launch, over the config's numbers as the first-run default.
+tauri-plugin-window-state = "2"
 # On Windows and Linux a deep link starts a second process; this hands its URL
 # to the running one, which is the one waiting for the sign-in callback.
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      T-804 step 1. Three things in one line:
+      - `viewport-fit=cover` lets the page paint under the notch and the home
+        indicator, which is what makes env(safe-area-inset-*) non-zero.
+      - `interactive-widget=resizes-content` tells Chromium to resize the LAYOUT
+        viewport when the on-screen keyboard opens, rather than overlaying it.
+        That makes dvh correct on Android without any JS. Safari ignores the
+        key, which is why useVisualViewportFix exists as well — iOS fires no
+        window.resize for the keyboard at all.
+      - no `maximum-scale` / `user-scalable=no`: pinch-zoom is an accessibility
+        affordance (WCAG 1.4.4) and suppressing it is the lazy fix for the
+        iOS tap-zoom problem. The real fix is a 16px composer, below.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="description" content="MatterWave — the platform your AI apps run on." />
+    <title>MatterWave</title>
+
+    <!-- Brand basics (T-801 step 10): favicons at every size, PWA manifest,
+         per-scheme theme colour, OG image. -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0B0C0E" />
+    <meta property="og:title" content="MatterWave" />
+    <meta property="og:description" content="MatterWave — the platform your AI apps run on." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/og-image.png" />
+
+    <!-- Pre-paint theme resolution: same logic as src/shell/theme.ts, inlined
+         so the correct palette is on <html> before first paint — no white
+         flash. Values: "dark" (default) | "light" | "system". -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("mw-theme");
+          var pref =
+            stored === "light" || stored === "dark" || stored === "system"
+              ? stored
+              : "dark";
+          var dark =
+            pref === "dark" ||
+            (pref === "system" &&
+              matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
