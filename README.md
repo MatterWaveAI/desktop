@@ -2,12 +2,14 @@
 
 The web app (`web/`, bundled in this repo) in a native window, built with Tauri 2. The SPA is
 bundled, not loaded from the server; the native side adds what a browser tab cannot: a sign-in
-that survives restarts with the tokens in the OS keychain, deep links (`matterwave://`), an OS
-notification when a reply lands while the window is unfocused, a check for updates the SPA can
-run, and a window whose size and position survive a restart. Tauri rather than Electron: the
-installer is about 10 MB because it uses the OS webview instead of shipping Chromium, the
-renderer has no Node and its IPC is allow-listed per command, and the native layer (sign-in,
-keychain, updater, notifications, deep links) is a few hundred lines of Rust.
+that survives restarts with the tokens in the OS keychain (or an API key in its place, for
+machines nobody sits at), deep links (`matterwave://`), an OS notification when a reply lands
+while the window is unfocused, a tray with Show/Hide and Quit, an update check and install the
+SPA can run, and a window whose size and position survive a restart. Tauri rather than
+Electron: the installer is about 10 MB because it uses the OS webview instead of shipping
+Chromium, the renderer has no Node and its IPC is allow-listed per command, and the native
+layer (sign-in, keychain, updater, notifications, tray, deep links) is a few hundred lines of
+Rust.
 
 ## Prerequisites
 
@@ -34,17 +36,20 @@ build time**: change it and the Rust side rebuilds. A build without it starts, b
 the build has no base URL.
 
 Unit tests: `cd src-tauri && cargo test` (PKCE, callback state check, token parsing, refresh
-decision, loopback parsing, the keychain's save/load rules against an in-memory store, and the
-whole sign-in flow -- discovery, authorize URL, loopback callback, PKCE exchange, refresh, revoke --
-against a fake issuer on 127.0.0.1 with a closure standing in for the browser). The SPA side,
-inside `web/`: `pnpm vitest run src/lib/desktopAuth.test.ts src/lib/desktopAuth.notify.test.ts
+decision, loopback parsing, the keychain's save/load rules against an in-memory store, the API
+key's shape checks, the updater's build flag, and the whole sign-in flow -- discovery,
+authorize URL, loopback callback, PKCE exchange, refresh, revoke -- against a fake issuer on
+127.0.0.1 with a closure standing in for the browser). The SPA side, inside `web/`:
+`pnpm vitest run src/lib/desktopAuth.test.ts src/lib/desktopAuth.notify.test.ts
 src/apps/chat/chatAdapter.test.ts` (the desktop bearer path, the reply-ready notification, the
-streaming adapter).
+streaming adapter), plus the settings pane and update banner tests
+(`pnpm vitest run src/apps/settings/panes/AccountPane.test.ts src/shell/UpdateBanner.test.tsx`).
 
 What the tests do not cover: the real OS keychain (the `Store` seam in `keychain.rs` is what the
 tests drive; the keyring-backed one needs a desktop session), the deep-link delivery (a Tauri
-`AppHandle`), the webview itself, the focus-gated notification (it needs a real window), and the
-updater's checks (they need a signed manifest).
+`AppHandle`), the webview itself, the focus-gated notification and the tray menu (they need a
+real window and a real system tray), and the updater's download and relaunch (they need a signed
+manifest and a built installer).
 
 On Windows, `cargo test` needs the MSVC build tools; the WebView2 SDK is pulled by the `tauri`
 crate and links without the runtime installed. A machine whose application-control policy blocks
@@ -101,7 +106,18 @@ and reloads the page into Boot; it never sends the webview to the identity provi
 browser's path and would leave the window on the IdP. `open_external` opens http(s) and mailto
 links in the system browser and refuses any other scheme.
 
-The webview may call only the app's own seven commands (`src-tauri/capabilities/default.json`);
+### An API key instead of the browser
+
+Settings -> Account ("Desktop app") takes a platform API key (`mw_<id>_<secret>`, the API keys
+pane makes one) as this machine's credential, for CI boxes and shared workstations where a
+browser dance has nobody to dance. `set_api_key` (`src-tauri/src/lib.rs`) validates the shape
+(`api_key.rs`) before the key reaches the keychain as its own `api-key` entry; from then on
+`get_access_token` answers with the key and every request carries it as the bearer, no OIDC
+tokens involved. Only the id half is shown again (`api_key_state`). Removing the key falls back
+to the browser session -- which stays signed in underneath -- while `sign_out` clears key and
+tokens together. OIDC stays the default: a completed browser sign-in supersedes a stored key.
+
+The webview may call only the app's own twelve commands (`src-tauri/capabilities/default.json`);
 no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
 (`tauri.conf.json`): no remote script (one hash, for the theme boot script inlined to avoid a
 flash), `wasm-unsafe-eval` for the syntax highlighter, and network access only to the page's own
@@ -121,17 +137,21 @@ person comes back.
 ## Updates and channels
 
 **Off by default.** `tauri.conf.json` names no update endpoint, and a build made without
-`MW_DESKTOP_UPDATER=1` does not register the updater plugin at all: no request leaves the app,
-and the one exposed entry point, the SPA's `check_for_updates` command, fails. The `pubkey` in
-the committed config is a placeholder the release job overwrites; it is harmless on its own
-because nothing reads it until the plugin is on.
+`MW_DESKTOP_UPDATER=1` does not register the updater plugin at all: no request leaves the app.
+Both exposed entry points answer cleanly -- `check_for_updates` reports "no update" and
+`install_update` says "updates are disabled in this build" (`src-tauri/src/updater.rs`). The
+`pubkey` in the committed config is a placeholder the release job overwrites; it is harmless on
+its own because nothing reads it until the plugin is on.
 
 A build made with `MW_DESKTOP_UPDATER=1` (read at build time, like `MW_DESKTOP_BASE_URL`)
 registers the plugin and runs **one check at launch** (`src-tauri/src/updater.rs`). The SPA can
 run the same check itself with `check_for_updates`, which answers with the newer version string
-(or nothing) and emits the same `update-available` event. Both paths report and stop: nothing is
-downloaded or installed on its own, and there is no in-app install step -- applying an update is
-the person running the new installer.
+(or nothing) and emits the same `update-available` event. A newer version is only ever
+announced: the shell shows an "update available" banner (`web/src/shell/UpdateBanner.tsx`)
+whose install button runs `install_update` -- the plugin downloads the artifact (progress goes
+to the SPA as `update-download-progress` / `update-download-finished`), verifies it against the
+release job's key, hands it to the OS installer and relaunches. Nothing downloads or installs
+on its own; applying an update is the person pressing the button.
 
 The endpoint and key come from the release job. `pnpm build:release` runs
 `scripts/release-config.mjs`, which writes `src-tauri/tauri.release.json` (ignored by git) from:
@@ -146,8 +166,8 @@ The endpoint and key come from the release job. `pnpm build:release` runs
 | `TAURI_SIGNING_PRIVATE_KEY` (+ `_PASSWORD`) | Read by the bundler to sign the update artifacts; kept with the release secrets, never in the repo. |
 
 The endpoint is `<MW_DESKTOP_UPDATES_URL>/desktop/<channel>/{{target}}/{{arch}}/{{current_version}}`,
-so a build only ever sees its own channel's manifest. The six-hourly re-check, the install step
-and the rollback test are not built.
+so a build only ever sees its own channel's manifest. The six-hourly re-check and the rollback
+test are not built; the install step is (the banner's button), but only ever on request.
 
 ## Offline: no send queue
 
@@ -165,5 +185,6 @@ Include:
 - The OS and version, and whether sign-in went through the deep link or the loopback page
   ("Signed in. You can close this tab").
 
-Never paste tokens: the keychain entries (`dev.matterwave.desktop`, `access` / `refresh`) are
+Never paste tokens: the keychain entries (`dev.matterwave.desktop`, `access` / `refresh` /
+`api-key`) are
 credentials.
