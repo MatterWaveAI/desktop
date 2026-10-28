@@ -141,6 +141,12 @@ describe("the failures", () => {
     expect(failureMessage("network", "server")).not.toMatch(/browser sends/);
     expect(failureMessage("too-long", "browser")).toContain("100,000");
   });
+
+  it("in the desktop shell a refused microphone points at the system's settings, not an address bar", () => {
+    const desktop = failureMessage("not-allowed", "server", true);
+    expect(desktop).toMatch(/system|settings/i);
+    expect(desktop).not.toMatch(/address bar/);
+  });
 });
 
 describe("the privacy note", () => {

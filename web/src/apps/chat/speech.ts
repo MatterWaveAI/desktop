@@ -253,10 +253,22 @@ export function failureOfMediaError(name: string): DictationFailure {
   }
 }
 
-export function failureMessage(failure: DictationFailure, engine: DictationEngine): string {
+/**
+ * The message for a failure. `desktop` (the Tauri webview) is worded apart
+ * where the remedy differs: there is no address bar to allow the microphone
+ * in, so a refused permission is the OS's privacy setting for the app, not a
+ * browser toggle.
+ */
+export function failureMessage(
+  failure: DictationFailure,
+  engine: DictationEngine,
+  desktop = false,
+): string {
   switch (failure) {
     case "not-allowed":
-      return "Microphone access was refused. Allow the microphone for this site in your browser's address bar, then try again.";
+      return desktop
+        ? "Microphone access was refused. Allow the microphone to the MatterWave app in your system's privacy settings, then try again."
+        : "Microphone access was refused. Allow the microphone for this site in your browser's address bar, then try again.";
     case "no-microphone":
       return "No microphone was found. Plug one in or pick one in your system settings, then try again.";
     case "network":

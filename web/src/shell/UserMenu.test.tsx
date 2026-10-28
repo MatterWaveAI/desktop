@@ -14,6 +14,13 @@ vi.mock("../lib/accounts", async (importOriginal) => {
   return { ...actual, reloadAsSwitchedAccount: vi.fn() };
 });
 
+// The desktop shell, scripted off: only the switcher test below turns it on.
+const desktop = vi.hoisted(() => ({ isDesktop: vi.fn(() => false) }));
+vi.mock("../lib/desktopAuth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/desktopAuth")>();
+  return { ...actual, ...desktop };
+});
+
 /**
  * The account menu names the org a person belongs to and never shows
  * them its id. Same harness as conversationSidebar.test.tsx: react-dom
@@ -298,5 +305,23 @@ describe("UserMenu: several accounts on this browser", () => {
     const menu = await open();
     await settled(menu);
     expect(menu.querySelector("[data-mw-add-account]")).toBeNull();
+  });
+
+  it("offers no switching in the desktop shell: parked accounts are cookies this window does not have", async () => {
+    // The afterEach here does not reset mocks, so put it back by hand.
+    desktop.isDesktop.mockReturnValue(true);
+    try {
+      stubApi(null, { accounts: [ME, ADA], max: 4, room: true });
+      await render(principal());
+      const menu = await open();
+      expect(menu.querySelector("[data-mw-accounts]")).toBeNull();
+      expect(menu.querySelector("[data-mw-add-account]")).toBeNull();
+      expect(menu.textContent).not.toContain("Sign out of all accounts");
+      expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url) === "/api/accounts")).toBe(
+        false,
+      );
+    } finally {
+      desktop.isDesktop.mockReturnValue(false);
+    }
   });
 });

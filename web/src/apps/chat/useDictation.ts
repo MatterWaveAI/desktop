@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { ApiError, currentToken } from "../../lib/api";
 import { getAuthConfig } from "../../lib/auth";
+import { isDesktop } from "../../lib/desktopAuth";
 import { useKeyboardShortcuts } from "../../shell/useKeyboardShortcuts";
 import {
   assembleTranscript,
@@ -160,7 +161,11 @@ export function useDictation(options: DictationOptions): UseDictation {
 
   const fail = useCallback(
     (what: DictationFailure) => {
-      setFailure(failureMessage(what, engine ?? "browser"));
+      // The desktop webview has no address bar, so a refused microphone is
+      // fixed in the OS's privacy settings, not a browser toggle. (The
+      // webview engines also ship no SpeechRecognition, so desktop dictation
+      // is always the server engine -- the one that needs the microphone.)
+      setFailure(failureMessage(what, engine ?? "browser", isDesktop()));
     },
     [engine],
   );

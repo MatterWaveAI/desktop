@@ -1272,6 +1272,13 @@ type PasskeysView =
  * the name (lib/passkeys.ts). The password stays: a passkey is one more
  * way in, and removing the last one leaves the password sign-in as it
  * was. Hidden with a line saying why on a browser that cannot take part.
+ *
+ * In the desktop shell the "Add a passkey" option is gated off
+ * (`passkeysSupported` is false there): a ceremony is bound to the origin
+ * it runs in and the webview's is not the rpId passkeys are made for, so
+ * the browser refuses it and the provider would refuse it anyway. The
+ * list, rename and remove stay: they are API calls, which the bearer
+ * carries as well as the cookie does.
  */
 export function PasskeysCard() {
   const shell = useShell();
@@ -1546,8 +1553,9 @@ export function PasskeysCard() {
                 </Button>
                 {!supported && (
                   <span className="text-xs text-mw-text-muted">
-                    This browser cannot make passkeys here; a secure (https) connection and a
-                    recent browser are needed.
+                    {isDesktop()
+                      ? "Passkeys are made in a browser, not in the desktop app: the window's origin is not the one they are bound to. Add one in the web app and it signs you in from the browser."
+                      : "This browser cannot make passkeys here; a secure (https) connection and a recent browser are needed."}
                   </span>
                 )}
                 {supported && full && (

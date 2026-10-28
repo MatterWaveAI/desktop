@@ -19,10 +19,23 @@
  * JSON and ArrayBuffers.
  */
 
+import { isDesktop } from "./desktopAuth";
+
 export type JsonObject = Record<string, unknown>;
 
-/** Whether this browser can take part at all: a secure context with WebAuthn. */
+/**
+ * Whether this context can take part at all: a secure context with WebAuthn.
+ *
+ * Always false inside the desktop shell. A WebAuthn ceremony is bound to the
+ * origin it runs in, and the provider's rpId names the web app's host; the
+ * webview's origin (`tauri://localhost`, or `http://tauri.localhost` on
+ * Windows) matches neither, so the browser refuses the ceremony before the
+ * provider is ever asked, and an assertion that got out anyway would be
+ * rejected as a wrong origin. Passkeys are made and used from the browser,
+ * where the session is a cookie on the origin they are bound to.
+ */
 export function passkeysSupported(): boolean {
+  if (isDesktop()) return false;
   return (
     typeof window !== "undefined" &&
     window.isSecureContext &&

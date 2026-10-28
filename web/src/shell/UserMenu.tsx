@@ -14,6 +14,7 @@ import {
   type AccountEntry,
 } from "../lib/accounts";
 import { fetchBillingStatus } from "../lib/billing";
+import { isDesktop } from "../lib/desktopAuth";
 import { loadModels } from "../lib/models";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { DEVELOPERS_PATH } from "./frontDoor";
@@ -65,6 +66,14 @@ export function UserMenu(props: {
     setOpen(next);
     if (!next || asked) return;
     setAsked(true);
+    // In the desktop shell the account switcher is gated off by leaving
+    // `accounts` null: parked accounts are cookies (`/api/accounts/*`
+    // lists, and switching swaps, the sessions this *browser* holds),
+    // while desktop auth is one bearer credential from the OS keychain --
+    // there is no second session to swap to, no cookie for "Add account"
+    // to sign in on, and the redirect it starts is one the webview could
+    // not finish anyway.
+    if (isDesktop()) return;
     fetchAccounts()
       .then((list) =>
         setAccounts({ others: list.accounts.filter((a) => !a.current), room: list.room }),

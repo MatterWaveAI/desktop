@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   credentialToJSON,
   fromBase64Url,
+  passkeysSupported,
   toBase64Url,
   toCreationOptions,
   toRequestOptions,
@@ -29,6 +30,18 @@ describe("base64url", () => {
   it("decodes what a provider sends, padded or not", () => {
     expect(new TextDecoder().decode(fromBase64Url("aGk"))).toBe("hi");
     expect(new TextDecoder().decode(fromBase64Url("aGk="))).toBe("hi");
+  });
+});
+
+describe("passkeysSupported", () => {
+  it("says no inside the desktop shell: the rpId can never match the webview origin", () => {
+    // The Tauri globals the desktopAuth module detects the shell by.
+    (window as { __TAURI_INTERNALS__?: object }).__TAURI_INTERNALS__ = {};
+    try {
+      expect(passkeysSupported()).toBe(false);
+    } finally {
+      delete (window as { __TAURI_INTERNALS__?: object }).__TAURI_INTERNALS__;
+    }
   });
 });
 
