@@ -86,10 +86,17 @@ describe("the help page's support section", () => {
     await loadConfig({ ...BASE, support_url: "mailto:help@example.test", status_url: "https://status.example.test" });
     const page = render(<HelpPage mac={false} />);
     expect(page.textContent).toContain("Support and status");
-    expect(external(page)).toEqual([
+    // Scoped to the support section: the page's other prose also links out
+    // (the developer portal), and this test is about these two links.
+    const support = [...page.querySelectorAll<HTMLElement>("section[data-slot='pane-section']")].find(
+      (section) => section.textContent?.includes("Support and status"),
+    )!;
+    const links = [...support.querySelectorAll("a")];
+    expect(links.map((a) => `${a.textContent?.trim()}|${a.getAttribute("href")}`)).toEqual([
       "Contact support|mailto:help@example.test",
       "Service status|https://status.example.test",
     ]);
+    expect(links.every((a) => a.target === "_blank" && a.rel.includes("noopener"))).toBe(true);
     expect(page.textContent).toContain("never paste an API key");
   });
 });

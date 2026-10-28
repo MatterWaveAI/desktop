@@ -97,10 +97,10 @@ describe("the landing page", () => {
     expect(page.querySelector("#landing-features")!.parentElement!.textContent).toContain(PRODUCT_LINE.message);
 
     const header = page.querySelector("nav[aria-label='MatterWave']")!;
+    // The header carries the brand and the ways into the app; Pricing and
+    // Docs are reached from the page body and the hero, not the header.
     expect(links(header)).toEqual([
       "MatterWave ai|/",
-      `Pricing|${PRICING_PATH}`,
-      `Docs|${DEVELOPERS_PATH}`,
       `Sign in|${LOGIN_PATH}`,
       `Create account|${SIGNUP_PATH}`,
     ]);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
-import { DEVELOPERS_PATH, PRICING_PATH } from "../../shell/frontDoor";
+import { PRICING_PATH } from "../../shell/frontDoor";
 import {
   authConfig,
   callTo,
@@ -255,9 +255,10 @@ describe("/pricing as a stranger: the chrome, the badge, the grid and the questi
   it("wears the front door's header and footer, with every way in", async () => {
     await open();
     const header = view().querySelector("nav[aria-label='MatterWave']")!;
+    // The front-door header carries the brand and the ways into the app;
+    // there is no nav row and no aria-current link on it.
     const hrefs = [...header.querySelectorAll("a")].map((a) => `${a.textContent}|${a.getAttribute("href")}`);
-    expect(hrefs).toEqual(expect.arrayContaining(["MatterWave ai|/", "Sign in|/login", "Create account|/signup", `Docs|${DEVELOPERS_PATH}`]));
-    expect(header.querySelector("a[aria-current='page']")?.textContent).toBe("Pricing");
+    expect(hrefs).toEqual(["MatterWave ai|/", "Sign in|/login", "Create account|/signup"]);
     const footer = view().querySelector("nav[aria-label='About MatterWave']")!;
     expect([...footer.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["Terms", "Privacy", "Acceptable use", "Contact"]);
   });
