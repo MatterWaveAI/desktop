@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 const SERVICE: &str = "dev.matterwave.desktop";
 const ACCESS: &str = "access";
 const REFRESH: &str = "refresh";
+/// The API-key alternative to the OIDC pair, stored bare like the refresh
+/// token: another keyring reader sees a credential, not a JSON document.
+const API_KEY: &str = "api-key";
 
 #[derive(Serialize, Deserialize)]
 struct AccessEntry {
@@ -65,6 +68,35 @@ pub fn load() -> Option<TokenSet> {
 
 pub fn clear() {
     clear_in(&Keychain)
+}
+
+/// The API key, stored bare. Saved only through `set_api_key`, which has
+/// validated the shape; the keychain is no place to find out a paste lost
+/// half its characters.
+pub fn save_api_key(key: &str) -> Result<(), String> {
+    save_api_key_in(&Keychain, key)
+}
+
+pub fn load_api_key() -> Option<String> {
+    load_api_key_in(&Keychain)
+}
+
+pub fn clear_api_key() {
+    clear_api_key_in(&Keychain)
+}
+
+pub(crate) fn save_api_key_in(store: &dyn Store, key: &str) -> Result<(), String> {
+    store.put(API_KEY, key.as_bytes())
+}
+
+pub(crate) fn load_api_key_in(store: &dyn Store) -> Option<String> {
+    String::from_utf8(store.get(API_KEY)?)
+        .ok()
+        .filter(|key| !key.is_empty())
+}
+
+pub(crate) fn clear_api_key_in(store: &dyn Store) {
+    store.delete(API_KEY);
 }
 
 pub(crate) fn save_in(store: &dyn Store, set: &TokenSet) -> Result<(), String> {
@@ -255,5 +287,37 @@ mod tests {
         clear_in(&store);
         assert!(store.names().is_empty());
         assert_eq!(load_from(&store), None);
+    }
+
+    #[test]
+    fn an_api_key_round_trips_bare_and_clears_on_its_own() {
+        let store = MemStore::default();
+        save_api_key_in(&store, "mw_ab12cd34_secret").unwrap();
+        assert_eq!(store.names(), vec![API_KEY.to_string()]);
+        assert_eq!(store.get(API_KEY).unwrap(), b"mw_ab12cd34_secret");
+        assert_eq!(
+            load_api_key_in(&store).as_deref(),
+            Some("mw_ab12cd34_secret")
+        );
+        // The OIDC entries and the key are separate lives: saving a token
+        // set neither reads nor removes the key, and the reverse.
+        save_in(&store, &set()).unwrap();
+        assert_eq!(
+            load_api_key_in(&store).as_deref(),
+            Some("mw_ab12cd34_secret")
+        );
+        clear_api_key_in(&store);
+        assert_eq!(load_from(&store), Some(set()));
+        assert_eq!(load_api_key_in(&store), None);
+    }
+
+    #[test]
+    fn an_empty_or_unreadable_api_key_loads_as_none() {
+        let store = MemStore::default();
+        store.put(API_KEY, b"").unwrap();
+        assert_eq!(load_api_key_in(&store), None);
+        // Not UTF-8 is the same as not there; nothing downstream can use it.
+        store.put(API_KEY, &[0xff, 0xfe]).unwrap();
+        assert_eq!(load_api_key_in(&store), None);
     }
 }

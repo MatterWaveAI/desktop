@@ -14,6 +14,11 @@ fn main() {
             "app_info",
             "check_for_updates",
             "notify_generation_complete",
+            "install_update",
+            "pending_update",
+            "set_api_key",
+            "clear_api_key",
+            "api_key_state",
         ]),
     ))
     .expect("tauri build script failed")

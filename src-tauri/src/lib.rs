@@ -3,8 +3,10 @@
 //!
 //! The SPA never sees the refresh token. It asks `get_access_token` for the
 //! current access token and sends it as a bearer; refreshing, storing and
-//! revoking happen here.
+//! revoking happen here. An API key (api_key.rs), when the person stores
+//! one, stands in for that whole story and is handed out instead.
 
+mod api_key;
 mod keychain;
 mod loopback;
 mod oidc;
@@ -18,7 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tokens::TokenSet;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{oneshot, Mutex, MutexGuard};
 
 /// Set at build time per environment (README, "Building"). No default: an
 /// installer that silently talked to some other environment is worse than
@@ -45,6 +47,9 @@ struct Session {
     /// keychain prompt (macOS) appears when the SPA first asks, not at launch.
     loaded: bool,
     tokens: Option<TokenSet>,
+    /// The API key, when one is stored. It wins over `tokens`: the person
+    /// who pasted a key asked for the machine to act as the key.
+    api_key: Option<String>,
 }
 
 struct AppState {
@@ -59,6 +64,18 @@ struct AppState {
 
 fn base_url() -> Result<&'static str, String> {
     BASE_URL.ok_or_else(|| "this build has no MW_DESKTOP_BASE_URL".to_string())
+}
+
+/// The keychain read once, lazily, behind the session lock: every command
+/// that needs the stored secrets starts here.
+async fn loaded_session(state: &AppState) -> Result<MutexGuard<'_, Session>, String> {
+    let mut session = state.session.lock().await;
+    if !session.loaded {
+        session.tokens = keychain::load();
+        session.api_key = keychain::load_api_key();
+        session.loaded = true;
+    }
+    Ok(session)
 }
 
 /// The native client, discovered once per run and cached.
@@ -78,17 +95,25 @@ struct AccessToken {
     expires_at: u64,
 }
 
+/// What an API key reports as its expiry: never. The SPA's refresh timer
+/// clamps the wait either way, and `should_refresh` is never consulted on
+/// this path -- the key has no grant to refresh with.
+const API_KEY_EXPIRES_AT: u64 = u64::MAX;
+
 /// The access token to send, refreshed first when it is close to expiry or
-/// when `force` says the API just refused it. `None` means signed out.
+/// when `force` says the API just refused it. `None` means signed out. A
+/// stored API key replaces the whole OIDC story and is sent instead.
 #[tauri::command]
 async fn get_access_token(
     state: State<'_, AppState>,
     force: Option<bool>,
 ) -> Result<Option<AccessToken>, String> {
-    let mut session = state.session.lock().await;
-    if !session.loaded {
-        session.tokens = keychain::load();
-        session.loaded = true;
+    let mut session = loaded_session(&state).await?;
+    if let Some(key) = session.api_key.clone() {
+        return Ok(Some(AccessToken {
+            access_token: key,
+            expires_at: API_KEY_EXPIRES_AT,
+        }));
     }
     let Some(current) = session.tokens.clone() else {
         return Ok(None);
@@ -242,18 +267,28 @@ async fn sign_in(app: AppHandle, state: State<'_, AppState>) -> Result<(), Strin
     })
     .await?;
     keychain::save(&set)?;
+    // A completed browser sign-in supersedes a pasted key: the person just
+    // showed they can sign in the ordinary way, and a key left winning here
+    // would make the fresh session invisible.
+    keychain::clear_api_key();
     *state.session.lock().await = Session {
         loaded: true,
         tokens: Some(set),
+        api_key: None,
     };
     focus_main(&app);
     Ok(())
 }
 
 /// Revoke at the IdP (best effort), then forget locally whatever happened.
+/// The API key goes too: Sign out is "no identity on this machine", not
+/// "switch method" -- the settings screen's Remove is the way to keep the
+/// browser session and drop only the key.
 #[tauri::command]
 async fn sign_out(state: State<'_, AppState>) -> Result<(), String> {
     let mut session = state.session.lock().await;
+    keychain::clear_api_key();
+    session.api_key = None;
     let tokens = session.tokens.take().or_else(|| {
         if session.loaded {
             None
@@ -265,6 +300,7 @@ async fn sign_out(state: State<'_, AppState>) -> Result<(), String> {
     *session = Session {
         loaded: true,
         tokens: None,
+        api_key: None,
     };
     drop(session);
     if let (Some(set), Ok(client)) = (tokens, native_client(&state).await) {
@@ -276,6 +312,59 @@ async fn sign_out(state: State<'_, AppState>) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// What the settings screen may show of a stored API key: that there is
+/// one, and its id half. The secret never leaves the keychain again.
+#[derive(Serialize)]
+struct ApiKeyState {
+    configured: bool,
+    hint: Option<String>,
+}
+
+fn api_key_state_of(key: &str) -> ApiKeyState {
+    ApiKeyState {
+        configured: true,
+        hint: Some(api_key::hint(key)),
+    }
+}
+
+/// Store a pasted API key (Settings -> Account, desktop only) and make it
+/// this machine's credential. Validated before it reaches the keychain;
+/// the answer is the new state, so the UI can show the hint without a
+/// second round trip.
+#[tauri::command]
+async fn set_api_key(state: State<'_, AppState>, key: String) -> Result<ApiKeyState, String> {
+    let trimmed = key.trim().to_string();
+    api_key::validate(&trimmed)?;
+    keychain::save_api_key(&trimmed)?;
+    let mut session = loaded_session(&state).await?;
+    session.api_key = Some(trimmed.clone());
+    Ok(api_key_state_of(&trimmed))
+}
+
+/// Forget the API key, keeping any OIDC session: removing the key falls
+/// back to the browser sign-in, which is why it does not clear the tokens
+/// the way `sign_out` does.
+#[tauri::command]
+async fn clear_api_key(state: State<'_, AppState>) -> Result<(), String> {
+    keychain::clear_api_key();
+    let mut session = loaded_session(&state).await?;
+    session.api_key = None;
+    Ok(())
+}
+
+/// Whether an API key is in use, for the settings screen's sign-in section.
+#[tauri::command]
+async fn api_key_state(state: State<'_, AppState>) -> Result<ApiKeyState, String> {
+    let session = loaded_session(&state).await?;
+    Ok(match session.api_key.as_deref() {
+        Some(key) => api_key_state_of(key),
+        None => ApiKeyState {
+            configured: false,
+            hint: None,
+        },
+    })
 }
 
 /// Links out of the app go to the system browser. Only web and mail links:
@@ -332,11 +421,35 @@ fn notify_generation_complete(app: AppHandle, title: String, body: String) -> Re
 
 /// The SPA's "check for updates": one check, the newer version as the answer
 /// and as `update-available` for listeners (updater.rs). Reporting only:
-/// nothing downloads or installs. A build without the updater has no plugin,
-/// so the call fails there.
+/// nothing downloads or installs. A build without MW_DESKTOP_UPDATER has no
+/// plugin to ask, and it answers cleanly -- "no update" -- because updates
+/// being switched off is not a failure to surface.
 #[tauri::command]
 async fn check_for_updates(app: AppHandle) -> Result<Option<String>, String> {
+    if !updater::enabled() {
+        return Ok(None);
+    }
     updater::check(&app).await
+}
+
+/// What the last completed check found, for a banner that mounted after the
+/// launch check had already run: the event alone would be missed.
+#[tauri::command]
+fn pending_update() -> Option<String> {
+    updater::pending()
+}
+
+/// Download the offered update, verify it (the release job's key), hand it
+/// to the OS installer and relaunch. Progress reaches the SPA as
+/// `update-download-progress` / `update-download-finished` events. A build
+/// made without MW_DESKTOP_UPDATER has no updater at all, so the answer is
+/// the plain fact rather than an error to surface.
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    if !updater::enabled() {
+        return Err("updates are disabled in this build".into());
+    }
+    updater::download_and_install(&app).await
 }
 
 fn focus_main(app: &AppHandle) {
@@ -344,6 +457,50 @@ fn focus_main(app: &AppHandle) {
         let _ = w.unminimize();
         let _ = w.set_focus();
     }
+}
+
+/// The tray's Show/Hide: visible means hide (get the window out of the way
+/// without quitting), anything else means show and focus. Focused-but-
+/// behind counts as hidden, so the item always does something visible.
+#[cfg(desktop)]
+fn toggle_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        if w.is_visible().unwrap_or(false) && !w.is_focused().unwrap_or(true) {
+            let _ = w.hide();
+        } else {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+    }
+}
+
+/// The system tray: Show/Hide and Quit, nothing else. The menu on left
+/// click too, because the tray item is not a drop target for anything and
+/// a menu that needs a right click is a menu half the world never finds.
+#[cfg(desktop)]
+fn build_tray(app: &tauri::App) -> Result<(), tauri::Error> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::TrayIconBuilder;
+    let show_hide =
+        MenuItem::with_id(app, "show-hide", "Show/Hide MatterWave", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit MatterWave", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show_hide, &quit])?;
+    TrayIconBuilder::with_id("matterwave")
+        .icon(app.default_window_icon().cloned().ok_or_else(|| {
+            tauri::Error::InvalidIcon(std::io::Error::other(
+                "the bundle has no window icon for the tray",
+            ))
+        })?)
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "show-hide" => toggle_main(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .build(app)?;
+    Ok(())
 }
 
 fn route_deep_link(app: &AppHandle, url: &str) {
@@ -409,6 +566,10 @@ pub fn run() {
             if updater::enabled() {
                 updater::check_on_launch(app.handle().clone());
             }
+            // The tray ships whatever the updater does: it is part of the
+            // app, not of a build flag.
+            #[cfg(desktop)]
+            build_tray(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -418,7 +579,12 @@ pub fn run() {
             open_external,
             app_info,
             check_for_updates,
-            notify_generation_complete
+            notify_generation_complete,
+            install_update,
+            pending_update,
+            set_api_key,
+            clear_api_key,
+            api_key_state
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MatterWave desktop app");
