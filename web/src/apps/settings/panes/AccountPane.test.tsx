@@ -35,6 +35,28 @@ vi.mock("../../../lib/webauthn", async (importOriginal) => {
   };
 });
 
+// The desktop shell's bridge, scripted: the API-key card is the one part of
+// this pane that talks to it. Default off, so every browser-shaped test in
+// this file mounts the pane without the card.
+const desktop = vi.hoisted(() => ({
+  isDesktop: vi.fn(() => false),
+  // The reply's shape, spelt out: the null-hint default otherwise pins
+  // `hint` to null and a scripted key-in-use answer would not typecheck.
+  desktopApiKeyState: vi.fn<() => Promise<{ configured: boolean; hint: string | null }>>(
+    async () => ({ configured: false, hint: null }),
+  ),
+  desktopSetApiKey: vi.fn<() => Promise<{ configured: boolean; hint: string | null }>>(
+    async () => ({ configured: true, hint: "mw_ab12cd34\u2026" }),
+  ),
+  desktopClearApiKey: vi.fn(async () => undefined),
+  desktopReload: vi.fn(() => {}),
+}));
+
+vi.mock("../../../lib/desktopAuth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../lib/desktopAuth")>();
+  return { ...actual, ...desktop };
+});
+
 const THIS_DEVICE: SessionInfo = {
   id: "s-here",
   current: true,
@@ -1217,5 +1239,94 @@ describe("passkeys", () => {
     mounted = await mount(<AccountPane />, principalWith([]), { passkey_login: true });
     expect(buttonNamed(section(), "Add a passkey").disabled).toBe(true);
     expect(section().textContent).toContain("cannot make passkeys here");
+  });
+});
+
+describe("the desktop API key card", () => {
+  /** The card's section: the status line and the form together. */
+  function card(): HTMLElement {
+    const form = mounted!.container.querySelector<HTMLElement>("[data-mw-api-key]");
+    if (!form) throw new Error("no API key card");
+    return form.closest<HTMLElement>("section[data-slot='pane-section']") ?? form;
+  }
+
+  function keyInput(): HTMLInputElement {
+    const input = card().querySelector<HTMLInputElement>("input[name='api_key']");
+    if (!input) throw new Error("no API key input");
+    return input;
+  }
+
+  /** The two reads every mount makes, quiet. */
+  function stubQuiet() {
+    stubApi(({ method, url }) => {
+      if (method === "GET" && url === "/api/me/mfa") return mfaAnswer(NOT_ENROLLED);
+      if (method === "GET" && url === "/api/me/sessions")
+        return { status: 200, body: { sessions: [] } };
+      return undefined;
+    });
+  }
+
+  it("renders nothing in a browser, where there is no keychain", async () => {
+    desktop.isDesktop.mockReturnValue(false);
+    stubQuiet();
+    mounted = await mount(<AccountPane />, principalWith([]));
+    expect(mounted.container.querySelector("[data-mw-api-key]")).toBeNull();
+    expect(desktop.desktopApiKeyState).not.toHaveBeenCalled();
+  });
+
+  it("offers a key when none is stored, stores it trimmed, and reloads into it", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopApiKeyState.mockResolvedValue({ configured: false, hint: null });
+    stubQuiet();
+    mounted = await mount(<AccountPane />, principalWith([]));
+    await flush();
+    expect(card().textContent).toContain("Signing in through your web browser.");
+
+    setInputValue(keyInput(), "  mw_ab12cd34_secret  ");
+    submit(keyInput().form!);
+    await flush();
+
+    expect(desktop.desktopSetApiKey).toHaveBeenCalledWith("mw_ab12cd34_secret");
+    expect(desktop.desktopReload).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the native shape refusal where the button was, and stays", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopApiKeyState.mockResolvedValue({ configured: false, hint: null });
+    desktop.desktopSetApiKey.mockRejectedValue(
+      "an API key's id is 8 characters; this one has 5",
+    );
+    stubQuiet();
+    mounted = await mount(<AccountPane />, principalWith([]));
+    await flush();
+
+    setInputValue(keyInput(), "mw_abc_secret");
+    submit(keyInput().form!);
+    await flush();
+
+    expect(mounted.container.querySelector("[role='alert']")?.textContent).toContain(
+      "8 characters",
+    );
+    expect(desktop.desktopReload).not.toHaveBeenCalled();
+  });
+
+  it("names the key in use and removes it on request", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopApiKeyState.mockResolvedValue({
+      configured: true,
+      hint: "mw_ab12cd34\u2026",
+    });
+    stubQuiet();
+    mounted = await mount(<AccountPane />, principalWith([]));
+    await flush();
+
+    expect(card().textContent).toContain("mw_ab12cd34\u2026");
+    expect(card().textContent).toContain("API key");
+
+    click(buttonNamed(card(), "Remove the key"));
+    await flush();
+
+    expect(desktop.desktopClearApiKey).toHaveBeenCalledTimes(1);
+    expect(desktop.desktopReload).toHaveBeenCalledTimes(1);
   });
 });

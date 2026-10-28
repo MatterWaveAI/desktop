@@ -29,6 +29,14 @@ import {
   type PasskeyInfo,
 } from "../../../lib/passkeys";
 import { PasskeyCancelled, passkeysSupported } from "../../../lib/webauthn";
+import {
+  desktopApiKeyState,
+  desktopClearApiKey,
+  desktopReload,
+  desktopSetApiKey,
+  isDesktop,
+  type DesktopApiKeyState,
+} from "../../../lib/desktopAuth";
 import { useShell } from "../../../shell/shellContext";
 import type { SessionInfo } from "../../../types";
 import { LearnMore, PaneSection } from "../PaneSection";
@@ -1672,6 +1680,145 @@ export function AccountPane() {
       <PasskeysCard />
 
       <SessionsList />
+
+      <DesktopApiKeyCard />
     </div>
+  );
+}
+
+/**
+ * A refused native command rejects with its message as a bare string,
+ * written for the person (api_key.rs's shape refusals, for one); an
+ * unexpected bridge failure is the generic line. The same shape the login
+ * page's desktop errors follow.
+ */
+function desktopFailure(err: unknown): string {
+  if (typeof err === "string" && err) return err;
+  if (err instanceof Error && err.message) return err.message;
+  return "That did not work. Try again.";
+}
+
+/**
+ * The desktop's second way in (`clients/desktop`): a pasted API key takes
+ * over as this machine's credential, stored in the OS keychain and sent
+ * instead of an OIDC token (`lib/desktopAuth.ts`). For machines nobody
+ * sits at, where a browser dance has nobody to dance. The key is the
+ * platform's own (the API keys pane makes one); only its id half is shown
+ * once stored, and removing it falls back to the browser session rather
+ * than ending it. Nothing here in a browser: no shell, no keychain.
+ */
+export function DesktopApiKeyCard() {
+  const [state, setState] = useState<DesktopApiKeyState | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputId = useId();
+
+  useEffect(() => {
+    // Not even a bridge call in a browser: there is no native side to ask.
+    if (!isDesktop()) return;
+    let alive = true;
+    desktopApiKeyState()
+      .then((keyState) => {
+        if (alive) setState(keyState);
+      })
+      .catch(() => {
+        if (alive) setState({ configured: false, hint: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!isDesktop()) return null;
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const key = String(new FormData(event.currentTarget).get("api_key") ?? "").trim();
+    setBusy(true);
+    setError(null);
+    try {
+      await desktopSetApiKey(key);
+      // A reload, not a live swap: Boot has to come back around the new
+      // credential exactly as it does around a browser sign-in.
+      desktopReload();
+    } catch (err) {
+      setError(desktopFailure(err));
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove() {
+    setBusy(true);
+    setError(null);
+    try {
+      await desktopClearApiKey();
+      desktopReload();
+    } catch (err) {
+      setError(desktopFailure(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <PaneSection
+      title="Desktop app"
+      description="How this installed app signs in: through your browser, or with an API key."
+    >
+      <p className="text-sm" aria-live="polite">
+        {state === null ? (
+          "Checking how this app signs in…"
+        ) : state.configured ? (
+          <>
+            <span className="font-medium">Signing in with the API key</span>{" "}
+            <span className="font-mono break-all">{state.hint}</span> — requests from this
+            machine carry it instead of a browser session.
+          </>
+        ) : (
+          <>
+            <span className="font-medium">Signing in through your web browser.</span> An API key
+            can stand in for it on this machine.
+          </>
+        )}
+      </p>
+      <LearnMore>
+        <p>
+          A key acts as this account until it is revoked: no expiry, no second factor, and it
+          lives in this machine's keychain. Make one in the API keys pane; remove it here, or on
+          the web, when the machine is no longer yours.
+        </p>
+      </LearnMore>
+      <form
+        noValidate
+        aria-busy={busy}
+        onSubmit={(event) => void handleSave(event)}
+        className="flex flex-wrap items-end gap-2"
+        data-mw-api-key=""
+      >
+        <label htmlFor={inputId} className="flex min-w-0 flex-1 basis-64 flex-col gap-1">
+          <span className="text-sm text-mw-text-muted">API key</span>
+          <Input
+            id={inputId}
+            name="api_key"
+            type="password"
+            autoComplete="off"
+            placeholder="mw_…"
+            maxLength={512}
+          />
+        </label>
+        <Button type="submit" disabled={busy}>
+          Use API key
+        </Button>
+        {state?.configured && (
+          <Button type="button" variant="outline" disabled={busy} onClick={() => void handleRemove()}>
+            Remove the key
+          </Button>
+        )}
+      </form>
+      {error && (
+        <p role="alert" className="text-sm text-mw-danger">
+          {error}
+        </p>
+      )}
+    </PaneSection>
   );
 }

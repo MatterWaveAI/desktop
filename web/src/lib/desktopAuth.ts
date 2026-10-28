@@ -213,6 +213,140 @@ export async function desktopSignOut(): Promise<void> {
 }
 
 /**
+ * What a stored API key may be shown as: that one is in use (it is what
+ * every request sends instead of an OIDC token) and its id half. The secret
+ * never comes back out of the keychain.
+ */
+export interface DesktopApiKeyState {
+  configured: boolean;
+  hint: string | null;
+}
+
+/** Whether an API key is stored on this machine. */
+export async function desktopApiKeyState(): Promise<DesktopApiKeyState> {
+  return call<DesktopApiKeyState>("api_key_state");
+}
+
+/**
+ * Store a pasted API key and make it this machine's credential; resolves
+ * once the native side holds it, after which the page reloads into Boot and
+ * every request carries the key. Trimmed here, so what reaches the
+ * keychain is exactly the key (api_key.rs validates the trimmed shape).
+ */
+export async function desktopSetApiKey(key: string): Promise<DesktopApiKeyState> {
+  const state = await call<DesktopApiKeyState>("set_api_key", { key: key.trim() });
+  await pullToken();
+  return state;
+}
+
+/** Drop the API key; any browser sign-in takes over again. */
+export async function desktopClearApiKey(): Promise<void> {
+  await call<void>("clear_api_key");
+  await pullToken();
+}
+
+/**
+ * The updater's side of the fence. The native side checks at launch and
+ * again when the SPA asks; both announce a newer version as the
+ * `update-available` event, and the install is its own deliberate command
+ * (`desktopInstallUpdate`), so a banner is a choice the person makes.
+ * Progress during the download arrives as events too, because the command
+ * is busy carrying the download.
+ */
+export interface UpdateDownloadProgress {
+  downloaded: number;
+  total: number | null;
+}
+
+export interface UpdateHandlers {
+  /** A newer version was found; the payload is its version string. */
+  onAvailable?: (version: string) => void;
+  /** Bytes moved since the download started; `total` until the server says. */
+  onProgress?: (progress: UpdateDownloadProgress) => void;
+  /** The artifact is complete and verified; the install, then the relaunch. */
+  onDownloadFinished?: () => void;
+}
+
+export type UnlistenFn = () => void;
+
+interface TauriEvent {
+  event: string;
+  id: number;
+  payload: unknown;
+}
+
+interface TauriInternals {
+  invoke: Invoke;
+  transformCallback?: (callback: (event: TauriEvent) => void, once?: boolean) => number;
+}
+
+/**
+ * One native event, through the same bridge the commands use: the event
+ * plugin's listen/unlisten over `__TAURI_INTERNALS__`, with the callback
+ * registered the way `@tauri-apps/api/event` does it. Without internals
+ * there is nothing to hear -- a browser, or a bridge this build does not
+ * know -- and the unlisten is a no-op.
+ */
+async function listenEvent(event: string, cb: (payload: unknown) => void): Promise<UnlistenFn> {
+  const internals = (window as unknown as TauriWindow).__TAURI_INTERNALS__ as
+    | TauriInternals
+    | undefined;
+  if (!internals?.invoke || !internals.transformCallback) return () => {};
+  const handler = internals.transformCallback((e) => cb(e.payload));
+  const id = await internals.invoke<number>("plugin:event|listen", {
+    event,
+    target: { kind: "Any" },
+    handler,
+  });
+  return () => {
+    internals.invoke("plugin:event|unlisten", { id }).catch(() => {});
+  };
+}
+
+/**
+ * Subscribe to the updater's events. The unlisten is safe to call before
+ * the subscriptions are in place: a banner that unmounts while the first
+ * registration is still in flight cancels it instead of leaking a listener
+ * into a page that no longer shows it.
+ */
+export function watchUpdates(handlers: UpdateHandlers): UnlistenFn {
+  if (!isDesktop()) return () => {};
+  const unlistens: UnlistenFn[] = [];
+  let cancelled = false;
+  const add = (event: string, cb: (payload: unknown) => void) => {
+    listenEvent(event, cb)
+      .then((unlisten) => {
+        if (cancelled) unlisten();
+        else unlistens.push(unlisten);
+      })
+      .catch(() => {});
+  };
+  if (handlers.onAvailable) add("update-available", (p) => handlers.onAvailable?.(String(p)));
+  if (handlers.onProgress)
+    add("update-download-progress", (p) => handlers.onProgress?.(p as UpdateDownloadProgress));
+  if (handlers.onDownloadFinished) add("update-download-finished", () => handlers.onDownloadFinished?.());
+  return () => {
+    cancelled = true;
+    for (const unlisten of unlistens.splice(0)) unlisten();
+  };
+}
+
+/** The version the launch check found, when this banner mounted too late to hear it. */
+export async function desktopPendingUpdate(): Promise<string | null> {
+  return call<string | null>("pending_update");
+}
+
+/**
+ * Download the offered update, verify it, hand it to the OS installer and
+ * relaunch. Resolves only on failure -- success ends with the old process
+ * gone -- so the banner keeps showing until the window dies or an error
+ * comes back to it.
+ */
+export async function desktopInstallUpdate(): Promise<void> {
+  await call<void>("install_update");
+}
+
+/**
  * Tell the native side that a generation finished, so it can raise the OS
  * notification -- which it does only when its window is unfocused, the one
  * state in which a reply can land unseen (`lib.rs`). Fire-and-forget: a

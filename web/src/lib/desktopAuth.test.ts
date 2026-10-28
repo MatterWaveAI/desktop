@@ -27,6 +27,50 @@ function fakeTauri(handler: Handler) {
   return invoke;
 }
 
+/**
+ * The bridge the events go through: the same internals plus the
+ * `transformCallback` the event plugin registers handlers with. `fire`
+ * delivers to every listener registered for an event, the way the native
+ * side delivers one payload to many subscribers.
+ */
+function fakeTauriWithEvents(handler: Handler) {
+  const callbacks = new Map<number, (event: unknown) => void>();
+  let nextCallbackId = 0;
+  const registrations = new Map<number, { event: string; cb: (event: unknown) => void }>();
+  const invoke = vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
+    if (cmd === "plugin:event|listen") {
+      const id = 100 + registrations.size;
+      const cb = callbacks.get(args?.handler as number);
+      if (cb) registrations.set(id, { event: args?.event as string, cb });
+      return id;
+    }
+    if (cmd === "plugin:event|unlisten") {
+      registrations.delete(args?.id as number);
+      return null;
+    }
+    return handler(cmd, args);
+  });
+  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+    invoke,
+    transformCallback: (cb: (event: unknown) => void) => {
+      const id = ++nextCallbackId;
+      callbacks.set(id, cb);
+      return id;
+    },
+  };
+  return {
+    invoke,
+    fire(event: string, payload: unknown) {
+      for (const { event: name, cb } of [...registrations.values()]) {
+        if (name === event) cb({ event: name, id: 1, payload });
+      }
+    },
+    listenerCount(event: string) {
+      return [...registrations.values()].filter((r) => r.event === event).length;
+    },
+  };
+}
+
 function authOf(call: unknown[]): string | null {
   return new Headers((call[1] as RequestInit | undefined)?.headers).get("Authorization");
 }
@@ -143,6 +187,130 @@ describe("where the bearer goes", () => {
     expect((fetchMock.mock.calls[0][1] as RequestInit).credentials).toBe("omit");
     expect(fetchMock.mock.calls[1][0]).toBe("/assets/logo.svg");
     expect(authOf(fetchMock.mock.calls[1])).toBeNull();
+  });
+});
+
+describe("the API key path", () => {
+  it("stores what was pasted and pulls the token again", async () => {
+    const invoke = fakeTauri((cmd, args) => {
+      if (cmd === "app_info") return { version: "1", api_base_url: null };
+      if (cmd === "api_key_state") return { configured: false, hint: null };
+      if (cmd === "set_api_key") {
+        return { configured: true, hint: "mw_ab12cd34\u2026" };
+      }
+      if (cmd === "get_access_token") {
+        return args?.key
+          ? { access_token: args.key, expires_at: Number.MAX_SAFE_INTEGER }
+          : null;
+      }
+      throw new Error(cmd);
+    });
+    const { desktop } = await load();
+
+    const state = await desktop.desktopSetApiKey("  mw_ab12cd34_secret  ");
+    expect(state).toEqual({ configured: true, hint: "mw_ab12cd34\u2026" });
+    expect(invoke).toHaveBeenCalledWith("set_api_key", { key: "mw_ab12cd34_secret" });
+  });
+
+  it("removes the key and asks whether one is stored", async () => {
+    let hasKey = true;
+    const invoke = fakeTauri((cmd) => {
+      if (cmd === "app_info") return { version: "1", api_base_url: null };
+      if (cmd === "api_key_state")
+        return hasKey ? { configured: true, hint: "mw_ab12cd34\u2026" } : { configured: false, hint: null };
+      if (cmd === "clear_api_key") {
+        hasKey = false;
+        return null;
+      }
+      if (cmd === "get_access_token") return null;
+      throw new Error(cmd);
+    });
+    const { desktop } = await load();
+    await desktop.installDesktopAuth();
+
+    await expect(desktop.desktopApiKeyState()).resolves.toEqual({
+      configured: true,
+      hint: "mw_ab12cd34\u2026",
+    });
+    await desktop.desktopClearApiKey();
+    expect(invoke).toHaveBeenCalledWith("clear_api_key", undefined);
+    await expect(desktop.desktopApiKeyState()).resolves.toEqual({
+      configured: false,
+      hint: null,
+    });
+  });
+});
+
+describe("watchUpdates", () => {
+  it("delivers the updater's events to the handlers", async () => {
+    const bridge = fakeTauriWithEvents(() => null);
+    const { desktop } = await load();
+    const seen: string[] = [];
+    const progress: unknown[] = [];
+    let finished = 0;
+
+    const unlisten = desktop.watchUpdates({
+      onAvailable: (version) => seen.push(version),
+      onProgress: (p) => progress.push(p),
+      onDownloadFinished: () => {
+        finished += 1;
+      },
+    });
+    await vi.waitFor(() => {
+      expect(bridge.listenerCount("update-available")).toBe(1);
+    });
+
+    bridge.fire("update-available", "1.3.0");
+    bridge.fire("update-download-progress", { downloaded: 1024, total: 4096 });
+    bridge.fire("update-download-finished", null);
+    expect(seen).toEqual(["1.3.0"]);
+    expect(progress).toEqual([{ downloaded: 1024, total: 4096 }]);
+    expect(finished).toBe(1);
+
+    unlisten();
+    await vi.waitFor(() => {
+      expect(bridge.listenerCount("update-available")).toBe(0);
+    });
+    bridge.fire("update-available", "1.4.0");
+    expect(seen).toEqual(["1.3.0"]);
+  });
+
+  it("unlistens cleanly even when cancelled before registration lands", async () => {
+    const bridge = fakeTauriWithEvents(() => null);
+    const { desktop } = await load();
+
+    const unlisten = desktop.watchUpdates({ onAvailable: () => {} });
+    unlisten();
+    await flushBridge();
+    expect(bridge.listenerCount("update-available")).toBe(0);
+
+    async function flushBridge() {
+      for (let i = 0; i < 5; i += 1) await Promise.resolve();
+    }
+  });
+
+  it("is a no-op in a browser, where no events can arrive", async () => {
+    const { desktop } = await load();
+    let called = false;
+    const unlisten = desktop.watchUpdates({ onAvailable: () => (called = true) });
+    expect(unlisten()).toBeUndefined();
+    expect(called).toBe(false);
+  });
+});
+
+describe("the update install", () => {
+  it("asks the version of the last check and runs the install command", async () => {
+    const invoke = fakeTauri((cmd) => {
+      if (cmd === "app_info") return { version: "1", api_base_url: null };
+      if (cmd === "pending_update") return "1.3.0";
+      if (cmd === "install_update") return undefined;
+      throw new Error(cmd);
+    });
+    const { desktop } = await load();
+
+    await expect(desktop.desktopPendingUpdate()).resolves.toBe("1.3.0");
+    await desktop.desktopInstallUpdate();
+    expect(invoke).toHaveBeenCalledWith("install_update", undefined);
   });
 });
 

@@ -20,6 +20,7 @@ import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { CommandPalette } from "./CommandPalette";
 import { NotificationsMenu } from "./NotificationsMenu";
+import { UpdateBanner } from "./UpdateBanner";
 import { ConversationSidebar, type SearchRequest } from "./conversationSidebar";
 import { CONVERSATION_SEARCH_ID } from "./shortcuts";
 import type { PaletteAction } from "./palette";
@@ -246,6 +247,8 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
           {/* The person's own standing under the acceptable-use policy, if any. */}
           <EnforcementBanner />
           <BillingBanner />
+          {/* "Update available — install": nothing in a browser, where there is no updater. */}
+          <UpdateBanner />
           <main className="min-h-0 flex-1">
             <Outlet />
           </main>
