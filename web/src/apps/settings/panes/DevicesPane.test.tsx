@@ -20,7 +20,22 @@ import {
  * and unpairs one with the call the route expects. On a box: the pane takes
  * the platform address and the code, then shows the sync status and can
  * unpair.
+ *
+ * Desktop (clients/desktop): the pairing code is shown against the API base
+ * the app was built with, not the webview's own origin.
  */
+
+const desktop = vi.hoisted(() => ({
+  isDesktop: vi.fn(() => false),
+  desktopAppInfo: vi.fn<() => Promise<{ version: string; api_base_url: string | null } | null>>(
+    async () => null,
+  ),
+}));
+
+vi.mock("../../../lib/desktopAuth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../lib/desktopAuth")>();
+  return { ...actual, ...desktop };
+});
 
 const PLATFORM: SyncStatus = { box: false, paired: false };
 const UNPAIRED_BOX: SyncStatus = { box: true, paired: false };
@@ -56,6 +71,8 @@ afterEach(() => {
   mounted = null;
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  desktop.isDesktop.mockReturnValue(false);
+  desktop.desktopAppInfo.mockResolvedValue(null);
 });
 
 describe("the pairing code", () => {
@@ -224,8 +241,7 @@ describe("on the platform", () => {
 });
 
 describe("on a box", () => {
-  it("pairs with the platform address and the code, then shows the status", async () => {
-    const changed = vi.fn();
+  it("pairs with the platform address and the code, then shows the status", async () => {    const changed = vi.fn();
     window.addEventListener("mw:sync-changed", changed);
     const calls = stubApi((call) => {
       if (call.url === "/api/sync/status") return { status: 200, body: UNPAIRED_BOX };
@@ -301,5 +317,48 @@ describe("on a box", () => {
     await flush();
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
     expect(container.textContent).not.toContain("Paired as");
+  });
+});
+
+describe("in the desktop shell", () => {
+  /** Mint one code and return the reveal's text, the state under test. */
+  async function revealText(): Promise<string> {
+    stubApi((call) => {
+      if (call.url === "/api/sync/status") return { status: 200, body: PLATFORM };
+      if (call.method === "GET" && call.url === "/api/sync/devices") return { status: 200, body: { data: [] } };
+      if (call.method === "POST" && call.url === "/api/sync/pairings") {
+        return {
+          status: 201,
+          body: { code: "ABCD-EFGH-JKMN", name: "Kitchen Pi", expires_in: 600, expires_at: "2026-10-20T12:10:00Z" },
+        };
+      }
+      return undefined;
+    });
+    mounted = await mount(<DevicesPane />, principalWith(["user"], "owner"));
+    await flush();
+    const form = pairForm(mounted.container, "Pair an edge box");
+    setInputValue(form.querySelector("input")!, "Kitchen Pi");
+    submit(form);
+    await flush();
+    return mounted.container.querySelector("[data-testid='pairing-code-reveal']")!.textContent ?? "";
+  }
+
+  it("names the API base, not the webview's origin, as the address to pair against", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopAppInfo.mockResolvedValue({
+      version: "0.2.2",
+      api_base_url: "https://app.example.test",
+    });
+    const reveal = await revealText();
+    expect(reveal).toContain("https://app.example.test");
+    expect(reveal).not.toContain(window.location.origin);
+  });
+
+  it("keeps the page's own origin in a browser, where no bridge is asked", async () => {
+    const asked = vi.fn();
+    desktop.desktopAppInfo.mockImplementation(asked);
+    const reveal = await revealText();
+    expect(reveal).toContain(window.location.origin);
+    expect(asked).not.toHaveBeenCalled();
   });
 });

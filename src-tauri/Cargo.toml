@@ -1,6 +1,6 @@
 [package]
 name = "matterwave-desktop"
-version = "0.2.1"
+version = "0.2.2"
 description = "MatterWave desktop: the web app in a native window, signed in through the system browser"
 edition = "2021"
 publish = false
@@ -13,6 +13,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+# Compiles the Windows resource that gives the test binaries their
+# application manifest (build.rs): the updater test needs Common-Controls
+# v6 to load.
+embed-resource = "3"
 
 [dependencies]
 # tray-icon: the system tray (Show/Hide and Quit) is part of the app, not a
@@ -46,6 +50,9 @@ tokio = { version = "1", features = ["net", "io-util", "time", "sync", "macros"]
 [dev-dependencies]
 # The sign-in test runs a fake issuer on loopback inside its own runtime.
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+# The updater test drives the plugin the way updater.rs does, on Tauri's
+# mock runtime: no window, no keychain, no installer.
+tauri = { version = "2", features = ["test"] }
 
 [profile.release]
 codegen-units = 1

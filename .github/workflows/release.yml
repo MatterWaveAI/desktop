@@ -1,0 +1,162 @@
+name: Release
+
+# A tag push (`v0.2.2`) builds signed installers on all three OSes, attaches
+# them and the updater manifests to a GitHub release, and publishes the
+# updater feed the installed apps check
+# (`<MW_DESKTOP_UPDATES_URL>/desktop/<channel>/<os>/<arch>/<version>`,
+# the endpoint scripts/release-config.mjs names). The web and Rust checks
+# are CI's job (.github/workflows/ci.yml); this job builds and ships.
+#
+# Required secrets (Settings -> Secrets and variables -> Actions):
+#
+# | Secret | What |
+# |---|---|
+# | `TAURI_SIGNING_PRIVATE_KEY` | The updater's private key (`pnpm tauri signer generate`), the base64 string the command prints. Signs every updater artifact; losing it means a new key and every installed app refusing updates from it. |
+# | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The private key's password, or empty for none. |
+# | `MW_UPDATER_PUBKEY` | The matching public half; written into the build config, carried by every build. |
+# | `MW_DESKTOP_UPDATES_URL` | Where the feed lives (e.g. `https://releases.example.com`). Also the base of the endpoint built into the app. |
+# | `MW_UPDATER_FEED_TOKEN` | A bearer token the feed accepts `PUT`s from. Without it the release is built and published but the feed keeps the previous version. |
+#
+# Variables (not secrets):
+#
+# | Variable | What |
+# |---|---|
+# | `MW_DESKTOP_CHANNEL` | The feed channel, one per environment (`dev`, `staging`, `prod`). Default `prod`. |
+# | `MW_DESKTOP_BASE_URL` | The API the release talks to, read at build time. Default `https://app.matterwave.ai`. |
+#
+# The feed itself must accept an authenticated `PUT` per file at the path
+# the layout script prints (a static host in front of a small writer
+# endpoint, or any equivalent -- the transport is the one thing this
+# workflow assumes; swap the upload step if the host speaks something else).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Signed installers (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-latest is arm64; an x86_64 mac build is another entry
+        # (macos-13) away, with its own feed path (darwin/x86_64).
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            web/pnpm-lock.yaml
+      - name: Install Tauri's Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir web install --frozen-lockfile
+      - name: Write the updater build config (scripts/release-config.mjs)
+        # The tag is v0.2.2; the app version is 0.2.2, so the v goes.
+        run: MW_RELEASE="${GITHUB_REF_NAME#v}" node scripts/release-config.mjs
+        env:
+          MW_UPDATER_PUBKEY: ${{ secrets.MW_UPDATER_PUBKEY }}
+          MW_DESKTOP_CHANNEL: ${{ vars.MW_DESKTOP_CHANNEL || 'prod' }}
+          MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
+      - name: Build, sign and publish the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The bundler signs the updater artifacts (setup.exe, .app.tar.gz,
+          # AppImage) with this; the manifests carry the signatures.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Read at build time by the Rust side (src-tauri/src/lib.rs,
+          # src-tauri/src/updater.rs): which API and whether the updater
+          # exists are properties of the build.
+          MW_DESKTOP_BASE_URL: ${{ vars.MW_DESKTOP_BASE_URL || 'https://app.matterwave.ai' }}
+          MW_DESKTOP_UPDATER: "1"
+        with:
+          projectPath: .
+          tauriScript: pnpm tauri
+          # The config release-config.mjs wrote: real pubkey, per-channel
+          # endpoint, createUpdaterArtifacts on.
+          args: --config src-tauri/tauri.release.json
+          tagName: ${{ github.ref_name }}
+          releaseName: MatterWave ${{ github.ref_name }}
+          releaseBody: >
+            Installers for Windows (MSI and NSIS), macOS (app bundle) and
+            Linux (AppImage and .deb). `latest.json` is the updater manifest
+            for the feed; `.sig` files are its artifact signatures.
+          releaseDraft: false
+          prerelease: false
+          includeRelease: true
+          includeUpdaterJson: true
+
+  feed:
+    name: Publish the updater feed
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Collect the release artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir release
+          gh release download "${{ github.ref_name }}" --repo "$GITHUB_REPOSITORY" \
+            --pattern "latest.json" \
+            --pattern "*-setup.exe" --pattern "*.msi" --pattern "*.msi.sig" \
+            --pattern "*.app.tar.gz" --pattern "*.AppImage" --pattern "*.deb" \
+            --dir release
+          ls -l release
+      - name: Lay out the feed (scripts/publish-updater-manifest.mjs)
+        run: |
+          node scripts/publish-updater-manifest.mjs \
+            --artifacts release \
+            --manifest release/latest.json \
+            --channel "${MW_DESKTOP_CHANNEL:-prod}" \
+            --base "$MW_DESKTOP_UPDATES_URL" \
+            --out feed
+        env:
+          MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
+          MW_DESKTOP_CHANNEL: ${{ vars.MW_DESKTOP_CHANNEL || 'prod' }}
+      - name: Upload the feed
+        env:
+          MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
+          MW_DESKTOP_CHANNEL: ${{ vars.MW_DESKTOP_CHANNEL || 'prod' }}
+          MW_UPDATER_FEED_TOKEN: ${{ secrets.MW_UPDATER_FEED_TOKEN }}
+        run: |
+          if [ -z "$MW_UPDATER_FEED_TOKEN" ]; then
+            echo "MW_UPDATER_FEED_TOKEN is not set: the release is published, the feed keeps the previous version."
+            exit 0
+          fi
+          status=0
+          while IFS= read -r file; do
+            # feed/desktop/<channel>/<os>/<arch>/<file> uploads at the same
+            # path, which is the endpoint the app asks for.
+            path="${file#feed/}"
+            url="$MW_DESKTOP_UPDATES_URL/$path"
+            code=$(curl -sS -o /dev/null -w "%{http_code}" \
+              --request PUT --header "Authorization: Bearer $MW_UPDATER_FEED_TOKEN" \
+              --data-binary "@$file" "$url")
+            echo "PUT $path -> HTTP $code"
+            case "$code" in 2*) ;; *) status=1 ;; esac
+          done < <(find feed -type f | sort)
+          exit $status

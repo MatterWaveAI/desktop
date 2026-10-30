@@ -37,19 +37,24 @@ the build has no base URL.
 
 Unit tests: `cd src-tauri && cargo test` (PKCE, callback state check, token parsing, refresh
 decision, loopback parsing, the keychain's save/load rules against an in-memory store, the API
-key's shape checks, the updater's build flag, and the whole sign-in flow -- discovery,
+key's shape checks, the updater's build flag, the whole sign-in flow -- discovery,
 authorize URL, loopback callback, PKCE exchange, refresh, revoke -- against a fake issuer on
-127.0.0.1 with a closure standing in for the browser). The SPA side, inside `web/`:
+127.0.0.1 with a closure standing in for the browser, and the updater's check and download against
+a local feed whose artifact is signed with a test key, `src-tauri/tests/updater_local.rs`). The SPA
+side, inside `web/`:
 `pnpm vitest run src/lib/desktopAuth.test.ts src/lib/desktopAuth.notify.test.ts
 src/apps/chat/chatAdapter.test.ts` (the desktop bearer path, the reply-ready notification, the
 streaming adapter), plus the settings pane and update banner tests
-(`pnpm vitest run src/apps/settings/panes/AccountPane.test.ts src/shell/UpdateBanner.test.tsx`).
+(`pnpm vitest run src/apps/settings/panes/AccountPane.test.ts src/apps/settings/panes/DevicesPane.test.ts
+src/shell/UpdateBanner.test.tsx`).
 
 What the tests do not cover: the real OS keychain (the `Store` seam in `keychain.rs` is what the
 tests drive; the keyring-backed one needs a desktop session), the deep-link delivery (a Tauri
 `AppHandle`), the webview itself, the focus-gated notification and the tray menu (they need a
-real window and a real system tray), and the updater's download and relaunch (they need a signed
-manifest and a built installer).
+real window and a real system tray), and the updater's **install and relaunch** (they need a real
+OS installer; the check, download and signature verification run in `tests/updater_local.rs`
+against a local feed, and the full pass with a release-signed artifact is the release QA checklist
+under "Updates and channels").
 
 On Windows, `cargo test` needs the MSVC build tools; the WebView2 SDK is pulled by the `tauri`
 crate and links without the runtime installed. A machine whose application-control policy blocks
@@ -168,6 +173,36 @@ The endpoint and key come from the release job. `pnpm build:release` runs
 The endpoint is `<MW_DESKTOP_UPDATES_URL>/desktop/<channel>/{{target}}/{{arch}}/{{current_version}}`,
 so a build only ever sees its own channel's manifest. The six-hourly re-check and the rollback
 test are not built; the install step is (the banner's button), but only ever on request.
+
+### Release QA checklist
+
+The updater's check and download are exercised in tests against a local feed
+(`src-tauri/tests/updater_local.rs`: the endpoint template, the static manifest lookup, version
+comparison, and signature verification of an artifact signed with a test key). What a test cannot
+do is run a real installer on a real OS, so before publishing a channel, run this pass with the
+release key's artifacts:
+
+1. **Serve the real feed.** Point `MW_DESKTOP_UPDATES_URL` at the staging channel and confirm the
+   manifest answers for the exact endpoint shape (any `current_version` path, e.g.
+   `.../prod/windows/x86_64/0.1.9` returns the `latest.json` for the new release).
+2. **Install the previous release.** A build of the version just superseded, made with
+   `MW_DESKTOP_UPDATER=1` and the same `MW_UPDATER_PUBKEY`.
+3. **The banner appears.** Launch, wait for the launch check (`update-available`), and confirm the
+   banner names the new version. Check-for-updates from the app answers the same.
+4. **Download reports progress.** The installing line shows percentages (`update-download-progress`),
+   then the finished state (`update-download-finished`).
+5. **Install and relaunch.** Press "Update and restart": the OS installer runs (passive on Windows),
+   the app relaunches, and `app_info` reports the new version. On macOS and Linux the artifact is
+   the app bundle/AppImage; confirm the replaced app starts and is the new version.
+6. **A tampered feed is refused.** Edit `latest.json` (or swap an artifact) so the signature no
+   longer matches; the download must fail with a signature error and the old app keeps running.
+   This is what the tests assert against the local feed; here confirm the real feed's error reaches
+   the banner's text.
+7. **No update, no noise.** Re-check after the update is applied: no banner, and a channel with
+   `latest.json` absent (or HTTP 204) reports "no update" rather than an error.
+8. **Rollback stays possible.** Confirm the previous release's artifacts are still on the feed or in
+   the release storage before deleting anything; the updater never downgrades on its own, but a
+   broken release must be replaceable by re-pointing the manifest at the previous artifacts.
 
 ## Offline: no send queue
 

@@ -45,5 +45,48 @@ the API's `MW_RELEASE` all report it).
   Windows/macOS/Linux that is allowed to fail while the runners' toolchains
   mature.
 
+## [Unreleased]
+
+## [0.2.2] - 2026-10-30
+
+### Added
+
+- **Edge pairing in the desktop shell** (Settings → Devices): the pane the
+  SPA ships is the platform's half of the pairing handshake -- an owner or
+  admin names a box, `POST /api/sync/pairings` mints the once-usable,
+  ten-minute code shown once with a countdown, `GET /api/sync/devices`
+  lists the paired boxes and `DELETE /api/sync/devices/{id}` unpairs one.
+  The desktop adaptation is the address the code is shown against: the
+  webview's origin is the app's own (`http://tauri.localhost`), so the code
+  names the API base the app was built with (`desktopAppInfo`) instead of
+  `window.location.origin`
+  (`web/src/apps/settings/panes/DevicesPane.tsx`). Gating and routes are
+  the SPA's own; requests ride the desktop bearer exactly as every other
+  API call does.
+- **Updater verification against a signed local feed**
+  (`src-tauri/tests/updater_local.rs`): the plugin's check and download are
+  driven the way `updater.rs` drives them against a loopback server serving
+  a static `latest.json` and an artifact signed with a Tauri test key
+  (`pnpm tauri signer generate`) -- the endpoint template resolves to the
+  release path, a newer release is offered and an older one is not,
+  progress is reported, and tampered bytes or an artifact signed by another
+  key are refused. The install and relaunch stay a manual pass with a real
+  signed artifact; the checklist lives in README.md ("Release QA
+  checklist"). Test binaries now carry an application manifest
+  (`src-tauri/tests/windows.manifest`, compiled by the build script):
+  without one, Common-Controls v6 imports make them fail to load on Windows
+  (0xc0000139).
+- **Release automation** (`.github/workflows/release.yml`): a tag push
+  (`v0.2.2`) builds signed installers on all three OSes via
+  `tauri-action` (secrets `TAURI_SIGNING_PRIVATE_KEY` +
+  `_PASSWORD`, `MW_UPDATER_PUBKEY`, `MW_DESKTOP_UPDATES_URL`,
+  `MW_UPDATER_FEED_TOKEN`; variables `MW_DESKTOP_CHANNEL`,
+  `MW_DESKTOP_BASE_URL`), attaches them and `latest.json` to the GitHub
+  release, and lays out the updater feed with
+  `scripts/publish-updater-manifest.mjs` at the exact per-platform paths
+  the app asks for. Without the feed token the release is published and the
+  feed keeps the previous version.
+
 [Unreleased]: https://github.com/MatterWaveAI/desktop/compare/v0.2.1...HEAD
+[0.2.2]: https://github.com/MatterWaveAI/desktop/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/MatterWaveAI/desktop/releases/tag/v0.2.1

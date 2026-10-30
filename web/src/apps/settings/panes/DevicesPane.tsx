@@ -15,6 +15,7 @@ import {
   type SyncStatus,
 } from "../../../lib/edgeSync";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../../patterns";
+import { desktopAppInfo, isDesktop } from "../../../lib/desktopAuth";
 import { useShell } from "../../../shell/shellContext";
 import { LearnMore, PaneSection } from "../PaneSection";
 import { PaneActions } from "../paneActions";
@@ -30,6 +31,13 @@ import { Row, RowList } from "../rows";
  *   conversations (`conversations:import`), and unpairs them.
  * - On a box (`/api/sync/status` says `box: true`), it takes the platform's
  *   address and that code, and shows how the sync is going.
+ *
+ * Desktop (clients/desktop): this page ships inside the webview, whose
+ * origin is the app's own (`http://tauri.localhost`), so the address a code
+ * is shown against is the API base the app was built with
+ * (`desktopAppInfo`), not `window.location.origin`. Everything else -- the
+ * gating, the routes, the requests -- is the SPA's own: `apiFetch` rides
+ * the desktop bearer exactly as it rides the browser cookie.
  */
 
 export interface EdgeDevice {
@@ -281,6 +289,25 @@ function CodeReveal(props: {
   const expired = left === 0;
   const [renewing, setRenewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The platform's address, named in the instructions. A browser IS the
+  // platform (`window.location.origin`); the desktop webview's origin is
+  // the app's own, so the address is the API base the app was built with.
+  const [origin, setOrigin] = useState(() => window.location.origin);
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let cancelled = false;
+    desktopAppInfo()
+      .then((info) => {
+        if (!cancelled && info?.api_base_url) setOrigin(info.api_base_url);
+      })
+      .catch(() => {
+        // No bridge answer: the webview origin stands, wrong only in that
+        // a paired box would be pointed at the app instead of the API.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (expired) return;
@@ -338,10 +365,10 @@ function CodeReveal(props: {
           </p>
         )}
         <p>
-          On the box: Settings → Devices, enter this platform's address ({window.location.origin}) and
-          the code. Or from the box's shell:{" "}
+          On the box: Settings → Devices, enter this platform's address ({origin}) and the code.
+          Or from the box's shell:{" "}
           <code className="font-mono text-xs break-all">
-            deploy/edge/edge-up.sh --check --pair {window.location.origin} {minted.code}
+            deploy/edge/edge-up.sh --check --pair {origin} {minted.code}
           </code>
         </p>
         <div className="flex flex-wrap items-center gap-2">
