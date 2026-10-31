@@ -1,6 +1,6 @@
 [package]
 name = "matterwave-desktop"
-version = "0.2.2"
+version = "0.3.0"
 description = "MatterWave desktop: the web app in a native window, signed in through the system browser"
 edition = "2021"
 publish = false
