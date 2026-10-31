@@ -1,0 +1,113 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { dictationLanguage } from "./speech";
+import {
+  loadReadAloudSettings,
+  pickVoice,
+  speakText,
+  speechText,
+  synthesisOf,
+  utteranceCtorOf,
+  type SpeechSynthesisLike,
+  type SpeechSynthesisUtteranceLike,
+} from "./tts";
+
+/**
+ * Read-aloud, the stateful half: the speaker button's state and the one
+ * synth behind every reply. One voice at a time, whoever is reading:
+ * starting a second reply stops the first, and the same button is the
+ * stop button while its reply is the one being read.
+ *
+ * A new generation stops it too (`stopWhen`, the thread's busy flag):
+ * the answer on screen is about to be replaced, and a voice narrating the
+ * old one over the new is noise, not read-aloud.
+ */
+
+/** The constructor lib.dom ships as a global; declared for the fakes. */
+export type UtteranceCtor = new () => SpeechSynthesisUtteranceLike;
+
+export interface UseReadAloud {
+  /** False where this webview has no speechSynthesis: no button renders. */
+  readonly supported: boolean;
+  /** The reply being read, or null when none is. */
+  readonly speakingId: string | null;
+  /** Read `text` as `messageId`, or stop it when it is already the speaker. */
+  readonly toggle: (messageId: string, text: string) => void;
+  /** Stop reading, whoever is. */
+  readonly stop: () => void;
+}
+
+export interface ReadAloudOptions {
+  /** A new turn started: stop the narration, if there is one. */
+  readonly stopWhen?: boolean;
+}
+
+export function useReadAloud(options: ReadAloudOptions = {}): UseReadAloud {
+  // Read once: what this webview has is a fact of the page, not state.
+  const [supported] = useState(() => synthesisOf() !== null && utteranceCtorOf() !== null);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+
+  const synthRef = useRef<SpeechSynthesisLike | null>(synthesisOf());
+  const ctorRef = useRef<UtteranceCtor>(utteranceCtorOf());
+  // Which message is speaking, readable from the utterance's callbacks:
+  // kept beside the state, the way useDictation keeps its refs.
+  const speakingRef = useRef<string | null>(null);
+
+  const stop = useCallback(() => {
+    speakingRef.current = null;
+    setSpeakingId(null);
+    try {
+      synthRef.current?.cancel();
+    } catch {
+      // Already silent.
+    }
+  }, []);
+
+  const toggle = useCallback(
+    (messageId: string, text: string) => {
+      const synth = synthRef.current;
+      const ctor = ctorRef.current;
+      if (!synth || !ctor) return;
+      if (speakingRef.current === messageId) {
+        stop();
+        return;
+      }
+      const spoken = speechText(text);
+      if (!spoken) return;
+      const settings = loadReadAloudSettings();
+      const language = dictationLanguage();
+      speakText(synth, ctor, spoken, {
+        lang: language,
+        rate: settings.rate,
+        voice: pickVoice(synth.getVoices(), settings, language),
+        onEnd: () => {
+          // A superseding toggle wrote its own id; only our own end clears it.
+          if (speakingRef.current === messageId) {
+            speakingRef.current = null;
+            setSpeakingId(null);
+          }
+        },
+      });
+      speakingRef.current = messageId;
+      setSpeakingId(messageId);
+    },
+    [stop],
+  );
+
+  // A generation started: whatever was being read stops.
+  useEffect(() => {
+    if (options.stopWhen && speakingRef.current !== null) stop();
+  }, [options.stopWhen, stop]);
+
+  // Unmount: the voice is never left talking behind a page that is gone.
+  useEffect(() => {
+    return () => {
+      try {
+        synthRef.current?.cancel();
+      } catch {
+        // Nothing to quiet.
+      }
+    };
+  }, []);
+
+  return { supported, speakingId, toggle, stop };
+}

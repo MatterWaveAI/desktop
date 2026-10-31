@@ -189,6 +189,80 @@ describe("which actions a row gets", () => {
   });
 });
 
+describe("Read aloud on a reply", () => {
+  it("the speaker button wires the synth call through its toggle", async () => {
+    stubClipboard(async () => {});
+    const onToggle = vi.fn();
+    render(
+      <MessageControls
+        {...handlers}
+        message={message("assistant")}
+        branch={null}
+        canRegenerate
+        readAloud={{ speaking: false, onToggle }}
+      />,
+    );
+    expect(buttons()).toEqual(["Copy", "Read aloud", "Regenerate", "Report"]);
+    await click(buttonNamed("Read aloud"));
+    expect(onToggle).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("while its reply is the one speaking, the same button is the stop button", async () => {
+    stubClipboard(async () => {});
+    const onToggle = vi.fn();
+    render(
+      <MessageControls
+        {...handlers}
+        message={message("assistant")}
+        branch={null}
+        canRegenerate
+        readAloud={{ speaking: true, onToggle }}
+      />,
+    );
+    expect(buttons()).toEqual(["Copy", "Stop reading", "Regenerate", "Report"]);
+    await click(buttonNamed("Stop reading"));
+    expect(onToggle).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("no button without the hook's say-so, and none on a user turn", () => {
+    stubClipboard(async () => {});
+    render(
+      <MessageControls
+        {...handlers}
+        message={message("assistant")}
+        branch={null}
+        canRegenerate
+      />,
+    );
+    expect(buttons()).toEqual(["Copy", "Regenerate", "Report"]);
+    render(
+      <MessageControls
+        {...handlers}
+        message={message("user")}
+        branch={null}
+        canRegenerate={false}
+        readAloud={{ speaking: false, onToggle: () => {} }}
+      />,
+    );
+    expect(buttons()).toEqual(["Edit"]);
+  });
+
+  it("is disabled, like its neighbours, while a turn is in flight", () => {
+    stubClipboard(async () => {});
+    render(
+      <MessageControls
+        {...handlers}
+        busy
+        message={message("assistant")}
+        branch={null}
+        canRegenerate
+        readAloud={{ speaking: false, onToggle: () => {} }}
+      />,
+    );
+    expect(buttonNamed("Read aloud").disabled).toBe(true);
+  });
+});
+
 describe("Copy on a reply", () => {
   it("writes the reply's flattened text and reads Copied for two seconds", async () => {
     vi.useFakeTimers();

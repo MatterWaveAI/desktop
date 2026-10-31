@@ -210,3 +210,92 @@ describe("the language", () => {
     );
   });
 });
+
+describe("read aloud", () => {
+  function stubSynthesis(voices: Array<{ voiceURI: string; name: string; lang: string }>): void {
+    vi.stubGlobal("speechSynthesis", {
+      speaking: false,
+      paused: false,
+      getVoices: () => voices,
+      speak: () => {},
+      cancel: () => {},
+      onvoiceschanged: null,
+    });
+    vi.stubGlobal(
+      "SpeechSynthesisUtterance",
+      class {
+        text = "";
+        lang = "";
+        rate = 1;
+        voice = null;
+        onend: (() => void) | null = null;
+        onerror: ((event: unknown) => void) | null = null;
+      },
+    );
+  }
+
+  function readAloudSelect(name: string): HTMLElement {
+    const select = selectNamed(mounted!.container, name);
+    if (!select) throw new Error(`no "${name}" select`);
+    return select;
+  }
+
+  it("hides itself where this browser has no speechSynthesis", async () => {
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    expect(mounted.container.textContent).not.toContain("Read aloud");
+  });
+
+  it("offers Automatic and the voices, and stores the choice on this device", async () => {
+    stubSynthesis([
+      { voiceURI: "en-gb-serena", name: "Serena", lang: "en-GB" },
+      { voiceURI: "en-us-sam", name: "Sam", lang: "en-US" },
+    ]);
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+
+    expect(mounted.container.textContent).toContain("Read aloud");
+    expect(await optionsOf(readAloudSelect("Voice"))).toEqual([
+      "Automatic",
+      "Serena (en-GB)",
+      "Sam (en-US)",
+    ]);
+    expect(await optionsOf(readAloudSelect("Pace"))).toEqual([
+      "0.75×",
+      "Normal (1×)",
+      "1.25×",
+      "1.5×",
+      "1.75×",
+      "2×",
+    ]);
+
+    await chooseOption(readAloudSelect("Voice"), "Serena (en-GB)");
+    await chooseOption(readAloudSelect("Pace"), "1.5×");
+    expect(JSON.parse(localStorage.getItem("mw.read-aloud")!)).toEqual({
+      voiceURI: "en-gb-serena",
+      rate: 1.5,
+    });
+  });
+
+  it("mounts with the stored voice and pace, and the missing-voice note when it must", async () => {
+    localStorage.setItem(
+      "mw.read-aloud",
+      JSON.stringify({ voiceURI: "gone", rate: 1.25 }),
+    );
+    stubSynthesis([{ voiceURI: "en-us-sam", name: "Sam", lang: "en-US" }]);
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+
+    expect(selectShown(readAloudSelect("Voice"))).toBe("Automatic");
+    expect(selectShown(readAloudSelect("Pace"))).toBe("1.25×");
+    expect(mounted.container.textContent).toContain(
+      "This voice is not available right now; Automatic is used until it is.",
+    );
+  });
+});

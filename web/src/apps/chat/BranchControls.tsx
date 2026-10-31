@@ -6,6 +6,8 @@ import {
   GitBranchIcon,
   PencilIcon,
   RefreshCwIcon,
+  Volume2Icon,
+  VolumeXIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -67,6 +69,8 @@ const ACTION_ICONS: Partial<Record<string, LucideIcon>> = {
   Regenerate: RefreshCwIcon,
   Report: FlagIcon,
   "Branch from here": GitBranchIcon,
+  "Read aloud": Volume2Icon,
+  "Stop reading": VolumeXIcon,
 };
 
 /**

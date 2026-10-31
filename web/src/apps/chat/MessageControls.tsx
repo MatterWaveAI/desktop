@@ -4,11 +4,13 @@ import type { BranchPosition } from "./branches";
 import { CopyAction } from "./CopyAction";
 import { MessageFeedback } from "./MessageFeedback";
 import type { Feedback } from "./feedback";
+import { ReadAloudAction } from "./ReadAloudAction";
 
 /**
  * The action row under one stored message: the "2 / 3" switcher where it has
- * siblings, Edit on the reader's own turns, Copy, Regenerate and Report on
- * a reply, and Branch from here on any stored message.
+ * siblings, Edit on the reader's own turns, Copy and Read aloud on a reply,
+ * Regenerate and Report on a reply, and Branch from here on any stored
+ * message.
  *
  * Presentational, like `BranchControls`: ChatPage decides which rows may
  * regenerate (every stored reply, not only the last) and what each action
@@ -35,6 +37,16 @@ export function MessageControls(props: {
   feedback?: {
     current: Feedback | null;
     onChange: (next: Feedback | null) => void;
+  };
+  /**
+   * Read aloud, on a stored reply, where the webview can speak (the hook
+   * decides; absent means no button). The state and the toggle come from
+   * the one hook above the transcript, so starting one reply stops the
+   * previous.
+   */
+  readAloud?: {
+    speaking: boolean;
+    onToggle: () => void;
   };
 }) {
   const { message, branch } = props;
@@ -73,6 +85,13 @@ export function MessageControls(props: {
       )}
       {isUser && <MessageAction label="Edit" disabled={props.busy} onClick={props.onEdit} />}
       {isStoredReply && <CopyAction text={message.content} disabled={props.busy} />}
+      {isStoredReply && props.readAloud && (
+        <ReadAloudAction
+          speaking={props.readAloud.speaking}
+          disabled={props.busy}
+          onToggle={props.readAloud.onToggle}
+        />
+      )}
       {props.canRegenerate && (
         <MessageAction
           label="Regenerate"
