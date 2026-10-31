@@ -37,7 +37,8 @@ the build has no base URL.
 
 Unit tests: `cd src-tauri && cargo test` (PKCE, callback state check, token parsing, refresh
 decision, loopback parsing, the keychain's save/load rules against an in-memory store, the API
-key's shape checks, the updater's build flag, the whole sign-in flow -- discovery,
+key's shape checks, the device pairing's code normalization, redeem and unpair against a fake
+platform on loopback, the updater's build flag, the whole sign-in flow -- discovery,
 authorize URL, loopback callback, PKCE exchange, refresh, revoke -- against a fake issuer on
 127.0.0.1 with a closure standing in for the browser, and the updater's check and download against
 a local feed whose artifact is signed with a test key, `src-tauri/tests/updater_local.rs`). The SPA
@@ -122,11 +123,24 @@ tokens involved. Only the id half is shown again (`api_key_state`). Removing the
 to the browser session -- which stays signed in underneath -- while `sign_out` clears key and
 tokens together. OIDC stays the default: a completed browser sign-in supersedes a stored key.
 
-The webview may call only the app's own twelve commands (`src-tauri/capabilities/default.json`);
+The webview may call only the app's own sixteen commands (`src-tauri/capabilities/default.json`);
 no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
 (`tauri.conf.json`): no remote script (one hash, for the theme boot script inlined to avoid a
 flash), `wasm-unsafe-eval` for the syntax highlighter, and network access only to the page's own
 origin plus https for the API.
+
+### Pairing this machine as a device
+
+Settings -> Devices gains a desktop-only section, "Pair with the platform": a code minted on the
+platform (`POST /api/sync/pairings`, by an owner or admin) is redeemed here at the platform's
+anonymous route (`POST /api/sync/pair`), and the device key it grants -- `conversations:import`
+and nothing else -- is kept in the OS keychain (`device-key` + `device-pairing` entries,
+`src-tauri/src/device_pairing.rs`). The key is **not** the app's bearer: pairing never changes
+how the app signs in, it registers the machine as one of the org's devices, listed and revocable
+on the platform's Devices pane beside the paired boxes. Unpairing revokes with the key itself
+(a key may always revoke itself) and forgets the pairing locally even when the platform is
+unreachable; a re-pairing keeps the machine's device id. The section is open to any signed-in
+person because redemption needs no role; only minting codes is an admin act.
 
 ## Notifications
 
@@ -204,6 +218,32 @@ release key's artifacts:
    the release storage before deleting anything; the updater never downgrades on its own, but a
    broken release must be replaceable by re-pointing the manifest at the previous artifacts.
 
+## Verifying the webview's seams (dev pane)
+
+What code review cannot prove -- what the webview actually offers, what the OS does with a
+notification, where an update round trip reaches -- has a pane, and the pane exists only in a
+dev build inside the desktop shell (`web/src/lib/desktopDev.ts`): a release build never ships
+it. Run `MW_DESKTOP_BASE_URL=... pnpm tauri dev`, sign in, open Settings -> Desktop diagnostics:
+
+1. **Capability flags.** The readout is the gating's own answer, not a restatement of it. Expect,
+   in the webview: "Passkeys offered: no" (the origin is not the rpId passkeys are bound to --
+   this is the check that must hold), the dictation engine the composer will really use
+   (`server` where the deployment advertises a transcriber; `none` means no control renders),
+   and the webview origin the RP-ID check is made against.
+2. **Send a test notification.** The button ignores focus on purpose (the real notification only
+   fires when the window is unfocused). Shown: the OS plumbing works. Nothing appears: look at
+   the OS's notification settings for the app, not at the app. The pane reports an OS refusal
+   verbatim.
+3. **Updater stages.** "Check for updates now" runs a check and logs every stage the native side
+   announces (`checking` → `downloading` → `verified` → `installing`, `update-stage` events).
+   Against a feed with a newer version, the banner offers the install; pressing it walks the
+   same stages with percentages, then "Signature verified.", then the OS installer. A build
+   without `MW_DESKTOP_UPDATER=1` answers the check with nothing and logs no stages -- that
+   quiet "off" is itself worth confirming once.
+
+The updater's install-and-relaunch pass with real signed artifacts is the release QA checklist
+above; this pane is how you watch the stages of that pass from inside the app.
+
 ## Offline: no send queue
 
 A message is **never queued for later sending**. Offline, Send is disabled and the draft is kept;
@@ -221,5 +261,4 @@ Include:
   ("Signed in. You can close this tab").
 
 Never paste tokens: the keychain entries (`dev.matterwave.desktop`, `access` / `refresh` /
-`api-key`) are
-credentials.
+`api-key` / `device-key` / `device-pairing`) are credentials.
