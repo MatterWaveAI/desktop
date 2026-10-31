@@ -99,10 +99,13 @@ export function useReadAloud(options: ReadAloudOptions = {}): UseReadAloud {
   }, [options.stopWhen, stop]);
 
   // Unmount: the voice is never left talking behind a page that is gone.
+  // The synth is read once here -- a fact of the page, not state -- so the
+  // cleanup closes over the same engine the hook spoke through.
   useEffect(() => {
+    const synth = synthRef.current;
     return () => {
       try {
-        synthRef.current?.cancel();
+        synth?.cancel();
       } catch {
         // Nothing to quiet.
       }
