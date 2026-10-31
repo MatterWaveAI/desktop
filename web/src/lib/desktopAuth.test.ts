@@ -314,6 +314,56 @@ describe("the update install", () => {
   });
 });
 
+describe("the device pairing", () => {
+  const PAIRED = {
+    paired: true,
+    name: "David's laptop",
+    hint: "mw_ab12cd34\u2026",
+    device_id: "0192b1c4-7a3e-7d10-9a51-3f6c2e8b4d99",
+    paired_at: 1769000000,
+  };
+
+  it("reads the state, redeems a code and unpairs through the bridge", async () => {
+    let paired = false;
+    const invoke = fakeTauri((cmd) => {
+      if (cmd === "app_info") return { version: "1", api_base_url: "https://api.example.test" };
+      if (cmd === "device_pairing_state") {
+        return paired ? PAIRED : { paired: false, name: null, hint: null, device_id: null, paired_at: null };
+      }
+      if (cmd === "pair_device") {
+        paired = true;
+        return PAIRED;
+      }
+      if (cmd === "unpair_device") {
+        paired = false;
+        return { paired: false, name: null, hint: null, device_id: null, paired_at: null };
+      }
+      throw new Error(cmd);
+    });
+    const { desktop } = await load();
+
+    await expect(desktop.desktopDevicePairing()).resolves.toMatchObject({ paired: false });
+    await expect(desktop.desktopPairDevice(" abcd-efgh-jkmn ")).resolves.toEqual(PAIRED);
+    // What the person typed goes up as `code`; trimming is deliberate, so a
+    // trailing newline in a paste never reaches the redeem route.
+    expect(invoke).toHaveBeenCalledWith("pair_device", { code: "abcd-efgh-jkmn" });
+    await expect(desktop.desktopUnpairDevice()).resolves.toMatchObject({ paired: false });
+    expect(invoke).toHaveBeenCalledWith("unpair_device", undefined);
+  });
+
+  it("surfaces the bridge's refusal", async () => {
+    fakeTauri((cmd) => {
+      if (cmd === "app_info") return { version: "1", api_base_url: null };
+      if (cmd === "pair_device") {
+        throw "That pairing code is not valid, or it has expired. Make a new one.";
+      }
+      throw new Error(cmd);
+    });
+    const { desktop } = await load();
+    await expect(desktop.desktopPairDevice("ZZZZ-ZZZZ-ZZZZ")).rejects.toContain("expired");
+  });
+});
+
 describe("in a browser", () => {
   it("installs nothing and leaves fetch alone", async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => ok());

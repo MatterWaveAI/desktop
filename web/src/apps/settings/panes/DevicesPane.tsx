@@ -15,7 +15,14 @@ import {
   type SyncStatus,
 } from "../../../lib/edgeSync";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../../patterns";
-import { desktopAppInfo, isDesktop } from "../../../lib/desktopAuth";
+import {
+  desktopAppInfo,
+  desktopDevicePairing,
+  desktopPairDevice,
+  desktopUnpairDevice,
+  isDesktop,
+  type DesktopDevicePairing,
+} from "../../../lib/desktopAuth";
 import { useShell } from "../../../shell/shellContext";
 import { LearnMore, PaneSection } from "../PaneSection";
 import { PaneActions } from "../paneActions";
@@ -63,6 +70,8 @@ const LABEL_CLASS = "text-sm text-mw-text-muted";
 const BOX_NAME_ID = "devices-box-name";
 
 function messageOf(err: unknown, fallback: string): string {
+  // A bridge refusal is the native side's own wording, a bare string.
+  if (typeof err === "string" && err) return err;
   return err instanceof ApiError ? err.message : fallback;
 }
 
@@ -85,7 +94,15 @@ export function DevicesPane() {
   }, []);
   if (status === null && !failed) return <LoadingSkeleton rows={2} />;
   if (status?.box) return <ThisBox initial={status} />;
-  return <PlatformDevices />;
+  return (
+    <>
+      {/* Desktop: this machine can itself be paired as a device, redeemed
+          straight at the platform's anonymous route. A box deploys pair
+          through ThisBox's own route above. */}
+      {isDesktop() && <MachinePairing />}
+      <PlatformDevices />
+    </>
+  );
 }
 
 // --- the platform -------------------------------------------------------------
@@ -620,6 +637,234 @@ function BoxStatus(props: { status: SyncStatus; onUnpaired: (status: SyncStatus)
           {error}
         </p>
       )}
+    </PaneSection>
+  );
+}
+
+// --- this machine (desktop) -----------------------------------------------------
+
+/** What a minted code looks like, for the field's hint. */
+const CODE_SHAPE = "ABCD-EFGH-JKMN";
+
+/**
+ * Pair THIS MACHINE with the platform: the desktop's half of the handshake.
+ * A code made on the platform (above, by an owner or admin) is redeemed
+ * here at the platform's anonymous route and the device key it grants is
+ * kept in the OS keychain -- not used as the app's bearer, which is why the
+ * section is available to any signed-in person, admin or not.
+ */
+function MachinePairing() {
+  const [pairing, setPairing] = useState<DesktopDevicePairing | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [sync, setSync] = useState<SyncStatus | null>(null);
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    desktopDevicePairing()
+      .then((state) => {
+        if (cancelled) return;
+        setPairing(state);
+        setLoadError(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoadError("Could not read this machine's pairing.");
+      });
+    fetchSyncStatus()
+      .then((next) => !cancelled && setSync(next))
+      .catch(() => {});
+    desktopAppInfo()
+      .then((info) => !cancelled && setOrigin(info?.api_base_url ?? null))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (loadError !== null) {
+    return (
+      <PaneSection title="Pair with the platform" description="Register this machine as a device.">
+        <p role="alert" className="text-sm text-mw-danger">
+          {loadError}
+        </p>
+      </PaneSection>
+    );
+  }
+  if (pairing === null) {
+    return (
+      <PaneSection title="Pair with the platform" description="Register this machine as a device.">
+        <LoadingSkeleton rows={1} />
+      </PaneSection>
+    );
+  }
+  return pairing.paired ? (
+    <MachineStatus pairing={pairing} origin={origin} sync={sync} onUnpaired={setPairing} />
+  ) : (
+    <MachinePairForm onPaired={setPairing} origin={origin} />
+  );
+}
+
+function MachinePairForm(props: { onPaired: (pairing: DesktopDevicePairing) => void; origin: string | null }) {
+  const codeId = useId();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!code.trim()) {
+      setError("Paste the pairing code.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      props.onPaired(await desktopPairDevice(code.trim()));
+    } catch (err) {
+      setError(messageOf(err, "Could not pair this machine."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <PaneSection
+      title="Pair with the platform"
+      description={
+        props.origin
+          ? `Register this machine (${props.origin}) as a device of your organisation.`
+          : "Register this machine as a device of your organisation."
+      }
+    >
+      <form className="flex flex-col gap-3" onSubmit={(e) => void submit(e)} aria-label="Pair with the platform">
+        <div className="flex flex-col gap-1">
+          <label className={LABEL_CLASS} htmlFor={codeId}>
+            Pairing code
+          </label>
+          <Input
+            id={codeId}
+            value={code}
+            placeholder={`e.g. ${CODE_SHAPE}`}
+            autoComplete="off"
+            className="font-mono"
+            onChange={(e) => setCode(e.target.value)}
+          />
+          <span className="text-xs text-mw-text-muted">
+            Twelve letters, made on the platform above by an owner or admin. It works for ten
+            minutes.
+          </span>
+        </div>
+        <div>
+          <Button type="submit" disabled={busy}>
+            Pair this machine
+          </Button>
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-mw-danger">
+            {error}
+          </p>
+        )}
+      </form>
+      <LearnMore className="mt-4">
+        <p>
+          Pairing stores a key on this machine that can only add conversations to your organisation
+          -- it never signs you in, and this app keeps working exactly as before. The platform lists
+          the machine beside the paired boxes, where it can be revoked; unpairing here does the same
+          from this side.
+        </p>
+      </LearnMore>
+    </PaneSection>
+  );
+}
+
+function MachineStatus(props: {
+  pairing: DesktopDevicePairing;
+  origin: string | null;
+  sync: SyncStatus | null;
+  onUnpaired: (pairing: DesktopDevicePairing) => void;
+}) {
+  const { pairing, origin, sync } = props;
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Read once per mount, as the box's status line is: "paired 3 days ago"
+  // does not need to tick.
+  const [now] = useState(() => Date.now());
+  async function unpair() {
+    setBusy(true);
+    setError(null);
+    try {
+      props.onUnpaired(await desktopUnpairDevice());
+      setConfirming(false);
+    } catch (err) {
+      setError(messageOf(err, "Could not unpair this machine."));
+    } finally {
+      setBusy(false);
+    }
+  }
+  // The one sync line the sync status route offers. A platform answers it
+  // for its boxes; unless this machine is pointed at one, there is nothing
+  // to report yet -- the pairing stands regardless.
+  const syncedAt = sync?.box && sync.paired ? sync.last_synced_at : null;
+  return (
+    <PaneSection
+      title={pairing.name ? `Paired as ${pairing.name}` : "Paired with the platform"}
+      description={
+        origin ? `A device of your organisation at ${origin}.` : "A device of your organisation."
+      }
+    >
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" aria-label="Device pairing">
+        {pairing.hint && (
+          <>
+            <dt className="text-mw-text-muted">Device key</dt>
+            <dd className="font-mono text-xs">{pairing.hint}</dd>
+          </>
+        )}
+        <dt className="text-mw-text-muted">Paired</dt>
+        <dd>{pairing.paired_at ? ago(new Date(pairing.paired_at * 1000).toISOString(), now) : "unknown"}</dd>
+        <dt className="text-mw-text-muted">Device id</dt>
+        <dd className="font-mono text-xs">{pairing.device_id}</dd>
+        <dt className="text-mw-text-muted">Last sync</dt>
+        <dd>
+          {syncedAt ? (
+            ago(syncedAt, now)
+          ) : (
+            <span className="text-mw-text-muted">nothing reported yet</span>
+          )}
+        </dd>
+      </dl>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {confirming ? (
+          <>
+            <span className="text-sm">Revoke this machine's key?</span>
+            <Button type="button" size="sm" variant="destructive" disabled={busy} onClick={() => void unpair()}>
+              Unpair
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+            >
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button type="button" variant="outline" onClick={() => setConfirming(true)}>
+            Unpair this machine…
+          </Button>
+        )}
+      </div>
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-mw-danger">
+          {error}
+        </p>
+      )}
+      <LearnMore className="mt-4">
+        <p>
+          Unpairing revokes the key on the platform, best effort -- if this machine is offline the
+          key can still be revoked there, under Settings → Devices. Conversations already mirrored
+          stay.
+        </p>
+      </LearnMore>
     </PaneSection>
   );
 }

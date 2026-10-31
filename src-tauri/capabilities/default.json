@@ -15,6 +15,9 @@
     "allow-pending-update",
     "allow-set-api-key",
     "allow-clear-api-key",
-    "allow-api-key-state"
+    "allow-api-key-state",
+    "allow-pair-device",
+    "allow-device-pairing-state",
+    "allow-unpair-device"
   ]
 }

@@ -19,6 +19,9 @@ fn main() {
             "set_api_key",
             "clear_api_key",
             "api_key_state",
+            "pair_device",
+            "device_pairing_state",
+            "unpair_device",
         ]),
     ))
     .expect("tauri build script failed");

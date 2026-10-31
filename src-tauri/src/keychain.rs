@@ -16,6 +16,10 @@ const REFRESH: &str = "refresh";
 /// The API-key alternative to the OIDC pair, stored bare like the refresh
 /// token: another keyring reader sees a credential, not a JSON document.
 const API_KEY: &str = "api-key";
+/// The device pairing (device_pairing.rs): the key the code redeemed, bare
+/// like the others, and its metadata as a small JSON document.
+const DEVICE_KEY: &str = "device-key";
+const DEVICE_META: &str = "device-pairing";
 
 #[derive(Serialize, Deserialize)]
 struct AccessEntry {
@@ -35,6 +39,25 @@ pub trait Store {
 
 /// The OS keychain, through keyring.
 struct Keychain;
+
+/// The one OS-backed `Store`, for the modules whose entry points persist
+/// here directly (device_pairing::pair), with the seam (`Store`) staying
+/// free for tests.
+pub(crate) struct KeychainStore;
+
+impl Store for KeychainStore {
+    fn get(&self, name: &str) -> Option<Vec<u8>> {
+        Keychain.get(name)
+    }
+
+    fn put(&self, name: &str, secret: &[u8]) -> Result<(), String> {
+        Keychain.put(name, secret)
+    }
+
+    fn delete(&self, name: &str) {
+        Keychain.delete(name)
+    }
+}
 
 fn entry(name: &str) -> Result<Entry, String> {
     Entry::new(SERVICE, name).map_err(|e| format!("keychain: {e}"))
@@ -99,6 +122,43 @@ pub(crate) fn clear_api_key_in(store: &dyn Store) {
     store.delete(API_KEY);
 }
 
+/// Store the device pairing: key and metadata together, so a half-written
+/// state is no state. The metadata goes first; if the key write fails the
+/// stale metadata is dropped, and `load` insists on both regardless.
+pub(crate) fn save_device_pairing_in(
+    store: &dyn Store,
+    key: &str,
+    meta_json: &str,
+) -> Result<(), String> {
+    store.put(DEVICE_META, meta_json.as_bytes())?;
+    if store.put(DEVICE_KEY, key.as_bytes()).is_err() {
+        store.delete(DEVICE_META);
+        return Err("keychain: device-key refused".to_string());
+    }
+    Ok(())
+}
+
+/// The pairing only when both halves are there and readable: either alone
+/// is a torn write or tampering, and nothing downstream can use it.
+pub(crate) fn load_device_pairing_in(store: &dyn Store) -> Option<(String, String)> {
+    let key = String::from_utf8(store.get(DEVICE_KEY)?)
+        .ok()
+        .filter(|key| !key.is_empty())?;
+    let meta = String::from_utf8(store.get(DEVICE_META)?)
+        .ok()
+        .filter(|meta| !meta.is_empty())?;
+    Some((key, meta))
+}
+
+pub(crate) fn clear_device_pairing_in(store: &dyn Store) {
+    store.delete(DEVICE_KEY);
+    store.delete(DEVICE_META);
+}
+
+pub fn load_device_pairing() -> Option<(String, String)> {
+    load_device_pairing_in(&Keychain)
+}
+
 pub(crate) fn save_in(store: &dyn Store, set: &TokenSet) -> Result<(), String> {
     match &set.refresh_token {
         Some(r) => store.put(REFRESH, r.as_bytes())?,
@@ -144,31 +204,41 @@ pub(crate) fn clear_in(store: &dyn Store) {
     store.delete(REFRESH);
 }
 
+/// An in-memory `Store` for tests, shared by the modules that persist
+/// through the keychain seam: the OS stores need a desktop session, and
+/// keyring's own mock keeps nothing between two `Entry::new` calls, so it
+/// cannot show a round trip.
 #[cfg(test)]
-mod tests {
-    use super::*;
+pub(crate) mod testing {
+    use super::Store;
     use std::collections::HashMap;
     use std::sync::Mutex;
 
-    /// An in-memory store that can be told to refuse one entry's writes, the
-    /// way Windows refuses an access entry over its size cap.
-    #[derive(Default)]
-    struct MemStore {
-        entries: Mutex<HashMap<String, Vec<u8>>>,
-        refuse: Mutex<Option<&'static str>>,
+    pub(crate) struct MemStore {
+        pub(crate) entries: Mutex<HashMap<String, Vec<u8>>>,
+        pub(crate) refuse: Mutex<Option<&'static str>>,
     }
 
     impl MemStore {
-        fn refusing(name: &'static str) -> Self {
+        pub(crate) fn refusing(name: &'static str) -> Self {
             let store = Self::default();
             *store.refuse.lock().unwrap() = Some(name);
             store
         }
 
-        fn names(&self) -> Vec<String> {
+        pub(crate) fn names(&self) -> Vec<String> {
             let mut names: Vec<String> = self.entries.lock().unwrap().keys().cloned().collect();
             names.sort();
             names
+        }
+    }
+
+    impl Default for MemStore {
+        fn default() -> Self {
+            Self {
+                entries: Mutex::new(HashMap::new()),
+                refuse: Mutex::new(None),
+            }
         }
     }
 
@@ -192,6 +262,12 @@ mod tests {
             self.entries.lock().unwrap().remove(name);
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::testing::MemStore;
+    use super::*;
 
     fn set() -> TokenSet {
         TokenSet {
@@ -319,5 +395,66 @@ mod tests {
         // Not UTF-8 is the same as not there; nothing downstream can use it.
         store.put(API_KEY, &[0xff, 0xfe]).unwrap();
         assert_eq!(load_api_key_in(&store), None);
+    }
+
+    #[test]
+    fn a_device_pairing_round_trips_as_two_entries_and_clears_on_its_own() {
+        let store = MemStore::default();
+        save_device_pairing_in(&store, "mw_ab12cd34_secret", r#"{"key_id":"k1"}"#).unwrap();
+        assert_eq!(
+            store.names(),
+            vec![DEVICE_KEY.to_string(), DEVICE_META.to_string()]
+        );
+        assert_eq!(
+            load_device_pairing_in(&store),
+            Some((
+                "mw_ab12cd34_secret".to_string(),
+                r#"{"key_id":"k1"}"#.to_string()
+            ))
+        );
+
+        // Separate lives: clearing the OIDC entries and the pasted API key
+        // leaves the pairing, and the reverse.
+        save_in(&store, &set()).unwrap();
+        save_api_key_in(&store, "mw_ffeeddcc_other").unwrap();
+        clear_in(&store);
+        clear_api_key_in(&store);
+        assert_eq!(
+            load_device_pairing_in(&store),
+            Some((
+                "mw_ab12cd34_secret".to_string(),
+                r#"{"key_id":"k1"}"#.to_string()
+            ))
+        );
+        assert_eq!(load_from(&store), None);
+        assert_eq!(load_api_key_in(&store), None);
+
+        clear_device_pairing_in(&store);
+        assert!(load_device_pairing_in(&store).is_none());
+        // And only the pairing.
+        assert_eq!(store.names(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_refused_device_key_write_leaves_no_stale_metadata() {
+        // The torn state the save must not leave behind: new metadata in,
+        // key write refused.
+        let store = MemStore::refusing(DEVICE_KEY);
+        store.put(DEVICE_META, br#"{"key_id":"k1"}"#).unwrap();
+        assert!(save_device_pairing_in(&store, "mw_ab12cd34_new", r#"{"key_id":"k1"}"#).is_err());
+        assert_eq!(store.get(DEVICE_META), None, "no metadata without a key");
+        assert_eq!(load_device_pairing_in(&store), None);
+    }
+
+    #[test]
+    fn half_a_device_pairing_loads_as_nothing() {
+        let store = MemStore::default();
+        store.put(DEVICE_KEY, b"mw_ab12cd34_secret").unwrap();
+        assert_eq!(load_device_pairing_in(&store), None);
+        store.put(DEVICE_META, br#"{"key_id":"k1"}"#).unwrap();
+        assert!(load_device_pairing_in(&store).is_some());
+        // A garbled or empty half is the same as a missing one.
+        store.put(DEVICE_META, &[0xff]).unwrap();
+        assert_eq!(load_device_pairing_in(&store), None);
     }
 }

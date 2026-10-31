@@ -30,6 +30,33 @@ const desktop = vi.hoisted(() => ({
   desktopAppInfo: vi.fn<() => Promise<{ version: string; api_base_url: string | null } | null>>(
     async () => null,
   ),
+  desktopDevicePairing: vi.fn<
+    () => Promise<{
+      paired: boolean;
+      name: string | null;
+      hint: string | null;
+      device_id: string | null;
+      paired_at: number | null;
+    }>
+  >(async () => ({ paired: false, name: null, hint: null, device_id: null, paired_at: null })),
+  desktopPairDevice: vi.fn<
+    (code: string) => Promise<{
+      paired: boolean;
+      name: string | null;
+      hint: string | null;
+      device_id: string | null;
+      paired_at: number | null;
+    }>
+  >(async () => ({ paired: false, name: null, hint: null, device_id: null, paired_at: null })),
+  desktopUnpairDevice: vi.fn<
+    () => Promise<{
+      paired: boolean;
+      name: string | null;
+      hint: string | null;
+      device_id: string | null;
+      paired_at: number | null;
+    }>
+  >(async () => ({ paired: false, name: null, hint: null, device_id: null, paired_at: null })),
 }));
 
 vi.mock("../../../lib/desktopAuth", async (importOriginal) => {
@@ -73,6 +100,27 @@ afterEach(() => {
   vi.useRealTimers();
   desktop.isDesktop.mockReturnValue(false);
   desktop.desktopAppInfo.mockResolvedValue(null);
+  desktop.desktopDevicePairing.mockResolvedValue({
+    paired: false,
+    name: null,
+    hint: null,
+    device_id: null,
+    paired_at: null,
+  });
+  desktop.desktopPairDevice.mockResolvedValue({
+    paired: false,
+    name: null,
+    hint: null,
+    device_id: null,
+    paired_at: null,
+  });
+  desktop.desktopUnpairDevice.mockResolvedValue({
+    paired: false,
+    name: null,
+    hint: null,
+    device_id: null,
+    paired_at: null,
+  });
 });
 
 describe("the pairing code", () => {
@@ -360,5 +408,116 @@ describe("in the desktop shell", () => {
     const reveal = await revealText();
     expect(reveal).toContain(window.location.origin);
     expect(asked).not.toHaveBeenCalled();
+  });
+
+  it("does not offer pairing this machine in a browser", async () => {
+    const calls = stubApi((call) =>
+      call.url === "/api/sync/status" ? { status: 200, body: PLATFORM } : undefined,
+    );
+    mounted = await mount(<DevicesPane />, principalWith(["user"], "member"));
+    await flush();
+    expect(mounted.container.textContent).not.toContain("Pair with the platform");
+    expect(desktop.desktopDevicePairing).not.toHaveBeenCalled();
+    expect(calls.map((c) => c.url)).toEqual(["/api/sync/status"]);
+  });
+});
+
+describe("pairing this machine (desktop)", () => {
+  const PAIRED_MACHINE = {
+    paired: true,
+    name: "David's laptop",
+    hint: "mw_ab12cd34\u2026",
+    device_id: "0192b1c4-7a3e-7d10-9a51-3f6c2e8b4d99",
+    paired_at: Math.floor(Date.now() / 1000) - 3600,
+  };
+
+  it("redeems a pasted code against the desktop bridge, then shows the pairing", async () => {
+    stubApi((call) =>
+      call.url === "/api/sync/status" ? { status: 200, body: PLATFORM } : undefined,
+    );
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopAppInfo.mockResolvedValue({
+      version: "0.2.2",
+      api_base_url: "https://app.example.test",
+    });
+    desktop.desktopPairDevice.mockResolvedValue(PAIRED_MACHINE);
+    mounted = await mount(<DevicesPane />, principalWith(["user"], "member"));
+    await flush();
+    const { container } = mounted;
+    // A member, not an admin: the pairing section is still theirs, above
+    // the admins-only note.
+    expect(container.textContent).toContain("Pair with the platform");
+    expect(container.textContent).toContain("Devices are for admins");
+
+    const form = pairForm(container, "Pair with the platform");
+    const code = form.querySelector("input")!;
+    expect(code.placeholder).toBe("e.g. ABCD-EFGH-JKMN");
+    setInputValue(code, "abcd-efgh-jkmn");
+    submit(form);
+    await flush();
+    expect(desktop.desktopPairDevice).toHaveBeenCalledWith("abcd-efgh-jkmn");
+    // The redeem route is anonymous on the platform; nothing rides the
+    // session, and the pairing renders from the keychain's answer.
+    const text = container.textContent ?? "";
+    expect(text).toContain("Paired as David's laptop");
+    expect(text).toContain("mw_ab12cd34");
+    expect(text).toContain("https://app.example.test");
+    expect(text).toContain("1 hour ago");
+    expect(text).toContain("nothing reported yet");
+  });
+
+  it("shows the platform's refusal where the code was typed", async () => {
+    stubApi((call) =>
+      call.url === "/api/sync/status" ? { status: 200, body: PLATFORM } : undefined,
+    );
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopPairDevice.mockRejectedValue(
+      "That pairing code is not valid, or it has expired. Make a new one.",
+    );
+    mounted = await mount(<DevicesPane />, principalWith(["user"], "member"));
+    await flush();
+    const form = pairForm(mounted.container, "Pair with the platform");
+    setInputValue(form.querySelector("input")!, "ZZZZ-ZZZZ-ZZZZ");
+    submit(form);
+    await flush();
+    expect(mounted.container.querySelector("[role='alert']")!.textContent).toContain(
+      "not valid, or it has expired",
+    );
+    // Still the form: a refused code is not a pairing.
+    expect(mounted.container.querySelector("dl[aria-label='Device pairing']")).toBeNull();
+  });
+
+  it("unpairs this machine after its confirmation", async () => {
+    let paired = true;
+    desktop.desktopDevicePairing.mockImplementation(async () =>
+      paired
+        ? PAIRED_MACHINE
+        : { paired: false, name: null, hint: null, device_id: null, paired_at: null },
+    );
+    desktop.desktopUnpairDevice.mockImplementation(async () => {
+      paired = false;
+      return { paired: false, name: null, hint: null, device_id: null, paired_at: null };
+    });
+    stubApi((call) =>
+      call.url === "/api/sync/status" ? { status: 200, body: PLATFORM } : undefined,
+    );
+    desktop.isDesktop.mockReturnValue(true);
+    mounted = await mount(<DevicesPane />, principalWith(["user"], "member"));
+    await flush();
+    const { container } = mounted;
+    click(buttonNamed(container, "Unpair this machine…"));
+    await flush();
+    // A confirmation stands between the click and the revoke.
+    expect(desktop.desktopUnpairDevice).not.toHaveBeenCalled();
+    click(buttonNamed(container, "Cancel"));
+    await flush();
+    expect(desktop.desktopUnpairDevice).not.toHaveBeenCalled();
+
+    click(buttonNamed(container, "Unpair this machine…"));
+    click(buttonNamed(container, "Unpair"));
+    await flush();
+    expect(desktop.desktopUnpairDevice).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("dl[aria-label='Device pairing']")).toBeNull();
+    expect(pairForm(container, "Pair with the platform")).toBeTruthy();
   });
 });

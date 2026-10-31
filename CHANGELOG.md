@@ -7,6 +7,22 @@ the API's `MW_RELEASE` all report it).
 
 ## [Unreleased]
 
+### Added
+
+- **Pair this machine with the platform** (Settings → Devices, desktop
+  only): the redeeming half of the edge handshake. A pairing code minted on
+  the platform (`POST /api/sync/pairings`) is redeemed here at the
+  anonymous route (`POST /api/sync/pair`); the device key it grants --
+  `conversations:import` and nothing else -- is kept in the OS keychain
+  (`src-tauri/src/device_pairing.rs`, entries `device-key` +
+  `device-pairing`), and the pane shows the pairing: name, key hint,
+  device id, when, the platform address, and the last sync the
+  `/api/sync/status` route reports. Unpairing revokes the key on the
+  platform (a key may always revoke itself) and forgets it locally even
+  offline. The key is never the app's bearer -- pairing does not change how
+  the app signs in -- and the section is available to any signed-in
+  person, not only admins, because redemption needs no role.
+
 ### Changed
 
 - **The release degrades to unsigned when the signing secrets are absent**

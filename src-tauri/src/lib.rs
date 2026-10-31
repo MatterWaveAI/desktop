@@ -7,6 +7,7 @@
 //! one, stands in for that whole story and is handed out instead.
 
 mod api_key;
+mod device_pairing;
 mod keychain;
 mod loopback;
 mod oidc;
@@ -367,6 +368,70 @@ async fn api_key_state(state: State<'_, AppState>) -> Result<ApiKeyState, String
     })
 }
 
+/// What the Devices pane shows of the machine's own pairing: that it is
+/// paired, as what, and the key's hint. The secret stays in the keychain
+/// and is never the app's bearer -- the device key may only add
+/// conversations (device_pairing.rs).
+#[derive(Serialize)]
+struct DevicePairingState {
+    paired: bool,
+    name: Option<String>,
+    hint: Option<String>,
+    device_id: Option<String>,
+    /// Unix seconds.
+    paired_at: Option<u64>,
+}
+
+const UNPAIRED_DEVICE: DevicePairingState = DevicePairingState {
+    paired: false,
+    name: None,
+    hint: None,
+    device_id: None,
+    paired_at: None,
+};
+
+fn device_state_of(meta: device_pairing::PairingMeta, hint: Option<String>) -> DevicePairingState {
+    DevicePairingState {
+        paired: true,
+        name: meta.name,
+        hint,
+        device_id: Some(meta.device_id),
+        paired_at: Some(meta.paired_at),
+    }
+}
+
+/// Redeem a pairing code (Settings -> Devices on the platform makes one)
+/// and keep the device key in the keychain.
+#[tauri::command]
+async fn pair_device(
+    state: State<'_, AppState>,
+    code: String,
+) -> Result<DevicePairingState, String> {
+    let meta = device_pairing::pair(&state.http, base_url()?, &code).await?;
+    let hint = keychain::load_device_pairing().map(|(key, _)| api_key::hint(&key));
+    Ok(device_state_of(meta, hint))
+}
+
+/// The pairing as the pane renders it.
+#[tauri::command]
+fn device_pairing_state() -> DevicePairingState {
+    match device_pairing::load_meta() {
+        Some(meta) => {
+            let hint = keychain::load_device_pairing().map(|(key, _)| api_key::hint(&key));
+            device_state_of(meta, hint)
+        }
+        None => UNPAIRED_DEVICE,
+    }
+}
+
+/// Revoke the device key on the platform (best effort) and forget the
+/// pairing. The answer is the state after, so the pane swaps in one step.
+#[tauri::command]
+async fn unpair_device(state: State<'_, AppState>) -> Result<DevicePairingState, String> {
+    device_pairing::unpair(&state.http, base_url()?).await?;
+    Ok(UNPAIRED_DEVICE)
+}
+
 /// Links out of the app go to the system browser. Only web and mail links:
 /// the webview must not be able to launch arbitrary handlers (`file:`,
 /// custom schemes) through this command.
@@ -584,7 +649,10 @@ pub fn run() {
             pending_update,
             set_api_key,
             clear_api_key,
-            api_key_state
+            api_key_state,
+            pair_device,
+            device_pairing_state,
+            unpair_device
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MatterWave desktop app");

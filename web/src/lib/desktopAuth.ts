@@ -246,6 +246,49 @@ export async function desktopClearApiKey(): Promise<void> {
 }
 
 /**
+ * This machine's pairing with the platform (Settings -> Devices): the
+ * desktop half of the edge handshake. Redeeming a code stores a device key
+ * (`conversations:import` and nothing else) in the OS keychain -- the
+ * desktop's pairing.json -- WITHOUT making it the request bearer, so
+ * pairing never changes how the app is signed in. Only what the pane shows
+ * comes back over the bridge; the key itself never does.
+ */
+export interface DesktopDevicePairing {
+  paired: boolean;
+  /** The name the code was minted with. */
+  name: string | null;
+  /** The key's id half, `mw_ab12cd34…`. */
+  hint: string | null;
+  device_id: string | null;
+  /** Unix seconds. */
+  paired_at: number | null;
+}
+
+export const UNPAIRED_DEVICE: DesktopDevicePairing = {
+  paired: false,
+  name: null,
+  hint: null,
+  device_id: null,
+  paired_at: null,
+};
+
+export async function desktopDevicePairing(): Promise<DesktopDevicePairing> {
+  return call<DesktopDevicePairing>("device_pairing_state");
+}
+
+/** Redeem a pairing code; resolves to the state after. Trimmed here, so a
+ * paste with padding sends exactly the code (the Rust side normalizes the
+ * rest: dashes, spaces, case, the ambiguous letters). */
+export async function desktopPairDevice(code: string): Promise<DesktopDevicePairing> {
+  return call<DesktopDevicePairing>("pair_device", { code: code.trim() });
+}
+
+/** Revoke the key (best effort) and forget the pairing; the state after. */
+export async function desktopUnpairDevice(): Promise<DesktopDevicePairing> {
+  return call<DesktopDevicePairing>("unpair_device");
+}
+
+/**
  * The updater's side of the fence. The native side checks at launch and
  * again when the SPA asks; both announce a newer version as the
  * `update-available` event, and the install is its own deliberate command
