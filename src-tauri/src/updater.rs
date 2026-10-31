@@ -193,4 +193,28 @@ mod tests {
     fn a_test_build_has_the_updater_off() {
         assert!(!enabled());
     }
+
+    /// The stage names are the SPA's status contract (`update-stage` events,
+    /// rendered verbatim by the banner and the dev pane's log): four distinct
+    /// steps, and the order here is the order `check` and
+    /// `download_and_install` announce them. A renamer must come through
+    /// this test.
+    #[test]
+    fn the_stage_names_are_the_round_trip_s_order() {
+        let round_trip = [
+            stages::CHECKING,
+            stages::DOWNLOADING,
+            stages::VERIFIED,
+            stages::INSTALLING,
+        ];
+        for (name, expected) in
+            round_trip
+                .iter()
+                .zip(["checking", "downloading", "verified", "installing"])
+        {
+            assert_eq!(*name, expected);
+        }
+        let distinct: std::collections::HashSet<_> = round_trip.iter().collect();
+        assert_eq!(distinct.len(), 4);
+    }
 }

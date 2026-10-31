@@ -413,6 +413,36 @@ export async function desktopInstallUpdate(): Promise<void> {
 }
 
 /**
+ * The global hotkey quick-summon (src-tauri/src/hotkey.rs). The chord is
+ * registered with the OS by the native side -- at launch from its persisted
+ * choice, and whenever this pane asks for a change -- so a press reaches
+ * the app before the SPA is up. The state command answers with the chord
+ * now registered (null when the hotkey is off) and the build's default.
+ */
+export interface DesktopGlobalShortcutState {
+  accelerator: string | null;
+  /** The build's default chord, for the "default" choice. */
+  default: string;
+}
+
+export async function desktopGlobalShortcutState(): Promise<DesktopGlobalShortcutState> {
+  return call<DesktopGlobalShortcutState>("global_shortcut_state");
+}
+
+/**
+ * Point the hotkey at `shortcut` (an accelerator like
+ * "CommandOrControl+Shift+M"; the native side normalizes and validates) or
+ * switch it off with null. The answer is the state after. A chord the OS
+ * refuses -- another application holds it -- rejects with the native side's
+ * wording, and the previous chord stays registered.
+ */
+export async function desktopSetGlobalShortcut(
+  shortcut: string | null,
+): Promise<DesktopGlobalShortcutState> {
+  return call<DesktopGlobalShortcutState>("set_global_shortcut", { shortcut });
+}
+
+/**
  * Tell the native side that a generation finished, so it can raise the OS
  * notification -- which it does only when its window is unfocused, the one
  * state in which a reply can land unseen (`lib.rs`). Fire-and-forget: a

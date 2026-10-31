@@ -69,6 +69,7 @@ import { fetchFeedback, type Feedback } from "./feedback";
 import { COMPACT_HINT, CompactionDivider, ContextMeter, SummaryMarker } from "./CompactionDivider";
 import { DictationButton, DictationNotices } from "./DictationButton";
 import { useDictation } from "./useDictation";
+import { useReadAloud } from "./useReadAloud";
 import {
   compactConversation,
   endedOnLength,
@@ -1014,6 +1015,10 @@ function ThreadView(props: {
   // composer's ArrowUp can open the last one.
   const [editingId, setEditingId] = useState<string | null>(null);
   const editLastId = props.busy ? null : lastEditableId(props.branched);
+  // Read-aloud for the stored replies. One hook above the transcript owns
+  // the synth, so starting one reply stops the previous; a new generation
+  // (the busy flag) stops whichever was reading.
+  const readAloud = useReadAloud({ stopWhen: props.busy });
   const copiedWhat = useCopyShortcuts({
     branched: props.branched,
     messages: props.messages,
@@ -1162,11 +1167,11 @@ function ThreadView(props: {
                   key={row.entry.message.id}
                   entry={row.entry}
                   /* Every stored reply, not only the last: regenerating an
-                     earlier one writes a sibling and the rows beneath it leave
-                     the active path, exactly as editing an earlier user turn
-                     does, and the switcher is the way back to them. A reply
-                     still streaming has the `pending-*` id and no server row
-                     to regenerate. */
+                      earlier one writes a sibling and the rows beneath it leave
+                      the active path, exactly as editing an earlier user turn
+                      does, and the switcher is the way back to them. A reply
+                      still streaming has the `pending-*` id and no server row
+                      to regenerate. */
                   canRegenerate={
                     row.entry.message.role === "assistant" &&
                     !row.entry.message.id.startsWith("pending-")
@@ -1186,6 +1191,15 @@ function ThreadView(props: {
                   onBranch={props.onBranch}
                   feedback={props.feedback.get(row.entry.message.id) ?? null}
                   onFeedbackChange={props.onFeedbackChange}
+                  readAloud={
+                    row.entry.message.role === "assistant" && readAloud.supported
+                      ? {
+                          speaking: readAloud.speakingId === row.entry.message.id,
+                          onToggle: () =>
+                            readAloud.toggle(row.entry.message.id, row.entry.message.content),
+                        }
+                      : undefined
+                  }
                 />
               ),
             )}
@@ -1719,6 +1733,11 @@ function BranchedRow(props: {
   onBranch?: (messageId: string) => void;
   feedback: Feedback | null;
   onFeedbackChange: (messageId: string, next: Feedback | null) => void;
+  /** Read aloud, on a reply, where the webview can speak; absent otherwise. */
+  readAloud?: {
+    speaking: boolean;
+    onToggle: () => void;
+  };
 }) {
   const { editing, onEditingChange: setEditing } = props;
   const { message, branch } = props.entry;
@@ -1758,8 +1777,8 @@ function BranchedRow(props: {
       onReport={props.onReport}
       onBranch={props.onBranch}
       /* Thumbs on a stored reply only: `canReport` is exactly "a reply
-         with a server id", which is also what a rating needs. They lead the
-         reply's one toolbar. */
+          with a server id", which is also what a rating needs. They lead the
+          reply's one toolbar. */
       feedback={
         canReport
           ? {
@@ -1768,6 +1787,7 @@ function BranchedRow(props: {
             }
           : undefined
       }
+      readAloud={props.readAloud}
     />
   );
 

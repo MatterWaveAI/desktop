@@ -7,8 +7,28 @@ the API's `MW_RELEASE` all report it).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-31
+
 ### Added
 
+- **Read-aloud of replies** (T-230): a speaker button on every stored reply,
+  driven by the webview's own `speechSynthesis` -- client-side only, the words
+  go to the OS voices and never over the network
+  (`web/src/apps/chat/tts.ts`, `useReadAloud.ts`). Markdown is spoken as
+  prose (code keeps its contents, links their words, images nothing); one
+  reply reads at a time; a new generation stops the narration; and the same
+  button is the stop button while its reply is the one speaking. Voice and
+  pace are in Preferences (this device), offered only where the webview can
+  speak at all.
+- **The global hotkey quick-summon** (T-231): `Ctrl+Shift+M` by default
+  (`CommandOrControl+Shift+M`, so macOS gets Cmd), toggling the window from
+  anywhere -- the tray's Show/Hide without finding the tray
+  (`src-tauri/src/hotkey.rs`, the `tauri-plugin-global-shortcut` plugin).
+  The chord is registered at launch, before the SPA is up, from the choice
+  persisted in the app's config directory; Preferences (desktop only)
+  offers the default, three alternatives and Off. A chord another
+  application holds is refused by the OS, the pane says so, and the
+  previous chord keeps working; a bare key is refused outright.
 - **Desktop diagnostics pane, dev builds only** (Settings → Desktop
   diagnostics; `web/src/lib/desktopDev.ts` gates it to a dev build inside
   the desktop shell, so release builds never ship it): the scaffolding to
@@ -16,10 +36,14 @@ the API's `MW_RELEASE` all report it).
   what the app actually gated (passkeys off, dictation's engine pick, the
   webview's origin); "Send a test notification" proves OS notifications on
   demand, ignoring the focus rule the real notification honours
-  (`send_test_notification` in `src-tauri/src/lib.rs`); and a
-  check-for-updates button logs each updater stage as it passes
+  (`send_test_notification` in `src-tauri/src/lib.rs`); and the updater
+  section is the round trip -- a check logs each stage as it passes
   (`checking` / `downloading` / `verified` / `installing`,
-  `update-stage` events from `src-tauri/src/updater.rs`).
+  `update-stage` events from `src-tauri/src/updater.rs`), and an offered
+  update can be installed from the pane (T-232's scaffolding), so a signed
+  release's check → download → verify → install → relaunch can be watched
+  end to end against a real feed. The manual pass itself is written down
+  in README.md ("The signed round-trip pass (Windows first)").
 - **The update banner names the stage** (`web/src/shell/UpdateBanner.tsx`):
   where the round trip is, next to the progress line -- so a stalled
   update says which step it stopped at.
@@ -39,6 +63,12 @@ the API's `MW_RELEASE` all report it).
 
 ### Changed
 
+- **CI runs test + lint on every push, not only main** (T-240,
+  `.github/workflows/ci.yml`): the web job (lint, typecheck, vitest,
+  build) and the Rust job (fmt, clippy, tests) already gated pushes and
+  PRs; the push trigger now covers the long-lived branches, develop
+  included. Verified green on this tree; the tauri build matrix stays
+  `continue-on-error` while the runners' toolchains mature.
 - **The release degrades to unsigned when the signing secrets are absent**
   (`.github/workflows/release.yml`, `scripts/release-config.mjs`): with none
   of `TAURI_SIGNING_PRIVATE_KEY`, `MW_UPDATER_PUBKEY` and
@@ -127,6 +157,7 @@ the API's `MW_RELEASE` all report it).
   the app asks for. Without the feed token the release is published and the
   feed keeps the previous version.
 
-[Unreleased]: https://github.com/MatterWaveAI/desktop/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/MatterWaveAI/desktop/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/MatterWaveAI/desktop/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/MatterWaveAI/desktop/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/MatterWaveAI/desktop/releases/tag/v0.2.1

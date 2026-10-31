@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   desktopAppInfo,
   desktopCheckForUpdates,
+  desktopInstallUpdate,
+  desktopPendingUpdate,
   desktopSendTestNotification,
   isDesktop,
   watchUpdates,
@@ -26,10 +28,12 @@ import { Button } from "../../../components/ui/button";
  *   pick, the origin the webview presents. This is the gating's own
  *   readout, not a restatement of it.
  * - **A test notification** -- the OS's answer, on demand, focus or no.
- * - **The updater's stages** -- a check runs here and every stage it
+ * - **The updater's round trip** -- a check runs here and every stage it
  *   passes (`checking` → `downloading` → `verified` → `installing`) lands
- *   in the log, so a round trip can be watched end to end against a real
- *   feed.
+ *   in the log, and the offered update can be installed from the pane, so
+ *   the whole walk -- check, download, verify, install, relaunch -- can be
+ *   watched end to end against a real signed feed (README, "Release QA
+ *   checklist").
  */
 
 interface Flag {
@@ -92,6 +96,9 @@ export function DesktopPane() {
   const [busyNotification, setBusyNotification] = useState(false);
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installResult, setInstallResult] = useState<string | null>(null);
   const [log, setLog] = useState<{ stage: UpdateStage; at: string }[]>([]);
   const logEnd = useRef<HTMLLIElement | null>(null);
 
@@ -100,6 +107,20 @@ export function DesktopPane() {
   useEffect(() => {
     let cancelled = false;
     desktopAppInfo().then((next) => !cancelled && setInfo(next));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // An update the launch check found, before this pane existed to hear the
+  // event: the install step is offered for it too.
+  useEffect(() => {
+    let cancelled = false;
+    desktopPendingUpdate()
+      .then((version) => {
+        if (!cancelled && version) setPending(version);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -140,6 +161,9 @@ export function DesktopPane() {
     setCheckResult(null);
     try {
       const found = await desktopCheckForUpdates();
+      // The offered version is the install step's target; a clean check
+      // clears whatever the last one offered.
+      setPending(found);
       setCheckResult(
         found
           ? `Update offered: ${found}.`
@@ -149,6 +173,24 @@ export function DesktopPane() {
       setCheckResult(typeof err === "string" && err ? err : "The check failed before an answer.");
     } finally {
       setChecking(false);
+    }
+  }, []);
+
+  // The rest of the walk: download, verify, hand to the OS installer,
+  // relaunch -- with every stage arriving through watchUpdates above. The
+  // command resolves only on failure; a success ends with the process gone.
+  const install = useCallback(async () => {
+    setInstalling(true);
+    setInstallResult(null);
+    try {
+      await desktopInstallUpdate();
+      setInstallResult("The installer returned without a relaunch.");
+    } catch (err) {
+      setInstallResult(
+        typeof err === "string" && err ? err : "The install failed before an answer.",
+      );
+    } finally {
+      setInstalling(false);
     }
   }, []);
 
@@ -202,14 +244,24 @@ export function DesktopPane() {
       </PaneSection>
 
       <PaneSection
-        title="Updater stages"
-        description="Run a check and watch the round trip: checking, downloading, verified, installing."
+        title="Updater round trip"
+        description="Run a check, watch the stages, and install the offered update: checking, downloading, verified, installing."
       >
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" disabled={checking} onClick={() => void check()}>
             Check for updates now
           </Button>
+          {pending && (
+            <Button type="button" disabled={installing} onClick={() => void install()}>
+              Install {pending} now
+            </Button>
+          )}
           {checkResult && <p className="text-sm text-mw-text-muted">{checkResult}</p>}
+          {installResult && (
+            <p role="alert" className="text-sm text-mw-danger">
+              {installResult}
+            </p>
+          )}
         </div>
         {log.length > 0 && (
           <ol
@@ -231,8 +283,9 @@ export function DesktopPane() {
         <LearnMore className="mt-4">
           <p>
             A build without the updater answers the check with nothing and logs no stages. Install
-            (download, verify, relaunch) runs from the banner when the feed offers a newer version
-            {info?.version ? `, and this build is ${info.version}` : ""}.
+            (download, verify, relaunch) runs here from the button once a feed offers a newer
+            version, and from the banner in the shell
+            {info?.version ? `; this build is ${info.version}` : ""}.
           </p>
         </LearnMore>
       </PaneSection>

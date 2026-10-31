@@ -24,6 +24,25 @@ import {
  * the whole shape so the API can validate it as one.
  */
 
+/** The desktop half, mocked the way the webview would answer it. */
+const desktop = vi.hoisted(() => ({
+  isDesktop: vi.fn(() => false),
+  desktopGlobalShortcutState: vi.fn<
+    () => Promise<{ accelerator: string | null; default: string }>
+  >(async () => ({ accelerator: "CommandOrControl+Shift+M", default: "CommandOrControl+Shift+M" })),
+  desktopSetGlobalShortcut: vi.fn<
+    (shortcut: string | null) => Promise<{ accelerator: string | null; default: string }>
+  >(async (shortcut) => ({
+    accelerator: shortcut,
+    default: "CommandOrControl+Shift+M",
+  })),
+}));
+
+vi.mock("../../../lib/desktopAuth", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../lib/desktopAuth")>();
+  return { ...actual, ...desktop };
+});
+
 const STORED: Preferences = {
   email: { product_updates: false, usage_alerts: true, billing_receipts: true },
   locale: null,
@@ -38,6 +57,15 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
+  desktop.isDesktop.mockReturnValue(false);
+  desktop.desktopGlobalShortcutState.mockResolvedValue({
+    accelerator: "CommandOrControl+Shift+M",
+    default: "CommandOrControl+Shift+M",
+  });
+  desktop.desktopSetGlobalShortcut.mockImplementation(async (shortcut) => ({
+    accelerator: shortcut,
+    default: "CommandOrControl+Shift+M",
+  }));
   await activateLocale(SOURCE_LOCALE);
 });
 
@@ -208,5 +236,181 @@ describe("the language", () => {
     expect(mounted.container.textContent).toContain(
       "Saved on this device only; the account could not be updated.",
     );
+  });
+});
+
+describe("read aloud", () => {
+  function stubSynthesis(voices: Array<{ voiceURI: string; name: string; lang: string }>): void {
+    vi.stubGlobal("speechSynthesis", {
+      speaking: false,
+      paused: false,
+      getVoices: () => voices,
+      speak: () => {},
+      cancel: () => {},
+      onvoiceschanged: null,
+    });
+    vi.stubGlobal(
+      "SpeechSynthesisUtterance",
+      class {
+        text = "";
+        lang = "";
+        rate = 1;
+        voice = null;
+        onend: (() => void) | null = null;
+        onerror: ((event: unknown) => void) | null = null;
+      },
+    );
+  }
+
+  function readAloudSelect(name: string): HTMLElement {
+    const select = selectNamed(mounted!.container, name);
+    if (!select) throw new Error(`no "${name}" select`);
+    return select;
+  }
+
+  it("hides itself where this browser has no speechSynthesis", async () => {
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    expect(mounted.container.textContent).not.toContain("Read aloud");
+  });
+
+  it("offers Automatic and the voices, and stores the choice on this device", async () => {
+    stubSynthesis([
+      { voiceURI: "en-gb-serena", name: "Serena", lang: "en-GB" },
+      { voiceURI: "en-us-sam", name: "Sam", lang: "en-US" },
+    ]);
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+
+    expect(mounted.container.textContent).toContain("Read aloud");
+    expect(await optionsOf(readAloudSelect("Voice"))).toEqual([
+      "Automatic",
+      "Serena (en-GB)",
+      "Sam (en-US)",
+    ]);
+    expect(await optionsOf(readAloudSelect("Pace"))).toEqual([
+      "0.75×",
+      "Normal (1×)",
+      "1.25×",
+      "1.5×",
+      "1.75×",
+      "2×",
+    ]);
+
+    await chooseOption(readAloudSelect("Voice"), "Serena (en-GB)");
+    await chooseOption(readAloudSelect("Pace"), "1.5×");
+    expect(JSON.parse(localStorage.getItem("mw.read-aloud")!)).toEqual({
+      voiceURI: "en-gb-serena",
+      rate: 1.5,
+    });
+  });
+
+  it("mounts with the stored voice and pace, and the missing-voice note when it must", async () => {
+    localStorage.setItem(
+      "mw.read-aloud",
+      JSON.stringify({ voiceURI: "gone", rate: 1.25 }),
+    );
+    stubSynthesis([{ voiceURI: "en-us-sam", name: "Sam", lang: "en-US" }]);
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+
+    expect(selectShown(readAloudSelect("Voice"))).toBe("Automatic");
+    expect(selectShown(readAloudSelect("Pace"))).toBe("1.25×");
+    expect(mounted.container.textContent).toContain(
+      "This voice is not available right now; Automatic is used until it is.",
+    );
+  });
+});
+
+describe("the global hotkey (desktop only)", () => {
+  function hotkeySelect(): HTMLElement {
+    const select = selectNamed(mounted!.container, "Shortcut");
+    if (!select) throw new Error("no Shortcut select");
+    return select;
+  }
+
+  it("hides itself outside the desktop shell, and reads the registered chord", async () => {
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    expect(mounted.container.textContent).not.toContain("Global hotkey");
+
+    desktop.isDesktop.mockReturnValue(true);
+    mounted?.unmount();
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await flush();
+
+    expect(desktop.desktopGlobalShortcutState).toHaveBeenCalled();
+    expect(selectShown(hotkeySelect())).toBe("Ctrl+Shift+M (default)");
+    expect(mounted.container.textContent).toContain(
+      "Ctrl+Shift+M is registered with the operating system.",
+    );
+    expect(await optionsOf(hotkeySelect())).toEqual([
+      "Ctrl+Shift+M (default)",
+      "Ctrl+Shift+K",
+      "Ctrl+Alt+M",
+      "Ctrl+Shift+Space",
+      "Off",
+    ]);
+  });
+
+  it("registers the chosen chord with the native side, and off with null", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await flush();
+
+    await chooseOption(hotkeySelect(), "Ctrl+Shift+K");
+    expect(desktop.desktopSetGlobalShortcut).toHaveBeenCalledExactlyOnceWith(
+      "CommandOrControl+Shift+K",
+    );
+    expect(mounted.container.textContent).toContain(
+      "Ctrl+Shift+K is registered with the operating system.",
+    );
+
+    await chooseOption(hotkeySelect(), "Off");
+    expect(desktop.desktopSetGlobalShortcut).toHaveBeenCalledWith(null);
+    expect(mounted.container.textContent).toContain(
+      "Off: the app is summoned from its taskbar or tray icon.",
+    );
+  });
+
+  it("a taken chord is the OS's refusal, shown, with the previous chord still the choice", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopSetGlobalShortcut.mockRejectedValue(
+      '"CommandOrControl+Shift+K" could not be registered -- the chord is already in use by another application',
+    );
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await flush();
+
+    await chooseOption(hotkeySelect(), "Ctrl+Shift+K");
+    const alert = mounted.container.querySelector("[role='alert']");
+    expect(alert?.textContent).toContain("already in use");
+    expect(alert?.textContent).toContain("The previous shortcut keeps working.");
+    // The native side refused, so the state stayed on the default chord.
+    expect(selectShown(hotkeySelect())).toBe("Ctrl+Shift+M (default)");
+  });
+
+  it("renders nothing when no native side answers the state", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopGlobalShortcutState.mockRejectedValue("no bridge");
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await flush();
+    expect(mounted.container.textContent).not.toContain("Global hotkey");
   });
 });

@@ -1,6 +1,6 @@
 [package]
 name = "matterwave-desktop"
-version = "0.2.2"
+version = "0.3.0"
 description = "MatterWave desktop: the web app in a native window, signed in through the system browser"
 edition = "2021"
 publish = false
@@ -25,6 +25,9 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-deep-link = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-notification = "2"
+# The global hotkey quick-summon (hotkey.rs): one chord, registered with
+# the OS, that toggles the window from anywhere.
+tauri-plugin-global-shortcut = "2"
 # Size and position survive a restart: saved when the window closes,
 # restored at launch, over the config's numbers as the first-run default.
 tauri-plugin-window-state = "2"
