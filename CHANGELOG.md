@@ -5,6 +5,18 @@ file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.
 and the version here is the app's own (`package.json`, `tauri.conf.json` and
 the API's `MW_RELEASE` all report it).
 
+## [Unreleased]
+
+### Changed
+
+- **The release degrades to unsigned when the signing secrets are absent**
+  (`.github/workflows/release.yml`, `scripts/release-config.mjs`): with none
+  of `TAURI_SIGNING_PRIVATE_KEY`, `MW_UPDATER_PUBKEY` and
+  `MW_DESKTOP_UPDATES_URL` set, the build carries no updater and plain
+  installers attach to a release titled "(unsigned installers)"; the feed
+  job is skipped. A release with only some of them still fails: half a feed
+  is worse than none.
+
 ## [0.2.1] - 2026-10-28
 
 ### Added
@@ -44,8 +56,6 @@ the API's `MW_RELEASE` all report it).
   executables under the repo path), and a `tauri build` matrix over
   Windows/macOS/Linux that is allowed to fail while the runners' toolchains
   mature.
-
-## [Unreleased]
 
 ## [0.2.2] - 2026-10-30
 

@@ -28,6 +28,14 @@ name: Release
 # the layout script prints (a static host in front of a small writer
 # endpoint, or any equivalent -- the transport is the one thing this
 # workflow assumes; swap the upload step if the host speaks something else).
+#
+# Without the signing setup (all three secrets absent), the build degrades
+# instead of failing: `MW_DESKTOP_UNSIGNED=1` has release-config.mjs write a
+# config without the updater, the app builds without the updater plugin, and
+# plain (clearly named) installers attach to a release titled "(unsigned
+# installers)". The feed job is skipped, so installed apps see no update.
+# One secret set but not the others is still a hard failure: half a feed is
+# worse than none.
 
 on:
   push:
@@ -43,6 +51,10 @@ defaults:
 jobs:
   build:
     name: Signed installers (${{ matrix.os }})
+    outputs:
+      # The feed job runs only when the updater artifacts exist; without the
+      # signing secrets there is no manifest to publish.
+      signed: ${{ steps.signing.outputs.signed }}
     strategy:
       fail-fast: false
       matrix:
@@ -69,6 +81,26 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir web install --frozen-lockfile
+      - id: signing
+        name: Decide signed (updater) or unsigned (plain installers)
+        # All three secrets, or none: a half-configured release is a hard
+        # failure (release-config.mjs refuses it) rather than a build that
+        # signs with one key and feeds from nowhere.
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          MW_UPDATER_PUBKEY: ${{ secrets.MW_UPDATER_PUBKEY }}
+          MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
+        run: |
+          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] && [ -n "$MW_UPDATER_PUBKEY" ] && [ -n "$MW_DESKTOP_UPDATES_URL" ]; then
+            echo "signed=1" >> "$GITHUB_OUTPUT"
+            echo "MW_DESKTOP_UPDATER=1" >> "$GITHUB_ENV"
+            echo "Signing secrets present: signed artifacts and an updater feed."
+          else
+            echo "signed=" >> "$GITHUB_OUTPUT"
+            echo "MW_DESKTOP_UPDATER=" >> "$GITHUB_ENV"
+            echo "MW_DESKTOP_UNSIGNED=1" >> "$GITHUB_ENV"
+            echo "::warning::Signing secrets absent -- building UNSIGNED installers without the updater."
+          fi
       - name: Write the updater build config (scripts/release-config.mjs)
         # The tag is v0.2.2; the app version is 0.2.2, so the v goes.
         run: MW_RELEASE="${GITHUB_REF_NAME#v}" node scripts/release-config.mjs
@@ -76,6 +108,7 @@ jobs:
           MW_UPDATER_PUBKEY: ${{ secrets.MW_UPDATER_PUBKEY }}
           MW_DESKTOP_CHANNEL: ${{ vars.MW_DESKTOP_CHANNEL || 'prod' }}
           MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
+          MW_DESKTOP_UNSIGNED: ${{ env.MW_DESKTOP_UNSIGNED }}
       - name: Build, sign and publish the release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -86,29 +119,32 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Read at build time by the Rust side (src-tauri/src/lib.rs,
           # src-tauri/src/updater.rs): which API and whether the updater
-          # exists are properties of the build.
+          # exists are properties of the build. Empty on the unsigned path,
+          # where the plain installers ship and no updater is registered.
           MW_DESKTOP_BASE_URL: ${{ vars.MW_DESKTOP_BASE_URL || 'https://app.matterwave.ai' }}
-          MW_DESKTOP_UPDATER: "1"
+          MW_DESKTOP_UPDATER: ${{ env.MW_DESKTOP_UPDATER }}
         with:
           projectPath: .
           tauriScript: pnpm tauri
           # The config release-config.mjs wrote: real pubkey, per-channel
-          # endpoint, createUpdaterArtifacts on.
+          # endpoint, createUpdaterArtifacts on -- or, unsigned, no updater.
           args: --config src-tauri/tauri.release.json
           tagName: ${{ github.ref_name }}
-          releaseName: MatterWave ${{ github.ref_name }}
+          releaseName: MatterWave ${{ github.ref_name }}${{ steps.signing.outputs.signed == '1' && '' || ' (unsigned installers)' }}
           releaseBody: >
             Installers for Windows (MSI and NSIS), macOS (app bundle) and
-            Linux (AppImage and .deb). `latest.json` is the updater manifest
-            for the feed; `.sig` files are its artifact signatures.
+            Linux (AppImage and .deb). ${{ steps.signing.outputs.signed == '1' && '`latest.json` is the updater manifest for the feed; `.sig` files are its artifact signatures.' || 'Unsigned build: no updater manifest, no auto-update; installed apps keep asking the previous feed.' }}
           releaseDraft: false
           prerelease: false
           includeRelease: true
-          includeUpdaterJson: true
+          includeUpdaterJson: ${{ steps.signing.outputs.signed == '1' }}
 
   feed:
     name: Publish the updater feed
     needs: build
+    # Nothing to lay out when the release shipped unsigned: the feed keeps
+    # serving the previous version, and installed apps see no update.
+    if: needs.build.outputs.signed == '1'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
