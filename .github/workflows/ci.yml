@@ -1,8 +1,12 @@
 name: CI
 
+# Test + lint on every push and every PR (T-240): the release workflow is
+# tags only, so this is what catches breakage between releases. The web
+# job and the Rust job gate; the tauri build matrix below is allowed to
+# fail while the runners' toolchains mature.
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 jobs:

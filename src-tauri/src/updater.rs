@@ -207,9 +207,11 @@ mod tests {
             stages::VERIFIED,
             stages::INSTALLING,
         ];
-        for (name, expected) in round_trip.iter().zip([
-            "checking", "downloading", "verified", "installing",
-        ]) {
+        for (name, expected) in
+            round_trip
+                .iter()
+                .zip(["checking", "downloading", "verified", "installing"])
+        {
             assert_eq!(*name, expected);
         }
         let distinct: std::collections::HashSet<_> = round_trip.iter().collect();
