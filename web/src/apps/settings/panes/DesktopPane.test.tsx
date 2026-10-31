@@ -24,6 +24,8 @@ const desktop = vi.hoisted(() => ({
   ),
   desktopSendTestNotification: vi.fn<() => Promise<boolean>>(async () => true),
   desktopCheckForUpdates: vi.fn<() => Promise<string | null>>(async () => null),
+  desktopPendingUpdate: vi.fn<() => Promise<string | null>>(async () => null),
+  desktopInstallUpdate: vi.fn<() => Promise<void>>(async () => {}),
   watchUpdates: vi.fn<
     (handlers?: { onStage?: (stage: string) => void }) => () => void
   >(() => () => {}),
@@ -47,6 +49,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   desktop.desktopSendTestNotification.mockResolvedValue(true);
   desktop.desktopCheckForUpdates.mockResolvedValue(null);
+  desktop.desktopPendingUpdate.mockResolvedValue(null);
+  desktop.desktopInstallUpdate.mockResolvedValue(undefined);
 });
 
 async function openPane(): Promise<HTMLElement> {
@@ -119,5 +123,43 @@ describe("the desktop diagnostics pane", () => {
     click(buttonNamed(container, "Check for updates now"));
     await flush();
     expect(container.textContent).toContain("Update offered: 0.3.0.");
+  });
+
+  it("offers the install step for an update the launch check already found", async () => {
+    desktop.desktopPendingUpdate.mockResolvedValue("0.3.0");
+    const container = await openPane();
+    expect(desktop.desktopPendingUpdate).toHaveBeenCalled();
+    expect(container.textContent).toContain("Install 0.3.0 now");
+  });
+
+  it("a clean check takes the install step back away", async () => {
+    desktop.desktopPendingUpdate.mockResolvedValue("0.3.0");
+    desktop.desktopCheckForUpdates.mockResolvedValue(null);
+    const container = await openPane();
+    expect(container.textContent).toContain("Install 0.3.0 now");
+    click(buttonNamed(container, "Check for updates now"));
+    await flush();
+    expect(container.textContent).toContain("Nothing newer (or the updater is off in this build).");
+    expect(container.textContent).not.toContain("Install 0.3.0 now");
+  });
+
+  it("the install button walks the rest of the round trip", async () => {
+    desktop.desktopPendingUpdate.mockResolvedValue("0.3.0");
+    const container = await openPane();
+    click(buttonNamed(container, "Install 0.3.0 now"));
+    await flush();
+    expect(desktop.desktopInstallUpdate).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("an install refusal comes back as the native wording, with the offer standing", async () => {
+    desktop.desktopPendingUpdate.mockResolvedValue("0.3.0");
+    desktop.desktopInstallUpdate.mockRejectedValue(
+      "install failed: signature verification failed",
+    );
+    const container = await openPane();
+    click(buttonNamed(container, "Install 0.3.0 now"));
+    await flush();
+    expect(container.textContent).toContain("install failed: signature verification failed");
+    expect(container.textContent).toContain("Install 0.3.0 now");
   });
 });

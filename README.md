@@ -209,6 +209,40 @@ The endpoint is `<MW_DESKTOP_UPDATES_URL>/desktop/<channel>/{{target}}/{{arch}}/
 so a build only ever sees its own channel's manifest. The six-hourly re-check and the rollback
 test are not built; the install step is (the banner's button), but only ever on request.
 
+### The signed round-trip pass (Windows first)
+
+The Done for the release ticket is concrete: **a signed release installs and relaunches via the
+updater on at least one OS**, walked by hand. The steps, Windows first:
+
+1. **One-time setup.** Generate the updater key (`pnpm tauri signer generate`): the private half
+   and its password go to the `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+   secrets, the public half to `MW_UPDATER_PUBKEY`, and a feed address to
+   `MW_DESKTOP_UPDATES_URL` (Settings -> Secrets and variables -> Actions; the full table is at
+   the top of `.github/workflows/release.yml`). Losing the private key means a new key and every
+   installed app refusing updates from it, so it lives with the release credentials, never in
+   the repo.
+2. **Cut a signed tag.** Bump the version, tag `vX.Y.Z`, push the tag: the release job decides
+   signed-vs-unsigned from the secrets, builds with `MW_DESKTOP_UPDATER=1`, signs the artifacts
+   with the private key and publishes the feed (`scripts/publish-updater-manifest.mjs`). The
+   release page must show `latest.json` and the `.sig` files; a release titled "(unsigned
+   installers)" means a secret was missing -- stop and fix the secrets, the pass is meaningless
+   against an unsigned feed.
+3. **Install the previous release.** A build of the version just superseded, made with the same
+   `MW_UPDATER_PUBKEY` (`MW_DESKTOP_UPDATER=1 pnpm build:release`).
+4. **Walk the round trip, watching the dev pane** (Settings -> Desktop diagnostics, dev build):
+   "Check for updates now" answers with the offered version, "Install X now" starts the
+   download, and the stage log shows `checking` → `downloading` (with percentages in the
+   banner) → `verified` (the signature, against the release key) → `installing` -- then the OS
+   installer runs (passive on Windows), the app relaunches, and the capability flags report the
+   new version. The same stages are visible from the shell's update banner without the dev pane.
+5. **File what you found.** Anything that surprised you in the walk -- a stage that never
+   arrived, a message that mis-names its remedy, an installer that left the old version
+   running -- is a gap against `src-tauri/src/updater.rs` (and, for the SPA side,
+   `web/src/lib/desktopAuth.ts`): fix it or open it against the file, with the stage the round
+   trip stopped at and the feed's manifest for that release.
+6. **Then run the full checklist below** for the channel you are about to publish -- the
+   tampered-feed step and the rollback step especially.
+
 ### Release QA checklist
 
 The updater's check and download are exercised in tests against a local feed
@@ -255,12 +289,12 @@ it. Run `MW_DESKTOP_BASE_URL=... pnpm tauri dev`, sign in, open Settings -> Desk
    fires when the window is unfocused). Shown: the OS plumbing works. Nothing appears: look at
    the OS's notification settings for the app, not at the app. The pane reports an OS refusal
    verbatim.
-3. **Updater stages.** "Check for updates now" runs a check and logs every stage the native side
-   announces (`checking` → `downloading` → `verified` → `installing`, `update-stage` events).
-   Against a feed with a newer version, the banner offers the install; pressing it walks the
-   same stages with percentages, then "Signature verified.", then the OS installer. A build
-   without `MW_DESKTOP_UPDATER=1` answers the check with nothing and logs no stages -- that
-   quiet "off" is itself worth confirming once.
+3. **Updater round trip.** "Check for updates now" runs a check and logs every stage the native side
+    announces (`checking` → `downloading` → `verified` → `installing`, `update-stage` events);
+    when the feed offers a newer version the pane offers "Install X now", and pressing it walks
+    the same stages with percentages, then "Signature verified.", then the OS installer. A build
+    without `MW_DESKTOP_UPDATER=1` answers the check with nothing and logs no stages -- that
+    quiet "off" is itself worth confirming once.
 
 The updater's install-and-relaunch pass with real signed artifacts is the release QA checklist
 above; this pane is how you watch the stages of that pass from inside the app.
