@@ -55,7 +55,8 @@ const basePanes: readonly SettingsPane[] = [
     id: "preferences",
     group: "You",
     title: "Preferences",
-    description: "Theme, language and notifications.",
+    description:
+      "Theme, language and notifications; in the desktop app, read-aloud and the global hotkey.",
   },
   {
     // Its own pane rather than a section of Preferences. It is the

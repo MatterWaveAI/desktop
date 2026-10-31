@@ -7,6 +7,12 @@ import { Button } from "../../../components/ui/button";
 import { SimpleSelect } from "../../../components/ui/select";
 import { DEVICE_LOCALE, LOCALES, useLocalePreference, type LocalePreference } from "../../../i18n/locale";
 import { ApiError, apiFetch } from "../../../lib/api";
+import {
+  desktopGlobalShortcutState,
+  desktopSetGlobalShortcut,
+  isDesktop,
+  type DesktopGlobalShortcutState,
+} from "../../../lib/desktopAuth";
 import { useThemePreference, type ThemePreference } from "../../../shell/theme";
 import type { Preferences } from "../../../types";
 import { PaneSection } from "../PaneSection";
@@ -346,13 +352,144 @@ export function PreferencesPane() {
       </PaneSection>
 
       {canSpeak() && <ReadAloudChoice />}
+
+      {isDesktop() && <GlobalHotkeyChoice />}
     </div>
   );
 }
 
 /** A voice as the list shows it: its name, and what it speaks. */
-export function voiceLabel(voice: SpeechSynthesisVoiceLike): string {
+function voiceLabel(voice: SpeechSynthesisVoiceLike): string {
   return `${voice.name} (${voice.lang})`;
+}
+
+/**
+ * The chord as a person reads it: "CommandOrControl" is the plugin's
+ * portable spelling, and what it means -- Ctrl on Windows and Linux, Cmd
+ * on a Mac -- is what the label should say.
+ */
+function friendlyAccelerator(accelerator: string, apple = /Mac/.test(navigator.platform)): string {
+  return accelerator
+    .split("+")
+    .map((part) => {
+      const key = part.trim();
+      switch (key.toLowerCase()) {
+        case "commandorcontrol":
+        case "cmdorctrl":
+          return apple ? "Cmd" : "Ctrl";
+        case "command":
+        case "cmd":
+        case "meta":
+        case "super":
+          return "Cmd";
+        case "control":
+        case "ctrl":
+          return "Ctrl";
+        case "option":
+        case "alt":
+          return apple ? "Option" : "Alt";
+        default:
+          return key.charAt(0).toUpperCase() + key.slice(1);
+      }
+    })
+    .join("+");
+}
+
+/** The chords the pane offers beside the default and Off. */
+const HOTKEY_CHOICES: readonly string[] = [
+  "CommandOrControl+Shift+K",
+  "CommandOrControl+Alt+M",
+  "CommandOrControl+Shift+Space",
+];
+
+/**
+ * The global hotkey quick-summon, desktop only: the chord that summons or
+ * hides the window from anywhere. The registration is the native side's
+ * (src-tauri/src/hotkey.rs), which also persists the choice -- the chord
+ * must work before this page is up. A chord another application holds is
+ * refused by the OS; the pane says so and the previous chord keeps working.
+ */
+export function GlobalHotkeyChoice() {
+  const [state, setState] = useState<DesktopGlobalShortcutState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    desktopGlobalShortcutState()
+      .then((loaded) => {
+        if (!cancelled) setState(loaded);
+      })
+      .catch(() => {
+        // No native side to answer (or an older app): render nothing rather
+        // than a control that cannot work.
+        if (!cancelled) setState({ accelerator: null, default: "" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const choose = useCallback(async (value: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setState(await desktopSetGlobalShortcut(value === "" ? null : value));
+    } catch (err) {
+      setError(
+        typeof err === "string" && err
+          ? `${err} The previous shortcut keeps working.`
+          : "The shortcut could not be registered; the previous one keeps working.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  if (state === null || state.default === "") {
+    // Still loading, or there is no native side to register with.
+    return null;
+  }
+
+  const options = [
+    { value: state.default, label: `${friendlyAccelerator(state.default)} (default)` },
+    ...HOTKEY_CHOICES.filter((choice) => choice !== state.default).map((choice) => ({
+      value: choice,
+      label: friendlyAccelerator(choice),
+    })),
+    { value: "", label: "Off" },
+  ];
+
+  return (
+    <PaneSection
+      title="Global hotkey"
+      description="Summon or hide MatterWave from anywhere, even when the window is hidden. Registered with the operating system, so it works before the app is in front."
+    >
+      <div className="flex flex-col gap-2">
+        <label htmlFor="preferences-global-hotkey" className="text-sm font-medium">
+          Shortcut
+        </label>
+        <SimpleSelect<string>
+          id="preferences-global-hotkey"
+          value={state.accelerator ?? ""}
+          onValueChange={(next) => void choose(next)}
+          disabled={busy}
+          className="w-full max-w-xs"
+          options={options}
+        />
+        <p aria-live="polite" className="text-sm text-mw-text-muted">
+          {state.accelerator === null
+            ? "Off: the app is summoned from its taskbar or tray icon."
+            : `${friendlyAccelerator(state.accelerator)} is registered with the operating system.`}
+          {error && (
+            <span role="alert" className="block text-mw-danger">
+              {error}
+            </span>
+          )}
+        </p>
+      </div>
+    </PaneSection>
+  );
 }
 
 /**

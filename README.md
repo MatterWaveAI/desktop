@@ -153,6 +153,27 @@ reply text never goes into a notification. Clicking it does nothing (no notifica
 are wired), and an error or a cancellation sends none: the in-app notices cover those when the
 person comes back.
 
+## Global hotkey
+
+`Ctrl+Shift+M` by default (the plugin's `CommandOrControl+Shift+M`, so a Mac gets `Cmd+Shift+M`):
+a quick-summon that toggles the window from anywhere, the tray's Show/Hide without finding the
+tray (`src-tauri/src/hotkey.rs`, the `tauri-plugin-global-shortcut` plugin). The chord is
+registered at launch -- before the SPA is up -- from the persisted choice, so the setting lives
+on the native side, in the app's config directory (`hotkey.json`), and the Preferences pane's
+"Global hotkey" select (desktop only) drives it through `set_global_shortcut`. A chord another
+application holds is refused by the OS: the pane says so, and the previous chord stays
+registered. A bare key (no modifier) is refused outright -- it would fire on every keystroke,
+everywhere.
+
+## Read aloud
+
+The speaker button under every stored reply reads it with the webview's own
+`speechSynthesis` (`web/src/apps/chat/tts.ts`, `useReadAloud.ts`) -- client-side only, the
+words go to the OS voices and never over the network. Markdown is spoken as prose (code keeps
+its contents, links their words, images nothing), one reply reads at a time, and a new
+generation stops the narration. Voice and pace are on Preferences (this device); a webview
+without speech synthesis renders neither the button nor the section.
+
 ## Updates and channels
 
 **Off by default.** `tauri.conf.json` names no update endpoint, and a build made without

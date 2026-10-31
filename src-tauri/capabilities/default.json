@@ -19,6 +19,8 @@
     "allow-api-key-state",
     "allow-pair-device",
     "allow-device-pairing-state",
-    "allow-unpair-device"
+    "allow-unpair-device",
+    "allow-global-shortcut-state",
+    "allow-set-global-shortcut"
   ]
 }

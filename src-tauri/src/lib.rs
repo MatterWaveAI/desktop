@@ -8,6 +8,7 @@
 
 mod api_key;
 mod device_pairing;
+mod hotkey;
 mod keychain;
 mod loopback;
 mod oidc;
@@ -534,6 +535,27 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     updater::download_and_install(&app).await
 }
 
+/// The global hotkey as the pane renders it: the chord now registered (null
+/// when off) and the build's default (hotkey.rs).
+#[tauri::command]
+fn global_shortcut_state(
+    manager: tauri::State<'_, hotkey::HotkeyManager>,
+) -> hotkey::GlobalShortcutState {
+    hotkey::state_of(hotkey::current_of(&manager).as_deref())
+}
+
+/// Point the global hotkey at `shortcut`, or switch it off with null. The
+/// answer is the state after; a chord the OS refuses comes back as the
+/// error, with the previous chord still registered.
+#[tauri::command]
+fn set_global_shortcut(
+    manager: tauri::State<'_, hotkey::HotkeyManager>,
+    shortcut: Option<String>,
+) -> Result<hotkey::GlobalShortcutState, String> {
+    let current = hotkey::apply(&manager, shortcut.as_deref())?;
+    Ok(hotkey::state_of(current.as_deref()))
+}
+
 fn focus_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
@@ -624,6 +646,16 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
+        // The global hotkey: pressed means toggle, the tray's Show/Hide.
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        toggle_main(app);
+                    }
+                })
+                .build(),
+        )
         // Size and position persist: saved when the window closes, restored
         // at launch, with the config's numbers as the first-run default.
         .plugin(tauri_plugin_window_state::Builder::default().build());
@@ -652,6 +684,9 @@ pub fn run() {
             // app, not of a build flag.
             #[cfg(desktop)]
             build_tray(app)?;
+            // The hotkey registers here, with the persisted choice or the
+            // default, so a press reaches the app before the SPA is up.
+            hotkey::register_on_launch(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -670,7 +705,9 @@ pub fn run() {
             api_key_state,
             pair_device,
             device_pairing_state,
-            unpair_device
+            unpair_device,
+            global_shortcut_state,
+            set_global_shortcut
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MatterWave desktop app");
