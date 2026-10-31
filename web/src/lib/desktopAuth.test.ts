@@ -275,6 +275,28 @@ describe("watchUpdates", () => {
     expect(seen).toEqual(["1.3.0"]);
   });
 
+  it("delivers the stage announcements to their handler", async () => {
+    const bridge = fakeTauriWithEvents(() => null);
+    const { desktop } = await load();
+    const stages: string[] = [];
+
+    const unlisten = desktop.watchUpdates({ onStage: (stage) => stages.push(stage) });
+    await vi.waitFor(() => {
+      expect(bridge.listenerCount("update-stage")).toBe(1);
+    });
+
+    bridge.fire("update-stage", "checking");
+    bridge.fire("update-stage", "downloading");
+    bridge.fire("update-stage", "verified");
+    bridge.fire("update-stage", "installing");
+    expect(stages).toEqual(["checking", "downloading", "verified", "installing"]);
+
+    unlisten();
+    await vi.waitFor(() => {
+      expect(bridge.listenerCount("update-stage")).toBe(0);
+    });
+  });
+
   it("unlistens cleanly even when cancelled before registration lands", async () => {
     const bridge = fakeTauriWithEvents(() => null);
     const { desktop } = await load();

@@ -9,6 +9,20 @@ the API's `MW_RELEASE` all report it).
 
 ### Added
 
+- **Desktop diagnostics pane, dev builds only** (Settings → Desktop
+  diagnostics; `web/src/lib/desktopDev.ts` gates it to a dev build inside
+  the desktop shell, so release builds never ship it): the scaffolding to
+  verify the webview seams for real. The capability flags readout shows
+  what the app actually gated (passkeys off, dictation's engine pick, the
+  webview's origin); "Send a test notification" proves OS notifications on
+  demand, ignoring the focus rule the real notification honours
+  (`send_test_notification` in `src-tauri/src/lib.rs`); and a
+  check-for-updates button logs each updater stage as it passes
+  (`checking` / `downloading` / `verified` / `installing`,
+  `update-stage` events from `src-tauri/src/updater.rs`).
+- **The update banner names the stage** (`web/src/shell/UpdateBanner.tsx`):
+  where the round trip is, next to the progress line -- so a stalled
+  update says which step it stopped at.
 - **Pair this machine with the platform** (Settings → Devices, desktop
   only): the redeeming half of the edge handshake. A pairing code minted on
   the platform (`POST /api/sync/pairings`) is redeemed here at the

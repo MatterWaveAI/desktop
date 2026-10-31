@@ -484,6 +484,23 @@ fn notify_generation_complete(app: AppHandle, title: String, body: String) -> Re
     Ok(true)
 }
 
+/// The dev pane's proof that OS notifications work (`send-test
+/// notification`): the same builder as `notify_generation_complete` but
+/// ignoring focus, since the point is to see one on demand rather than only
+/// when a reply lands unseen. The command exists in every build (fixed
+/// copy, nothing sensitive); the SPA surfaces it only in dev.
+#[tauri::command]
+fn send_test_notification(app: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_notification::NotificationExt;
+    app.notification()
+        .builder()
+        .title("MatterWave")
+        .body("This is a test notification. OS notifications are working.")
+        .show()
+        .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 /// The SPA's "check for updates": one check, the newer version as the answer
 /// and as `update-available` for listeners (updater.rs). Reporting only:
 /// nothing downloads or installs. A build without MW_DESKTOP_UPDATER has no
@@ -645,6 +662,7 @@ pub fn run() {
             app_info,
             check_for_updates,
             notify_generation_complete,
+            send_test_notification,
             install_update,
             pending_update,
             set_api_key,

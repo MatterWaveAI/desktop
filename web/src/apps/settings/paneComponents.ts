@@ -5,12 +5,14 @@ import { BudgetPane } from "./panes/BudgetPane";
 import { BillingPane } from "./panes/BillingPane";
 import { CustomInstructionsPane } from "./panes/CustomInstructionsPane";
 import { DataPane } from "./panes/DataPane";
+import { DesktopPane } from "./panes/DesktopPane";
 import { DevicesPane } from "./panes/DevicesPane";
 import { MembersPane } from "./panes/MembersPane";
 import { OrganisationPane } from "./panes/OrganisationPane";
 import { PreferencesPane } from "./panes/PreferencesPane";
 import { UsagePane } from "./panes/UsagePane";
 import { WebhooksPane } from "./panes/WebhooksPane";
+import { desktopDevEnabled } from "../../lib/desktopDev";
 
 /**
  * Each pane id's component. Kept apart from panes.ts so the metadata the
@@ -18,6 +20,9 @@ import { WebhooksPane } from "./panes/WebhooksPane";
  * every pane in with it; only SettingsPage, behind the lazy settings
  * route, imports this. settings.test.tsx checks every pane in panes.ts
  * has one here.
+ *
+ * The desktop diagnostics pane rides the same gate as its nav entry
+ * (desktopDev.ts): a dev build inside the desktop shell, nothing else.
  */
 export const paneComponents: Record<string, ComponentType> = {
   account: AccountPane,
@@ -32,4 +37,5 @@ export const paneComponents: Record<string, ComponentType> = {
   usage: UsagePane,
   budget: BudgetPane,
   billing: BillingPane,
+  ...(desktopDevEnabled() ? { desktop: DesktopPane } : {}),
 };

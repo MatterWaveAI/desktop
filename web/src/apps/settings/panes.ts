@@ -6,6 +6,8 @@
  * the first paint.
  */
 
+import { desktopDevEnabled } from "../../lib/desktopDev";
+
 /**
  * The nav's headings. Twelve panes in one flat row wrapped to four rows on
  * a phone; grouped by whose settings they are, the side nav reads as three
@@ -35,7 +37,14 @@ export interface SettingsPane {
   description: string;
 }
 
-export const settingsPanes: readonly SettingsPane[] = [
+const DESKTOP_DEV_PANE: SettingsPane = {
+  id: "desktop",
+  group: "You",
+  title: "Desktop diagnostics",
+  description: "Dev only: capability flags, a test notification, and the updater's stages.",
+};
+
+const basePanes: readonly SettingsPane[] = [
   {
     id: "account",
     group: "You",
@@ -127,6 +136,16 @@ export const settingsPanes: readonly SettingsPane[] = [
     description: "Your plan, when it renews, and where to change it.",
   },
 ];
+
+/**
+ * What the nav lists. The desktop diagnostics pane exists only in a dev
+ * build inside the desktop shell (desktopDev.ts): the prove-it runs --
+ * capability flags, a test notification, the updater's stages -- have no
+ * meaning anywhere else, and a release build must not ship them.
+ */
+export const settingsPanes: readonly SettingsPane[] = desktopDevEnabled()
+  ? [...basePanes, DESKTOP_DEV_PANE]
+  : basePanes;
 
 export const DEFAULT_PANE_ID = settingsPanes[0].id;
 

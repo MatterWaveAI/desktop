@@ -24,6 +24,20 @@ pub const UPDATE_DOWNLOAD_PROGRESS_EVENT: &str = "update-download-progress";
 /// The artifact is complete and verified; the install (and the relaunch)
 /// comes next.
 pub const UPDATE_DOWNLOAD_FINISHED_EVENT: &str = "update-download-finished";
+/// One stage of the round trip, so the SPA can show where an update is and
+/// prove the pipeline reached each step: the payload is one of "checking",
+/// "downloading", "verified", "installing".
+pub const UPDATE_STAGE_EVENT: &str = "update-stage";
+
+/// The stages, named once. They are the observable round trip: a check that
+/// answers nothing never passes "checking"; a download that verifies passes
+/// "verified" on its way to "installing".
+pub mod stages {
+    pub const CHECKING: &str = "checking";
+    pub const DOWNLOADING: &str = "downloading";
+    pub const VERIFIED: &str = "verified";
+    pub const INSTALLING: &str = "installing";
+}
 
 pub fn enabled() -> bool {
     flag_is_on(FLAG)
@@ -58,6 +72,7 @@ fn remember(version: Option<String>) {
 /// there is no plugin to ask, which surfaces as the returned error.
 pub async fn check(app: &AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_updater::UpdaterExt;
+    stage(app, stages::CHECKING);
     let updater = app.updater().map_err(|e| format!("not checking: {e}"))?;
     let Some(update) = updater
         .check()
@@ -71,6 +86,12 @@ pub async fn check(app: &AppHandle) -> Result<Option<String>, String> {
     remember(Some(version.clone()));
     let _ = app.emit(UPDATE_AVAILABLE_EVENT, version.clone());
     Ok(Some(version))
+}
+
+/// One stage announcement to the SPA. Fire and forget: a stage line is
+/// status, never an error path.
+fn stage(app: &AppHandle, name: &str) {
+    let _ = app.emit(UPDATE_STAGE_EVENT, name);
 }
 
 #[derive(Clone, Serialize)]
@@ -91,6 +112,7 @@ pub async fn download_and_install(app: &AppHandle) -> Result<(), String> {
     // A fresh check rather than a stored artifact: the manifest can have
     // moved on (or the found update been withdrawn) since the banner
     // appeared, and the plugin hands back the update to install.
+    stage(app, stages::CHECKING);
     let Some(update) = updater
         .check()
         .await
@@ -98,8 +120,10 @@ pub async fn download_and_install(app: &AppHandle) -> Result<(), String> {
     else {
         return Err("no update is available".into());
     };
+    stage(app, stages::DOWNLOADING);
     let progress_app = app.clone();
     let finish_app = app.clone();
+    let installing_app = app.clone();
     let mut downloaded: u64 = 0;
     update
         .download_and_install(
@@ -111,11 +135,16 @@ pub async fn download_and_install(app: &AppHandle) -> Result<(), String> {
                 );
             },
             move || {
+                // The plugin fires this only after the artifact's signature
+                // has verified, so this is the "verified" stage; the OS
+                // installer takes over once download_and_install returns.
+                stage(&installing_app, stages::VERIFIED);
                 let _ = finish_app.emit(UPDATE_DOWNLOAD_FINISHED_EVENT, ());
             },
         )
         .await
         .map_err(|e| format!("install failed: {e}"))?;
+    stage(app, stages::INSTALLING);
     app.restart()
 }
 

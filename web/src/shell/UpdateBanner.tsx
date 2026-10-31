@@ -5,6 +5,7 @@ import {
   desktopPendingUpdate,
   watchUpdates,
   type UpdateDownloadProgress,
+  type UpdateStage,
 } from "../lib/desktopAuth";
 
 /**
@@ -18,7 +19,10 @@ import {
  * In a browser there is no updater and this renders nothing, so the shell
  * mounts it unconditionally. Install failures come back here (the command
  * only resolves on failure -- success ends with the process gone), and the
- * person can read them where the button was.
+ * person can read them where the button was. The stage announcements ride
+ * the same events (`update-stage`) and name where the round trip is --
+ * check, download, verified, install -- so a stalled update says which
+ * step it stopped at.
  */
 
 type UpdateState =
@@ -28,8 +32,16 @@ type UpdateState =
   /** The artifact is in; the OS installer and the relaunch take over. */
   | { phase: "restarting"; version: string };
 
+const STAGE_TEXT: Record<UpdateStage, string> = {
+  checking: "Checking the update feed…",
+  downloading: "Downloading…",
+  verified: "Signature verified.",
+  installing: "Handing to the installer…",
+};
+
 export function UpdateBanner() {
   const [state, setState] = useState<UpdateState>({ phase: "hidden" });
+  const [stage, setStage] = useState<UpdateStage | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The unlisten from watchUpdates lands one tick after mount; a banner
   // unmounted inside that tick must not leave the listeners behind.
@@ -45,6 +57,7 @@ export function UpdateBanner() {
     unlistenRef.current = watchUpdates({
       onAvailable: (version) => {
         setError(null);
+        setStage(null);
         setState({ phase: "available", version });
       },
       onProgress: (progress) =>
@@ -57,6 +70,7 @@ export function UpdateBanner() {
             ? { phase: "restarting", version: current.version }
             : current,
         ),
+      onStage: setStage,
     });
     return () => {
       alive = false;
@@ -113,6 +127,7 @@ export function UpdateBanner() {
           </>
         )}
         {state.phase === "restarting" && <>Installing {version}; the app restarts when it is done.</>}
+        {stage && <span className="text-mw-text-muted"> {STAGE_TEXT[stage]}</span>}
         {error && (
           <span role="alert" className="block text-mw-danger">
             {error}

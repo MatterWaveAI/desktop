@@ -294,12 +294,16 @@ export async function desktopUnpairDevice(): Promise<DesktopDevicePairing> {
  * `update-available` event, and the install is its own deliberate command
  * (`desktopInstallUpdate`), so a banner is a choice the person makes.
  * Progress during the download arrives as events too, because the command
- * is busy carrying the download.
+ * is busy carrying the download -- and so does the stage the round trip is
+ * in, which is how a dev pane can prove the pipeline reached each step.
  */
 export interface UpdateDownloadProgress {
   downloaded: number;
   total: number | null;
 }
+
+/** The stages the native side announces, in the order the round trip runs. */
+export type UpdateStage = "checking" | "downloading" | "verified" | "installing";
 
 export interface UpdateHandlers {
   /** A newer version was found; the payload is its version string. */
@@ -308,6 +312,8 @@ export interface UpdateHandlers {
   onProgress?: (progress: UpdateDownloadProgress) => void;
   /** The artifact is complete and verified; the install, then the relaunch. */
   onDownloadFinished?: () => void;
+  /** The round trip reached another stage. */
+  onStage?: (stage: UpdateStage) => void;
 }
 
 export type UnlistenFn = () => void;
@@ -368,6 +374,8 @@ export function watchUpdates(handlers: UpdateHandlers): UnlistenFn {
   if (handlers.onProgress)
     add("update-download-progress", (p) => handlers.onProgress?.(p as UpdateDownloadProgress));
   if (handlers.onDownloadFinished) add("update-download-finished", () => handlers.onDownloadFinished?.());
+  if (handlers.onStage)
+    add("update-stage", (p) => handlers.onStage?.(String(p) as UpdateStage));
   return () => {
     cancelled = true;
     for (const unlisten of unlistens.splice(0)) unlisten();
@@ -377,6 +385,21 @@ export function watchUpdates(handlers: UpdateHandlers): UnlistenFn {
 /** The version the launch check found, when this banner mounted too late to hear it. */
 export async function desktopPendingUpdate(): Promise<string | null> {
   return call<string | null>("pending_update");
+}
+
+/** One check now: the newer version, or null when the feed offers nothing
+ * (updates switched off answer null too -- off is not a failure). */
+export async function desktopCheckForUpdates(): Promise<string | null> {
+  return call<string | null>("check_for_updates");
+}
+
+/**
+ * Show one OS notification on demand, focus or no focus -- the dev pane's
+ * proof that notifications work on this machine. Resolves true when the OS
+ * took it; rejects with the OS's own reason when it did not.
+ */
+export async function desktopSendTestNotification(): Promise<boolean> {
+  return call<boolean>("send_test_notification");
 }
 
 /**

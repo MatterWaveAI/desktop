@@ -14,6 +14,7 @@ fn main() {
             "app_info",
             "check_for_updates",
             "notify_generation_complete",
+            "send_test_notification",
             "install_update",
             "pending_update",
             "set_api_key",

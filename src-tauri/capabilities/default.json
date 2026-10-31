@@ -11,6 +11,7 @@
     "allow-app-info",
     "allow-check-for-updates",
     "allow-notify-generation-complete",
+    "allow-send-test-notification",
     "allow-install-update",
     "allow-pending-update",
     "allow-set-api-key",
