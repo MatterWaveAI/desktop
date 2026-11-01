@@ -33,7 +33,7 @@ import { PaneActions } from "../paneActions";
 import { Row, RowList } from "../rows";
 
 /** The hosted guide to the MCP endpoint: docs/mcp.md, as the public site renders it. */
-const MCP_GUIDE_URL = "https://matterwave.dev/docs/reference/mcp";
+const MCP_GUIDE_URL = "https://docs.matterwave.ai/docs/reference/mcp";
 
 /**
  * API keys: list, create, edit, rotate, revoke.

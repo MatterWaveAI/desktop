@@ -26,7 +26,7 @@ export const CHECKBOX_LABEL_CLASS = "flex min-h-6 cursor-pointer items-start gap
  * The support address the public site publishes (site/business/index.md).
  * Used only when the deployment names no support URL of its own.
  */
-export const SUPPORT_EMAIL = "support@matterwave.dev";
+export const SUPPORT_EMAIL = "support@matterwave.ai";
 
 export interface FooterLink {
   kind: "contact" | "status";

@@ -55,6 +55,11 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   (`scripts/smoke-packaged-app.mjs`), and only then is the release made
   public and the updater feed laid out. CI's packaged build on Windows,
   macOS and Linux now gates too, with the same start.
+- **Every public address is on matterwave.ai**: the support and sales
+  addresses are `support@matterwave.ai` and `sales@matterwave.ai`, and
+  Settings → API keys links the MCP guide at `docs.matterwave.ai`. They
+  are desktop patches to the bundled SPA until the platform makes the
+  same change.
 
 ### Security
 

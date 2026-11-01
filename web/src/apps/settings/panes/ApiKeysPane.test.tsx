@@ -108,7 +108,7 @@ describe("the API keys pane", () => {
     expect(portal?.getAttribute("href")).toBe(DEVELOPERS_PATH);
     // The MCP section sends the reader to the hosted guide, in a new tab.
     const guide = [...container.querySelectorAll("a")].find((a) => a.textContent === "MCP guide");
-    expect(guide?.getAttribute("href")).toBe("https://matterwave.dev/docs/reference/mcp");
+    expect(guide?.getAttribute("href")).toBe("https://docs.matterwave.ai/docs/reference/mcp");
     expect(guide?.getAttribute("rel")).toBe("noreferrer");
 
     const form = openCreate(container);

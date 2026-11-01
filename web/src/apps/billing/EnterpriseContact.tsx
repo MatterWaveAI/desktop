@@ -6,7 +6,7 @@ import { Textarea } from "../../components/ui/textarea";
 import { apiFetch } from "../../lib/api";
 import { PROSE_LINK_CLASS, failureMessage } from "../../shell/authForms";
 
-const SALES_EMAIL = "sales@matterwave.dev";
+const SALES_EMAIL = "sales@matterwave.ai";
 
 /** What `POST /api/enterprise/contact` takes; `website` is the field no person fills in. */
 interface EnterpriseContactBody {

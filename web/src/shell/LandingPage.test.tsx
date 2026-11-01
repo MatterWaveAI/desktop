@@ -208,7 +208,7 @@ describe("the landing page", () => {
       `Terms|${TERMS_PATH}`,
       `Privacy|${PRIVACY_PATH}`,
       `Acceptable use|${POLICY_PATH}`,
-      "Contact|mailto:support@matterwave.dev",
+      "Contact|mailto:support@matterwave.ai",
     ]);
     act(() => root?.unmount());
     container?.remove();
