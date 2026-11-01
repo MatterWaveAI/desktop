@@ -1,9 +1,9 @@
 diff --git a/src/lib/desktopNavigation.test.ts b/src/lib/desktopNavigation.test.ts
 new file mode 100644
-index 0000000..9c44ff2
+index 0000000..7cccd5b
 --- /dev/null
 +++ b/src/lib/desktopNavigation.test.ts
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,130 @@
 +import { afterEach, describe, expect, it, vi } from "vitest";
 +import { apps } from "../apps/registry";
 +
@@ -69,6 +69,11 @@ index 0000000..9c44ff2
 +  it("opens a share at its page", async () => {
 +    const { hrefFor } = await load();
 +    expect(hrefFor({ kind: "share", token: "Zx9_-k" })).toBe("/share/Zx9_-k");
++  });
++
++  it("brings the return from Stripe to the billing settings", async () => {
++    const { hrefFor } = await load();
++    expect(hrefFor({ kind: "billing" })).toBe("/settings/billing");
 +  });
 +
 +  it("refuses ids that would be read as more than an id", async () => {

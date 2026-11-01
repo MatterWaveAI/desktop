@@ -1,9 +1,9 @@
 diff --git a/src/lib/desktopNavigation.ts b/src/lib/desktopNavigation.ts
 new file mode 100644
-index 0000000..d638b48
+index 0000000..e216cca
 --- /dev/null
 +++ b/src/lib/desktopNavigation.ts
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,62 @@
 +/**
 + * The desktop shell sending the SPA somewhere: a `matterwave://` link
 + * opened from outside the app, warm or the one that launched it
@@ -38,6 +38,8 @@ index 0000000..d638b48
 +    }
 +    case "share":
 +      return ID.test(target.token) ? `/share/${target.token}` : null;
++    case "billing":
++      return "/settings/billing";
 +    default:
 +      return null;
 +  }

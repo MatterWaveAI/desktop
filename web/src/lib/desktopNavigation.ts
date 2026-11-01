@@ -32,6 +32,8 @@ export function hrefFor(target: DesktopNavigationTarget | null): string | null {
     }
     case "share":
       return ID.test(target.token) ? `/share/${target.token}` : null;
+    case "billing":
+      return "/settings/billing";
     default:
       return null;
   }

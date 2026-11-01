@@ -170,14 +170,24 @@ person because redemption needs no role; only minting codes is an admin act.
 
 ## Links into the app
 
-`matterwave://conversation/<id>` (optionally `?m=<message id>`) opens that conversation and
-`matterwave://share/<token>` opens a shared one, whether the app is running or the link is what
-starts it. The native side parses the link against that allow-list (`src-tauri/src/navigation.rs`;
+`matterwave://conversation/<id>` (optionally `?m=<message id>`) opens that conversation,
+`matterwave://share/<token>` opens a shared one and `matterwave://billing/return` opens Settings →
+Billing, whether the app is running or the link is what starts it. The native side parses the link against that allow-list (`src-tauri/src/navigation.rs`;
 anything else opens nothing, not even the window), keeps the target until the SPA takes it, and
 announces it as the `navigate` event; the SPA takes it on start-up and on every event and routes
 it itself (`web/src/lib/desktopNavigation.ts`). A link that needs a session while signed out is
 remembered by the front door and opened after sign-in, as in the browser.
 `matterwave://auth/callback` is the sign-in's own and never reaches the SPA.
+
+### Billing
+
+Stripe Checkout and the customer portal open in the system browser, not in the webview
+(`web/src/lib/desktopBilling.ts`): inside the webview they would replace the app, and Stripe
+returns to the web origin, where the webview has no session. The plans page and the billing pane
+say the payment is open in the browser and read `/api/billing/status` again each time the window
+comes back to the front, so the new plan shows as soon as Stripe has confirmed it. Stripe's return
+URL is the platform's, so it still lands on the web app in the browser; `matterwave://billing/return`
+is ready for a platform that sends desktop buyers back to the app.
 
 ## Notifications
 

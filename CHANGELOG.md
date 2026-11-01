@@ -69,6 +69,13 @@ the API's `MW_RELEASE` all report it).
   `src-tauri/Info.plist` now says why the app wants the microphone, and
   the hardened-runtime bundle carries
   `com.apple.security.device.audio-input` (`src-tauri/Entitlements.plist`).
+- **Upgrading from the desktop app no longer strands the person in the
+  webview**: Checkout and the billing portal replaced the app with
+  Stripe's page, and Stripe returned to the web origin, where the webview
+  has no session. Both now open in the system browser
+  (`web/src/lib/desktopBilling.ts`); the plans page and the billing pane
+  say so and read the billing status again whenever the window is focused,
+  and `matterwave://billing/return` opens Settings → Billing.
 
 ## [0.3.0] - 2026-10-31
 

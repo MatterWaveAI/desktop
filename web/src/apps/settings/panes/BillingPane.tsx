@@ -12,6 +12,7 @@ import { ErrorState, LoadingSkeleton } from "../../../patterns";
 import { useShell } from "../../../shell/shellContext";
 import { failureMessage } from "../../../shell/authForms";
 import { managesOrg } from "../../../lib/auth";
+import { goToStripe, useRefreshOnReturn } from "../../../lib/desktopBilling";
 import {
   ANNUAL_OVERAGE_NOTE_MSG,
   SEATS_FOLLOW_MEMBERS_NOTE_MSG,
@@ -101,6 +102,8 @@ export function BillingPane() {
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [portal, setPortal] = useState<"idle" | "opening" | string>("idle");
+  // The desktop app opened the portal in the system browser.
+  const [portalOutside, setPortalOutside] = useState(false);
   const [version, setVersion] = useState(0);
   // The error is cleared by the retry, not by the effect: a setState at the
   // top of an effect is the lint's "set-state-in-effect" and an extra render
@@ -109,6 +112,10 @@ export function BillingPane() {
     setError(null);
     setVersion((v) => v + 1);
   }, []);
+
+  // The desktop app's return from the portal in the browser: the window
+  // coming back to the front reads the status again.
+  useRefreshOnReturn(reload);
 
   useEffect(() => {
     let alive = true;
@@ -123,7 +130,10 @@ export function BillingPane() {
   async function manage() {
     setPortal("opening");
     try {
-      window.location.assign(await openPortal());
+      if (goToStripe(await openPortal())) {
+        setPortal("idle");
+        setPortalOutside(true);
+      }
     } catch (err) {
       setPortal(failureMessage(err));
     }
@@ -293,6 +303,11 @@ export function BillingPane() {
         {!isAdmin && (
           <p className="mt-2 text-xs text-mw-text-subtle">
             <Trans>Only an organisation admin can change the card or the plan.</Trans>
+          </p>
+        )}
+        {portalOutside && (
+          <p role="status" className="mt-2 text-sm text-mw-text-muted" data-portal-outside="">
+            Billing is open in your browser. Changes made there show here when you come back.
           </p>
         )}
         {portal !== "idle" && portal !== "opening" && (

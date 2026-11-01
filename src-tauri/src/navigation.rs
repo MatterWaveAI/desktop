@@ -1,5 +1,5 @@
 //! Sending the SPA somewhere from the native side: a `matterwave://` link
-//! opened from outside the app. The native side says *what* to open -- a
+//! opened from outside the app, the way back from Stripe included. The native side says *what* to open -- a
 //! conversation, a share -- and the SPA decides *where* that is in its own
 //! router, so a renamed route is the SPA's change alone.
 //!
@@ -28,6 +28,9 @@ pub enum Target {
     },
     /// A shared conversation, by its share token.
     Share { token: String },
+    /// Back from Stripe in the browser: the billing settings, which read the
+    /// subscription afresh.
+    Billing,
 }
 
 /// The link's target, or nothing: only the shapes below open anything, and
@@ -36,6 +39,7 @@ pub enum Target {
 ///
 /// - `matterwave://conversation/<id>[?m=<message id>]`
 /// - `matterwave://share/<token>`
+/// - `matterwave://billing/return`
 pub fn from_deep_link(raw: &str) -> Option<Target> {
     let url = url::Url::parse(raw).ok()?;
     if url.scheme() != crate::DEEP_LINK_SCHEME {
@@ -58,6 +62,7 @@ pub fn from_deep_link(raw: &str) -> Option<Target> {
         ("share", [token]) if is_id(token) => Some(Target::Share {
             token: (*token).to_string(),
         }),
+        ("billing", ["return"]) => Some(Target::Billing),
         _ => None,
     }
 }
@@ -139,6 +144,16 @@ mod tests {
     }
 
     #[test]
+    fn the_return_from_stripe_opens_billing() {
+        assert_eq!(
+            from_deep_link("matterwave://billing/return?session_id=cs_1"),
+            Some(Target::Billing)
+        );
+        assert_eq!(from_deep_link("matterwave://billing"), None);
+        assert_eq!(from_deep_link("matterwave://billing/portal"), None);
+    }
+
+    #[test]
     fn anything_else_opens_nothing() {
         for raw in [
             "matterwave://auth/callback?code=x&state=y",
@@ -173,6 +188,8 @@ mod tests {
         );
         let json = serde_json::to_value(Target::Share { token: "t".into() }).unwrap();
         assert_eq!(json, serde_json::json!({"kind": "share", "token": "t"}));
+        let json = serde_json::to_value(Target::Billing).unwrap();
+        assert_eq!(json, serde_json::json!({"kind": "billing"}));
     }
 
     /// One request, taken once; a newer one replaces an untaken older one.

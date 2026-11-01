@@ -65,6 +65,11 @@ describe("hrefFor", () => {
     expect(hrefFor({ kind: "share", token: "Zx9_-k" })).toBe("/share/Zx9_-k");
   });
 
+  it("brings the return from Stripe to the billing settings", async () => {
+    const { hrefFor } = await load();
+    expect(hrefFor({ kind: "billing" })).toBe("/settings/billing");
+  });
+
   it("refuses ids that would be read as more than an id", async () => {
     const { hrefFor } = await load();
     expect(hrefFor({ kind: "conversation", id: "c1&x=1" })).toBeNull();

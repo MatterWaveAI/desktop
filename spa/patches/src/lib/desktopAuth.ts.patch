@@ -1,8 +1,8 @@
 diff --git a/src/lib/desktopAuth.ts b/src/lib/desktopAuth.ts
-index e67f627..3b9699f 100644
+index e67f627..45eaadd 100644
 --- a/src/lib/desktopAuth.ts
 +++ b/src/lib/desktopAuth.ts
-@@ -212,6 +212,303 @@ export async function desktopSignOut(): Promise<void> {
+@@ -212,6 +212,304 @@ export async function desktopSignOut(): Promise<void> {
    await call<void>("sign_out");
  }
  
@@ -280,7 +280,8 @@ index e67f627..3b9699f 100644
 + */
 +export type DesktopNavigationTarget =
 +  | { kind: "conversation"; id: string; message?: string }
-+  | { kind: "share"; token: string };
++  | { kind: "share"; token: string }
++  | { kind: "billing" };
 +
 +/** The waiting request, taken (each opens once), or null. */
 +export async function desktopTakeNavigation(): Promise<DesktopNavigationTarget | null> {

@@ -486,7 +486,8 @@ export async function desktopOpenExternal(url: string): Promise<void> {
  */
 export type DesktopNavigationTarget =
   | { kind: "conversation"; id: string; message?: string }
-  | { kind: "share"; token: string };
+  | { kind: "share"; token: string }
+  | { kind: "billing" };
 
 /** The waiting request, taken (each opens once), or null. */
 export async function desktopTakeNavigation(): Promise<DesktopNavigationTarget | null> {
