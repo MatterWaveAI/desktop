@@ -18,7 +18,7 @@
 //! here (`plan` is read-only whatever the webview asks); approval of each
 //! write and command in `ask` mode is the SPA's diff and its buttons,
 //! which is the one control that lives in the webview -- the README says
-//! so for the security review (T-406).
+//! so for the security review.
 
 pub(crate) mod checkpoints;
 pub(crate) mod confine;
@@ -243,7 +243,7 @@ async fn confirm(app: &AppHandle, title: &str, body: &str, ok: &str) -> bool {
     }
 }
 
-const ENABLE_BODY: &str = "Agent mode lets the model read files in a folder you choose and, with your approval, change them and run commands on this computer as you. Commands are not sandboxed. Everything the model reads is sent to MatterWave and the model's provider.\n\nThis is experimental and off by default; its security review (T-406) is not finished. Turn it on?";
+const ENABLE_BODY: &str = "Agent mode lets the model read files in a folder you choose and, with your approval, change them and run commands on this computer as you. Commands are not sandboxed. Everything the model reads is sent to MatterWave and the model's provider.\n\nThis is experimental and off by default; its security review is not finished. Turn it on?";
 
 /// What the webview may read of agent mode: on or off, the root picked this
 /// session and whether it is trusted, and the platform's shell.

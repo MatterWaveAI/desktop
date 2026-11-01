@@ -41,8 +41,10 @@ key's shape checks, the device pairing's code normalization, redeem and unpair a
 platform on loopback, the updater's build flag, the whole sign-in flow -- discovery,
 authorize URL, loopback callback, PKCE exchange, refresh, revoke -- against a fake issuer on
 127.0.0.1 with a closure standing in for the browser, and the updater's check and download against
-a local feed whose artifact is signed with a test key, `src-tauri/tests/updater_local.rs`). The SPA
-side, inside `web/`:
+a local feed whose artifact is signed with a test key, `src-tauri/tests/updater_local.rs`, and
+agent mode's tool host -- confinement, edits, search, checkpoints, the contract parity and
+`run_shell`'s timeout, cap and process-tree Stop, `src-tauri/src/agent`; see "Agent mode" below).
+The SPA side, inside `web/`:
 `pnpm vitest run src/lib/desktopAuth.test.ts src/lib/desktopAuth.notify.test.ts
 src/apps/chat/chatAdapter.test.ts` (the desktop bearer path, the reply-ready notification, the
 streaming adapter), plus the settings pane and update banner tests
@@ -61,7 +63,10 @@ On Windows, `cargo test` needs the MSVC build tools; the WebView2 SDK is pulled 
 crate and links without the runtime installed. A machine whose application-control policy blocks
 freshly built executables will see `os error 4551` on build scripts -- the build is fine, the
 policy is refusing to run what it just produced. Where the policy is path-scoped, building
-somewhere else works: `CARGO_TARGET_DIR=<an allowed path> cargo test`.
+somewhere else works: `CARGO_TARGET_DIR=<an allowed path> cargo test`. Smart App Control is not
+path-scoped: it judges each unsigned binary by what is in it, and it refused a test binary whose
+test spelled out a hidden-window PowerShell launch. The agent tests start their child processes
+without one; keep it that way.
 
 ## Build
 
@@ -123,8 +128,9 @@ tokens involved. Only the id half is shown again (`api_key_state`). Removing the
 to the browser session -- which stays signed in underneath -- while `sign_out` clears key and
 tokens together. OIDC stays the default: a completed browser sign-in supersedes a stored key.
 
-The webview may call only the app's own sixteen commands (`src-tauri/capabilities/default.json`);
-no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
+The webview may call only the app's own commands, each named in `src-tauri/capabilities/default.json`;
+no filesystem, shell, dialog or HTTP plugin is exposed to it. The `agent_*` commands are agent mode's
+native tool host, which is off until the person turns it on (below). The page runs under a restrictive CSP
 (`tauri.conf.json`): no remote script (one hash, for the theme boot script inlined to avoid a
 flash), `wasm-unsafe-eval` for the syntax highlighter, and network access only to the page's own
 origin plus https for the API.
@@ -298,6 +304,130 @@ it. Run `MW_DESKTOP_BASE_URL=... pnpm tauri dev`, sign in, open Settings -> Desk
 
 The updater's install-and-relaunch pass with real signed artifacts is the release QA checklist
 above; this pane is how you watch the stages of that pass from inside the app.
+
+## Agent mode (experimental, off by default)
+
+> **Not released, and off by default.** Agent mode is the desktop's half of T-1501 (coding clients
+> parity), its P2 item "a native Rust tool host behind new, narrowly allow-listed Tauri commands".
+> T-1501 gates that item on T-406, the agent and tool-use security gate, and **T-406 has not
+> signed off on local tools.** The code ships switched off behind a setting; whether the setting
+> is offered in a release is the owner's decision once T-406 has recorded one. Nothing below runs
+> until a person turns it on.
+
+**What it is.** The model works in one folder on this machine through the shared agent tool
+contract (`read_file`, `list_dir`, `glob`, `grep`, `edit`, `write_file`, `run_shell`). The loop
+runs in the SPA (`web/src/apps/agent/loop.ts`): it calls `/v1/chat/completions` with the tools the
+mode offers, `/v1` hands the model's `tool_calls` back unexecuted, the native host runs them, and
+the results go back as `role: "tool"` messages until the model answers without a call. The server
+keeps metering, the budget, the model allow-list and moderation, and never sees the filesystem.
+Each session's first run creates a conversation ("Agent: ...") and every request carries
+`metadata.conversation_id`, so the run is in the sidebar and on the web. `/v1` records the user's
+text and the model's text; whether it also stores the tool rounds is open on the API side
+(T-1501's first API item).
+
+**Turning it on.** Settings -> Preferences -> "Agent mode (experimental)". The desktop app asks
+for confirmation in a **native** dialog, which the webview cannot answer for the person; the
+switch is persisted natively (`agent.json` in the app's config directory) and every agent command
+refuses while it is off. Turning it off stops every run at once and forgets the folder.
+
+**Using it.** On a new chat, the **Agent** toggle (beside Temporary) swaps the thread for the agent
+panel. It is greyed out, with the reason, when `/api/me` says `local_agent_tools: false` (the
+org's switch) or `/api/models` says the picked model has `supports_tools: false`; a flag the API
+does not send counts as allowed. Then:
+
+1. **Choose folder** opens the OS folder picker. The webview never names a path to work in; the
+   native side takes the picked folder, resolves its links and refuses a drive root or the whole
+   home folder. The folder is per app session.
+2. **Pick a mode** (Shift+Tab cycles plan, ask and auto-edit; `/approval-mode <mode>` sets any):
+
+   | Mode | Reads and searches | `edit`, `write_file` | `run_shell` |
+   |---|---|---|---|
+   | `plan` | yes | never offered to the model | never offered |
+   | `ask` (default) | yes | diff shown, Apply or Reject | full command shown, Run or Reject |
+   | `auto-edit` | yes | applied, diff in the transcript | full command shown, Run or Reject |
+   | `yolo` | yes | applied | runs |
+
+   `yolo` asks the desktop app (natively) the first time a run uses it in an app session and is
+   never remembered; the other modes are remembered on this device. A rejection reaches the model
+   as an answer ("do not send the same change again"), not as an error.
+3. **Send.** `@path` attaches a file (read through the host, so the deny list applies).
+   `/restore` lists checkpoints and `/restore <id>` puts files back; `/init` asks the agent to
+   draft a `MATTERWAVE.md`, through the same approvals; `/help` lists them.
+
+**Stop** aborts the request to `/v1` and stops the run in the host, which kills a running command
+and everything it started. A run also ends at its **step cap** (25 model calls by default) or its
+**token cap** (200,000 tokens of `usage.total_tokens` by default), both adjustable in the panel, or
+on a **402** (the chat's budget copy) or **429** (a rate-limit copy), with the request id.
+
+**Context files.** A folder's `MATTERWAVE.md`, `AGENTS.md` and `MATTERWAVE.local.md` (a personal
+override, kept out of git by its owner) are added to the system prompt only when the folder is
+**trusted**: "Trust folder" in the panel asks natively and remembers the folder. In an untrusted
+folder they are named in a notice and not sent. A cloned repository can put anything in them.
+
+### The native tool host (`src-tauri/src/agent`)
+
+The webview gets one command per tool (`agent_read_file`, `agent_list_dir`, `agent_glob`,
+`agent_grep`, `agent_edit`, `agent_write_file`, `agent_run_shell`) plus `agent_state`,
+`agent_set_enabled`, `agent_pick_root`, `agent_trust_root`, `agent_start_run`, `agent_stop_run`,
+`agent_checkpoints` and `agent_restore`, each in `build.rs` and the capability file by name; a test
+holds the three lists together and checks that no `fs:`, `shell:` or `dialog:` permission is
+granted. The folder picker and the confirmations use `rfd` (the crate the dialog plugin wraps)
+from Rust only.
+
+- **Confinement** (`confine.rs`, a port of the SDKs' `confine`): every path the webview sends is
+  resolved here. A `..` segment is refused outright; an absolute path only when it lies under the
+  root; links (symbolic links, and junctions on Windows) are followed and must still lead under
+  the root; the deny list (`.env*`, `*.pem`, `id_*`, `.git/`, plus the folder's
+  `.matterwaveignore`) refuses reads as well as writes; `.matterwaveignore` itself can be read but
+  not written. Search (`list_dir`, `glob`, `grep`) also skips what `.gitignore` and
+  `.matterwaveignore` ignore, never enters a denied directory, and confines each link it meets.
+- **Modes**: a run's mode is fixed when it starts, and the host refuses every tool the mode does
+  not offer, so `plan` is read-only whatever the webview sends.
+- **Writes** are two steps: a preview (the file before and after, which the SPA turns into the
+  unified diff) and an apply, which recomputes the change and refuses if the file's bytes are not
+  the ones the preview saw, so what lands is what was shown. Before every apply the file is
+  **checkpointed** in the app's data directory, outside the project (`checkpoints.rs`); a write
+  without a checkpoint does not happen. `/restore <id>` undoes that checkpoint and every later
+  one, and never touches the project's `.git`. Changes made by `run_shell` are not checkpointed.
+- **`run_shell`** (`shell.rs`) runs the contract's shell (`powershell.exe -NoLogo -NoProfile
+  -NonInteractive -Command` on Windows, `/bin/sh -c` elsewhere) in the root, with a timeout
+  (`timeout_s`, default 120, at most 600) and stdout and stderr together, cut at 64 KiB. The
+  command runs in a **job object** (Windows, kill-on-close) or its own **process group** (Unix),
+  and Stop or the timeout kills the whole tree; so does the command's own exit, so nothing it left
+  in the background outlives the call.
+
+**Where each control lives**, for the security review: the enable switch, the folder, folder
+trust, `yolo`, the mode's tool set, confinement, the deny list, the checkpoints and the
+process-tree kill are enforced in Rust. **The approval of each write and command in `ask` (and of
+commands in `auto-edit`) is the SPA's diff and buttons**: script running in the webview could
+call `agent_edit` or `agent_run_shell` itself. The page's CSP (no remote script, no inline script
+but the one hashed boot script) is what stands between the model's output and that. A native
+approval for `run_shell` is the obvious next step if T-406 wants one.
+
+**Known limits.** Confinement is not a sandbox: an approved command can reach anything the user
+can. The deny list is a floor, not a guarantee; everything the agent reads goes to MatterWave and
+the model's provider. On Windows the shell is assigned to its job right after it starts, so a
+process it spawned in its first instant could escape (PowerShell's startup makes that window
+small); on Unix a process that calls `setsid` leaves the group. The native dialogs follow the
+dialog plugin's threading (the GTK main thread on Linux) but have only been exercised on Windows.
+
+**The contract.** `src-tauri/agent/contract.json` and `conformance.json` are byte-for-byte copies
+of the Python SDK's `contract.json` and `tests/agent_conformance.json`, the one source both SDKs
+are generated from. `contract.rs` restates the tools, modes, deny list, limits and messages, and
+its tests fail when the copy and the code disagree; with `MATTERWAVE_AGENT_CONTRACT` naming the
+Python SDK's file they also check the copy against it. The SPA's copy of the TypeScript SDK's
+browser-safe agent helpers (`web/src/apps/agent/sdk/`) is tested against the same two files
+(`sdk.test.ts`). To take a new contract version: copy both JSON files, copy the four TypeScript
+files from the SDK's `src/agent/`, and fix what the tests name.
+
+**Tests.** `cargo test agent` (confinement: `..`, absolute outside, a link out -- a junction where
+a symbolic link needs privileges -- and `.env`; the shared deny, edit and confinement cases; edit
+semantics; search; preview and apply; checkpoints and restore with the project's `.git` HEAD and
+index unchanged; the capability list; and Stop ending `sleep 60` and the child it started within
+2 s). In `web/`: `pnpm vitest run src/apps/agent` (plan sends only the read tools; a rejected diff
+leaves the file byte-identical; approvals per mode; tool results and `metadata.conversation_id`
+on the wire; the step and token caps; the 402 and 429 copy; Stop; `@path`; the panel, the toggle
+and the Preferences switch).
 
 ## Offline: no send queue
 

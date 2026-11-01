@@ -7,6 +7,34 @@ the API's `MW_RELEASE` all report it).
 
 ## [Unreleased]
 
+### Added
+
+- **Agent mode, off by default and not for release until T-406 signs off** (T-1501, its P2
+  "native tool host" item): a local agent loop on new chats behind an Agent toggle, offered only
+  after the person turns agent mode on in Preferences (a native confirmation). The model works in
+  a folder chosen in the OS folder picker through the shared tool contract; the loop runs in the
+  SPA against `/v1/chat/completions` (tool calls come back unexecuted, results go back as
+  `role: "tool"`, `metadata.conversation_id` stores the run), and every file and process
+  operation happens in a native tool host (`src-tauri/src/agent`) behind one allow-listed command
+  per tool -- no fs, shell or dialog plugin reaches the webview. The host confines every path
+  (`..`, absolute outside, links out, the deny list plus `.matterwaveignore`), fixes each run's
+  mode (`plan` is read-only whatever the webview asks), applies a write only as previewed and
+  after a checkpoint, and runs `run_shell` with a timeout, a 64 KiB output cap and a process-tree
+  kill on Stop (a job object on Windows, a process group on Unix). Modes plan / ask (default) /
+  auto-edit / yolo (natively confirmed once per session, never saved); unified diffs to approve or
+  reject; step and token caps; the chat's budget copy on a 402 and a rate-limit copy on a 429;
+  greyed out when `/api/me` has `local_agent_tools: false` or the model `supports_tools: false`.
+  Also `/approval-mode`, `/restore`, `/init`, `@path`, Shift+Tab through the modes, and a trusted
+  folder's `MATTERWAVE.md` / `AGENTS.md`. The contract is the Python SDK's `contract.json`, copied,
+  and tested against in Rust and in the SPA. README: "Agent mode".
+
+### Changed
+
+- **A send that folds first says so.** The API now opens such a send with a `compacting` frame
+  and folds inside the stream; the chat restarts its one-minute wait for the first token on it
+  and says the earlier messages are being summarised, instead of giving up on a turn that was
+  working (the web app's change of 2026-10-26, caught up).
+
 ## [0.3.0] - 2026-10-31
 
 ### Added
