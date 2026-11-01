@@ -108,6 +108,15 @@ const basePanes: readonly SettingsPane[] = [
     description: msg`People in your organisation and what they can do.`,
   },
   {
+    // Its own pane rather than a tab of Organisation: every member reads
+    // it (it is what the composer offers), while Organisation's tabs are
+    // an admin's, and a preset needs a form of its own.
+    id: "presets",
+    group: "Organisation",
+    title: msg`Presets`,
+    description: msg`Ready-made assistants: a model, instructions and tools, picked in the composer.`,
+  },
+  {
     // Beside Members rather than inside Organisation: an endpoint is the
     // org's, managed by the same owners and admins, and the delivery log
     // and the once-shown secret need a URL of their own to be sent to.
@@ -115,6 +124,16 @@ const basePanes: readonly SettingsPane[] = [
     group: "Organisation",
     title: msg`Webhooks`,
     description: msg`Where this organisation's events are posted, and how each delivery went.`,
+  },
+  {
+    // Beside Webhooks, its inbound counterpart: a workspace that asks
+    // the org's presets a question, governed by the same owners and
+    // admins. The wizard, the routing and the trigger log need a URL of
+    // their own to be sent to.
+    id: "connections",
+    group: "Organisation",
+    title: msg`Connections`,
+    description: msg`Workspaces that can ask your presets a question, which channels are answered, and on whose budget.`,
   },
   {
     id: "keys",

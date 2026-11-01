@@ -145,12 +145,12 @@ export type ChatModelAdapter = {
     abortSignal: AbortSignal;
   }): AsyncGenerator<ChatModelRunResult, void, unknown>;
 };
-import type { Conversation } from "../../types";
+import type { Conversation, ConversationSource } from "../../types";
 import { ApiError, apiFetch, apiStream } from "../../lib/api";
-import { notifyGenerationComplete } from "../../lib/desktopAuth";
 import { parseSSEStream } from "../../lib/sse";
 import { REFUSAL_CODE, TRUNCATED_CODE } from "./streamErrors";
 import { noticeText, type CompactionFrame, type ContextFrame } from "./compaction";
+import { connectorSourceOfError } from "./connectorConversation";
 
 export interface ChatAdapterHooks {
   getConversationId: () => string | null;
@@ -162,6 +162,11 @@ export interface ChatAdapterHooks {
    * creation; absent means a kept conversation.
    */
   getTemporary?: () => boolean;
+  /**
+   * The org preset the conversation this send creates starts on, by id;
+   * null or absent is none. Read once, at creation, like `getTemporary`.
+   */
+  getPresetId?: () => string | null;
   onRenamed: (conversationId: string, title: string) => void;
   onSettled: () => void;
   /**
@@ -194,6 +199,13 @@ export interface ChatAdapterHooks {
   onLengthTruncated?: (messageId: string) => void;
   /** The stream reached `done`: an answer is ready to read. */
   onDone?: (conversationId: string) => void;
+  /**
+   * The API refused the send because the conversation is a connector's --
+   * one started from Slack, answered in its own thread -- and said which
+   * thread. Not a failure of the turn: the composer gives way to a notice
+   * pointing there, so `onError` is not called for it.
+   */
+  onConnectorConversation?: (source: ConversationSource) => void;
 }
 
 /** The prompt we send: the user's text, which is all a user turn carries. */
@@ -284,10 +296,16 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
       };
       try {
         if (!conversationId) {
+          // `temporary` only when on and `preset_id` only when one is
+          // picked, so a plain chat's request is unchanged.
+          const presetId = hooks.getPresetId?.() ?? null;
           const conversation = await apiFetch<Conversation>("/api/conversations", {
             method: "POST",
-            // `temporary` only when on, so a kept chat's request is unchanged.
-            json: { title: "New chat", ...(hooks.getTemporary?.() ? { temporary: true } : {}) },
+            json: {
+              title: "New chat",
+              ...(hooks.getTemporary?.() ? { temporary: true } : {}),
+              ...(presetId === null ? {} : { preset_id: presetId }),
+            },
           });
           conversationId = conversation.id;
           hooks.onConversationCreated(conversation);
@@ -456,10 +474,6 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
             yield emit();
             hooks.onDone?.(conversationId);
             settle();
-            // The answer is complete; whether anyone saw it land is the
-            // native side's call -- it notifies only an unfocused window,
-            // and a click on the notification opens this conversation.
-            notifyGenerationComplete(conversationId);
           }
         }
 
@@ -479,8 +493,11 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
           });
         }
       } catch (err) {
+        const source = connectorSourceOfError(err);
         if (err instanceof DOMException && err.name === "AbortError") {
           yield { status: { type: "incomplete", reason: "cancelled" } };
+        } else if (source !== null && hooks.onConnectorConversation) {
+          hooks.onConnectorConversation(source);
         } else {
           hooks.onError(err instanceof Error ? err.message : "Streaming failed.", {
             // An ApiError knows its own id; a thrown read falls back to the

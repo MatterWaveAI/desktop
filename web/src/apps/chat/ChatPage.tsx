@@ -7,10 +7,13 @@ import type { ChatMessage, ChatModelAdapter, MessagePart } from "./chatAdapter";
 import { useChatThread, type ThreadPhase } from "./useChatThread";
 import type {
   Conversation,
+  ConversationSource,
   ConversationWithMessages,
   EffectiveInstructions,
   Message,
   ModelInfo,
+  Preset,
+  PresetRef,
 } from "../../types";
 import { ApiError, apiFetch, currentToken } from "../../lib/api";
 import { useShell } from "../../shell/shellContext";
@@ -18,6 +21,7 @@ import { announceAnswerReady } from "../../shell/answerReady";
 import { useOnline } from "../../shell/useOnline";
 import { createChatAdapter, textOfParts } from "./chatAdapter";
 import { ModelPicker } from "./ModelPicker";
+import { PresetPicker } from "./PresetPicker";
 import { InstructionsBadge } from "./InstructionsBadge";
 import { MessageParts } from "./MessageParts";
 import { classifyStreamError, isMissingConversation, type StreamFailure } from "./streamErrors";
@@ -71,11 +75,13 @@ import { ConversationActions, type ExportFormat } from "./ConversationActions";
 import { ReportDialog } from "./ReportDialog";
 import { ShareDialog } from "./ShareDialog";
 import { TemporaryNotice, TemporaryToggle } from "./TemporaryChat";
+import { ConnectorNotice } from "./ConnectorSource";
 import { fetchFeedback, type Feedback } from "./feedback";
 import { COMPACT_HINT, CompactionDivider, ContextMeter, SummaryMarker } from "./CompactionDivider";
 import { DictationButton, DictationNotices } from "./DictationButton";
 import { useDictation } from "./useDictation";
 import { useReadAloud } from "./useReadAloud";
+import { notifyGenerationComplete } from "../../lib/desktopAuth";
 import {
   compactConversation,
   endedOnLength,
@@ -191,6 +197,11 @@ function ChatSession(props: {
   const [instructions, setInstructions] = useState<EffectiveInstructions | null>(null);
   // Whether the stored conversation is temporary, from the same GET.
   const [temporary, setTemporary] = useState(false);
+  // The preset the stored conversation is on, from the same GET.
+  const [preset, setPreset] = useState<PresetRef | null>(null);
+  // Where a connector opened the stored conversation, from the same GET:
+  // null for one a person started.
+  const [source, setSource] = useState<ConversationSource | null>(null);
   // The load failure keeps its kind, not its raw body: the transcript error
   // component owns the wording (the "never show a raw error body" rule).
   const [loadError, setLoadError] = useState<StreamFailure | null>(null);
@@ -263,6 +274,8 @@ function ChatSession(props: {
         setLeaf(conversation.current_leaf_message_id ?? null);
         setInstructions(conversation.instructions);
         setTemporary(conversation.temporary === true);
+        setPreset(conversation.preset ?? null);
+        setSource(conversation.source ?? null);
         setAwaitingReply(conversation.messages.at(-1)?.role === "user");
       })
       .catch((err: unknown) => {
@@ -371,6 +384,8 @@ function ChatSession(props: {
       instructions={instructions}
       onInstructionsChanged={setInstructions}
       temporary={temporary}
+      preset={preset}
+      source={source}
       onConversationCreated={props.onConversationCreated}
       onSettled={props.onSettled}
       onRenamed={shell.onConversationRenamed}
@@ -393,6 +408,10 @@ function ThreadRuntime(props: {
   onInstructionsChanged: (next: EffectiveInstructions) => void;
   /** The stored conversation is temporary; false for a new chat. */
   temporary: boolean;
+  /** The preset the stored conversation is on; null for none, or a new chat. */
+  preset: PresetRef | null;
+  /** Where a connector opened the stored conversation; null for one a person started, and for a new chat. */
+  source: ConversationSource | null;
   onConversationCreated: (conversation: Conversation) => void;
   onSettled: () => void;
   onRenamed: (conversationId: string, title: string) => void;
@@ -447,6 +466,20 @@ function ThreadRuntime(props: {
   // conversation; the state is what the header and the notice render.
   const [temporary, setTemporary] = useState(props.temporary);
   const temporaryRef = useRef(props.temporary);
+  // The preset in force: the stored conversation's, or the picker's choice
+  // on a new chat. The ref is what the adapter sends on the create; the
+  // state is what the pickers and the empty state render. The full preset
+  // -- its model to fix, its welcome message -- comes from the picker's
+  // list, which it reports as `presets`.
+  const [preset, setPreset] = useState<PresetRef | null>(props.preset);
+  const presetRef = useRef<string | null>(props.preset?.id ?? null);
+  const [presets, setPresets] = useState<readonly Preset[]>([]);
+  const activePreset = preset === null ? null : (presets.find((p) => p.id === preset.id) ?? null);
+  // A connector's conversation: the stored flag, or what the API answered
+  // a send with when the list was stale. Either way the thread is answered
+  // in its own channel, so the composer gives way to the notice and the
+  // fork is the way to continue here.
+  const [source, setSource] = useState(props.source);
   // The adapter reports a detail string; it is classified here and the string
   // itself is dropped. Nothing downstream can render it by accident. The
   // correlation id is kept, because it is the one piece of the failure that is
@@ -509,6 +542,7 @@ function ThreadRuntime(props: {
         getConversationId: () => idRef.current,
         getModel: () => modelRef.current,
         getTemporary: () => temporaryRef.current,
+        getPresetId: () => presetRef.current,
         onConversationCreated: (conversation) => {
           idRef.current = conversation.id;
           setConversationId(conversation.id);
@@ -518,7 +552,7 @@ function ThreadRuntime(props: {
         onSettled: () => hooksRef.current.onSettled(),
         // `meta` forwarded, not dropped: it carries the correlation id and the
         // refusal code, and a one-argument wrapper here silently threw both
-        // away — the id reached this line and got no further.
+        // away â€” the id reached this line and got no further.
         onError: (message, meta) => hooksRef.current.onError(message, meta),
         onCompaction: (frame) => compactionRef.current(frame),
         // State setters are stable, so these need no ref.
@@ -526,7 +560,17 @@ function ThreadRuntime(props: {
         onContext: (frame) => setContext(readingOfFrame(frame)),
         onNotice: setNotice,
         onLengthTruncated: (id) => setLengthCut((current) => new Set(current).add(id)),
-        onDone: (id) => answerReadyRef.current(id),
+        onDone: (id) => {
+          answerReadyRef.current(id);
+          // The desktop shell notifies natively too; whether anyone saw the
+          // answer land is its call -- it notifies only an unfocused window,
+          // and a click on the notification opens this conversation.
+          notifyGenerationComplete(id);
+        },
+        onConnectorConversation: (found) => {
+          setSource(found);
+          setError(null);
+        },
       }),
     [],
   );
@@ -695,6 +739,9 @@ function ThreadRuntime(props: {
   // An operator's support session is read only: the API refuses every
   // write, so the composer says so instead of offering a send that fails.
   const readOnly = useSupportReadOnly(shell.principal);
+  // Nothing may be sent, edited or regenerated in a connector's
+  // conversation either; unlike a support session it can still be forked.
+  const locked = readOnly || source !== null;
 
   // What is being reported: the whole conversation, or one reply by id.
   // Null closes the dialog, and the dialog is unmounted with it so the next
@@ -776,11 +823,18 @@ function ThreadRuntime(props: {
     }
   };
 
+  // The fork a connector's notice offers: from the leaf, so the copy is
+  // the whole thread as it stands.
+  const forkFromLeaf = () => {
+    const leaf = branches.path.at(-1)?.message.id ?? props.history.at(-1)?.id;
+    if (leaf !== undefined) void branchFrom(leaf);
+  };
+
   const meterContext: ContextReading = {
     used: context?.used ?? null,
     estimated: context?.estimated === true,
     window: resolveWindow({
-      selectedModel,
+      selectedModel: activePreset?.model ?? selectedModel,
       defaultModel,
       models,
       contextWindow: context === null ? undefined : context.window,
@@ -835,9 +889,19 @@ function ThreadRuntime(props: {
           />
         )}
       </div>
+      <PresetPicker
+        conversationId={conversationId}
+        value={preset}
+        onChange={(next) => {
+          presetRef.current = next?.id ?? null;
+          setPreset(next === null ? null : { id: next.id, name: next.name });
+        }}
+        onPresetsLoaded={setPresets}
+      />
       <ModelPicker
         conversationId={conversationId}
         value={selectedModel}
+        fixed={activePreset === null ? null : { model: activePreset.model, by: activePreset.name }}
         onChange={(model) => {
           modelRef.current = model;
           setSelectedModel(model);
@@ -910,11 +974,15 @@ function ThreadRuntime(props: {
       <ThreadView
         conversationId={conversationId}
         reattaching={props.reattaching}
-        readOnly={readOnly}
+        readOnly={locked}
+        source={source}
+        onFork={conversationId === null || readOnly ? undefined : forkFromLeaf}
+        forking={branching}
         onGiveUp={giveUp}
         folding={folding}
         models={models}
-        selectedModel={selectedModel}
+        selectedModel={activePreset?.model ?? selectedModel}
+        welcome={activePreset?.welcome_message ?? null}
         csrfCookieName={shell.authConfig.csrf_cookie}
         messages={showingSend ? thread.messages : []}
         branched={showingSend ? [] : branches.path}
@@ -922,7 +990,7 @@ function ThreadRuntime(props: {
         error={error}
         canRetry={thread.canRetry}
         context={meterContext}
-        onCompact={conversationId === null || readOnly ? undefined : () => void compactNow()}
+        onCompact={conversationId === null || locked ? undefined : () => void compactNow()}
         compactDisabled={sending || branches.running || compacting}
         keepPairs={keepPairs}
         serverCompactable={serverCompactable}
@@ -1001,16 +1069,23 @@ function ThreadView(props: {
   conversationId: string | null;
   /** Looking for the reply that was streaming when the page reloaded. */
   reattaching: boolean;
-  /** An operator's support session: nothing may be sent. */
+  /** An operator's support session, or a connector's conversation: nothing may be sent. */
   readOnly: boolean;
+  /** Where a connector opened the conversation: its notice stands where the composer would. */
+  source: ConversationSource | null;
+  /** The notice's fork; absent where the conversation cannot be forked. */
+  onFork?: () => void;
+  forking: boolean;
   /** A minute with no first token: stop and say so. */
   onGiveUp: () => void;
   /** A fold the server is running before the turn, and a count of changes to it. */
   folding?: { on: boolean; tick: number };
   /** The gateway's models, for the vision gate; null until loaded. */
   models: readonly ModelInfo[] | null;
-  /** The picker's current choice; null is "Default", resolved server-side. */
+  /** The model in force: the preset's, else the picker's choice; null is "Default", resolved server-side. */
   selectedModel: string | null;
+  /** The preset's welcome message for the empty state; null for none. */
+  welcome: string | null;
   /** For the upload request's CSRF header; the same cookie `apiFetch` reads. */
   csrfCookieName: string;
   /** The in-flight send's transcript; empty when the tree is on screen. */
@@ -1076,7 +1151,10 @@ function ThreadView(props: {
   // The row whose bubble is a textarea, here rather than in the row so the
   // composer's ArrowUp can open the last one.
   const [editingId, setEditingId] = useState<string | null>(null);
-  const editLastId = props.busy ? null : lastEditableId(props.branched);
+  // A connector's conversation takes no edit either: the thread is answered
+  // in its own channel, and a rewritten question would be refused the way a
+  // new one is.
+  const editLastId = props.busy || props.source !== null ? null : lastEditableId(props.branched);
   // Read-aloud for the stored replies. One hook above the transcript owns
   // the synth, so starting one reply stops the previous; a new generation
   // (the busy flag) stops whichever was reading.
@@ -1108,14 +1186,14 @@ function ThreadView(props: {
     endedStopped(lastEntry.message);
 
   // Mirror every keystroke to storage. Cheap (one small string) and the
-  // alternative — debouncing — loses exactly the last few characters in the
+  // alternative â€” debouncing â€” loses exactly the last few characters in the
   // case this exists for, because an eviction gives no warning to flush on.
   useEffect(() => {
     saveDraft(conversationId, draft);
   }, [conversationId, draft]);
 
   // Follow the stream unless the reader scrolled up, AND re-pin when the
-  // on-screen keyboard opens or closes — the keyboard shrinks
+  // on-screen keyboard opens or closes â€” the keyboard shrinks
   // the box without changing the content, so a content-keyed effect never
   // sees it. useStickToBottom owns both rules. Keyed on everything the
   // transcript draws, not on `messages` alone: an edit, a regenerate or a
@@ -1143,7 +1221,7 @@ function ThreadView(props: {
   // The guard runs before the pre-check and before any upload, so attaching
   // an image to a text-only model costs the user nothing but the sentence
   // that explains it. It reads the same `supports_vision` the API's 422 reads,
-  // and makes the same trade for `null` (unknown is allowed through —
+  // and makes the same trade for `null` (unknown is allowed through â€”
   // `vision.ts` has the reasoning), so the two cannot disagree about a model
   // the gateway described.
   const { models, selectedModel } = props;
@@ -1198,6 +1276,7 @@ function ThreadView(props: {
                 props.onSend(prompt, [], []);
               }}
               disabled={!props.online || props.busy || props.readOnly}
+              welcome={props.welcome}
             />
             {/* /help and /context answer before a first turn too. */}
             {props.notice !== null && (
@@ -1212,7 +1291,15 @@ function ThreadView(props: {
               message.role === "user" ? (
                 <UserMessage key={i} message={message} />
               ) : (
-                <AssistantMessage key={i} message={message} modelLabel={labelOf} />
+                <AssistantMessage
+                  key={i}
+                  message={message}
+                  modelLabel={labelOf}
+                  /* Only the reply being written can have a tool still
+                     running; an earlier one, or this one once the turn
+                     has ended, says a call without a result got none. */
+                  running={props.busy && i === props.messages.length - 1}
+                />
               ),
             )}
             {rows.map((row) =>
@@ -1245,8 +1332,10 @@ function ThreadView(props: {
                      to regenerate. */
                   canRegenerate={
                     row.entry.message.role === "assistant" &&
-                    !row.entry.message.id.startsWith("pending-")
+                    !row.entry.message.id.startsWith("pending-") &&
+                    props.source === null
                   }
+                  canEdit={props.source === null}
                   busy={props.busy}
                   editing={editingId === row.entry.message.id}
                   onEditingChange={(editing) =>
@@ -1287,7 +1376,7 @@ function ThreadView(props: {
             {props.phase === "streaming" && <StreamingIndicator />}
             {props.reattaching && (
               <p data-mw-reattaching="" className="py-2 text-sm text-mw-text-muted">
-                Picking up the reply that was being written…
+                Picking up the reply that was being writtenâ€¦
               </p>
             )}
             {/* In the transcript, at the point of failure - not a toast. */}
@@ -1330,43 +1419,50 @@ function ThreadView(props: {
           stick.jumpToLatest();
         }}
       />
-      <Composer
-        draft={draft}
-        onDraftChange={setDraft}
-        running={props.busy}
-        readOnly={props.readOnly}
-        online={props.online}
-        context={props.context}
-        onCompact={props.onCompact}
-        compactDisabled={props.compactDisabled}
-        compactable={compactable}
-        attachments={attachments}
-        onSend={(text) => {
-          // The ids are read BEFORE the draft is cleared, and only `ready`
-          // entries have one. There is no await between these three lines and
-          // nothing here can throw, which is the whole design of the send
-          // path: every way an attachment can fail has already happened by
-          // now, in the upload, and left its chip behind. The text cannot be
-          // lost to an upload because by the time this runs there is no
-          // upload left to fail.
-          const ids = readyIds(attachments.pending);
-          const parts = attachmentParts(attachments.pending);
-          setDraft("");
-          attachments.clear();
-          props.onSend(text, ids, parts);
-        }}
-        onCommand={(command) => {
-          // The line was a command, not a message: the box clears, the
-          // attachments stay for the message the reader is still composing.
-          // An unknown `/word` keeps the line -- it may be a typo of a
-          // command, or a message that happens to start with a slash, and
-          // either way the person's text is not ours to throw away.
-          if (command.kind !== "unknown") setDraft("");
-          props.onCommand(command);
-        }}
-        onCancel={props.onCancel}
-        onEditLast={editLastId === null ? undefined : () => setEditingId(editLastId)}
-      />
+      {/* A connector's conversation takes no message here: the notice says
+          where it is answered, and the fork is how to continue in this
+          app. The draft is kept for the fork to find. */}
+      {props.source !== null ? (
+        <ConnectorNotice source={props.source} onFork={props.onFork} forking={props.forking} />
+      ) : (
+        <Composer
+          draft={draft}
+          onDraftChange={setDraft}
+          running={props.busy}
+          readOnly={props.readOnly}
+          online={props.online}
+          context={props.context}
+          onCompact={props.onCompact}
+          compactDisabled={props.compactDisabled}
+          compactable={compactable}
+          attachments={attachments}
+          onSend={(text) => {
+            // The ids are read BEFORE the draft is cleared, and only `ready`
+            // entries have one. There is no await between these three lines and
+            // nothing here can throw, which is the whole design of the send
+            // path: every way an attachment can fail has already happened by
+            // now, in the upload, and left its chip behind. The text cannot be
+            // lost to an upload because by the time this runs there is no
+            // upload left to fail.
+            const ids = readyIds(attachments.pending);
+            const parts = attachmentParts(attachments.pending);
+            setDraft("");
+            attachments.clear();
+            props.onSend(text, ids, parts);
+          }}
+          onCommand={(command) => {
+            // The line was a command, not a message: the box clears, the
+            // attachments stay for the message the reader is still composing.
+            // An unknown `/word` keeps the line -- it may be a typo of a
+            // command, or a message that happens to start with a slash, and
+            // either way the person's text is not ours to throw away.
+            if (command.kind !== "unknown") setDraft("");
+            props.onCommand(command);
+          }}
+          onCancel={props.onCancel}
+          onEditLast={editLastId === null ? undefined : () => setEditingId(editLastId)}
+        />
+      )}
     </div>
   );
 }
@@ -1400,7 +1496,7 @@ function ThreadNotice(props: { text: string; onDismiss: () => void }) {
  * The server stores the real `image` and `document` parts and a reload shows
  * those; this is the optimistic echo, so a person who just sent a screenshot
  * sees it in the transcript instead of a bare line of text. `text: null` on
- * the document part is the honest value here — the client has not extracted
+ * the document part is the honest value here â€” the client has not extracted
  * anything and does not know whether the server will, so claiming otherwise
  * would put a wrong "the model read this" in the transcript for the few
  * seconds before the reload corrects it.
@@ -1444,9 +1540,9 @@ function attachmentHint(attachments: UseAttachments, blocked: boolean): string {
   if (blocked) return "You are offline";
   const kinds = "Images, PDF, text and Markdown";
   const { limits } = attachments;
-  if (limits === null) return `Attach a file — ${kinds}`;
+  if (limits === null) return `Attach a file â€” ${kinds}`;
   return (
-    `Attach a file — ${kinds}, up to ${humanSize(limits.max_upload_bytes)} each, ` +
+    `Attach a file â€” ${kinds}, up to ${humanSize(limits.max_upload_bytes)} each, ` +
     `${humanSize(limits.quota_remaining_bytes)} left of your ${humanSize(limits.quota_bytes)} quota`
   );
 }
@@ -1647,7 +1743,7 @@ function Composer(props: {
           className="mx-auto mb-2 w-full max-w-3xl rounded-lg border border-mw-danger bg-mw-danger-subtle px-3 py-2 text-xs text-mw-danger-strong"
         >
           An attachment did not upload, so nothing was sent. Retry it or remove it, then send
-          again — your message is still here.
+          again â€” your message is still here.
         </p>
       )}
       <DictationNotices dictation={dictation} />
@@ -1691,7 +1787,7 @@ function Composer(props: {
             //
             // `preventDefault` ONLY when files were found. A clipboard with
             // text in it also carries `text/plain` items, and swallowing the
-            // paste unconditionally would break every ordinary Ctrl+V — so
+            // paste unconditionally would break every ordinary Ctrl+V â€” so
             // the default is left alone unless this really is a file paste,
             // in which case the default would insert the filename as text.
             if (!attachments.available) return;
@@ -1714,17 +1810,17 @@ function Composer(props: {
           aria-activedescendant={menu.active ? optionId(menuId, menu.active) : undefined}
           placeholder={
             props.readOnly
-              ? "Read only — support sessions cannot send messages"
+              ? "Read only â€” support sessions cannot send messages"
               : !props.online
-                ? "Offline — your draft is kept"
-                : "Message MatterWave…"
+                ? "Offline â€” your draft is kept"
+                : "Message MatterWaveâ€¦"
           }
           /*
            * 16px (`text-base`) below the md breakpoint, 14px
            * (`text-sm`) above it.
            *
            * Safari zooms the page when a text field with a computed font-size
-           * UNDER 16px is focused, and it never zooms back out — the user is
+           * UNDER 16px is focused, and it never zooms back out â€” the user is
            * left on a zoomed, horizontally-scrolling page for the rest of the
            * session. Measured at 14px before this change on every phone
            * viewport. Suppressing zoom with `maximum-scale=1` in the viewport
@@ -1782,7 +1878,7 @@ function Composer(props: {
                    no explanation during a 20-second upload is the frozen UI
                    this step exists to prevent, and the chip's progress bar
                    is the answer to "how long" -- this is the answer to "why". */
-                aria-label={uploading ? "Uploading…" : "Send"}
+                aria-label={uploading ? "Uploadingâ€¦" : "Send"}
                 title={
                   props.readOnly
                     ? "Support sessions are read only"
@@ -1834,6 +1930,8 @@ function BranchedRow(props: {
   onFeedbackChange: (messageId: string, next: Feedback | null) => void;
   /** A model id to the label a person knows it by. */
   modelLabel: (id: string) => string;
+  /** False where the reader's own turns may not be rewritten: a connector's conversation. */
+  canEdit: boolean;
   /** Read aloud, on a reply, where the webview can speak; absent otherwise. */
   readAloud?: {
     speaking: boolean;
@@ -1871,6 +1969,7 @@ function BranchedRow(props: {
       message={message}
       branch={branch}
       canRegenerate={props.canRegenerate}
+      canEdit={props.canEdit}
       busy={props.busy}
       onSwitchBranch={props.onSwitchBranch}
       onEdit={() => setEditing(true)}
@@ -1991,7 +2090,11 @@ function UserMessage(props: { message: ChatMessage }) {
   );
 }
 
-function AssistantMessage(props: { message: ChatMessage; modelLabel: (id: string) => string }) {
+function AssistantMessage(props: {
+  message: ChatMessage;
+  modelLabel: (id: string) => string;
+  running: boolean;
+}) {
   const model = props.message.metadata?.custom?.model ?? "";
   return (
     <AssistantRow>
@@ -1999,7 +2102,7 @@ function AssistantMessage(props: { message: ChatMessage; modelLabel: (id: string
           build does not know. Text still goes through the markdown renderer -- no
           rehype-raw, URL allowlist, same-origin images, per-message error
           boundary -- which MessageParts is the only caller of here. */}
-      <MessageParts parts={props.message.content} />
+      <MessageParts parts={props.message.content} running={props.running} />
       {model && (
         <div className="mt-2 flex min-h-8 items-center">
           <ModelName label={props.modelLabel(model)} />

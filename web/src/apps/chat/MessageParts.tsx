@@ -48,13 +48,14 @@ export function MessageParts(props: {
     current: Feedback | null;
     onChange: (next: Feedback | null) => void;
   };
+  /**
+   * The message is still being written, so a call without a result is
+   * running. Otherwise it never got one: the run stopped first (a cancelled
+   * turn, or a coding client's run that ended mid-round).
+   */
+  running?: boolean;
 }) {
-  // Results are matched to their call by id so a call renders with its own
-  // output, not with whichever result happened to arrive next.
-  const results = new Map<string, ToolResultPart>();
-  for (const part of props.parts) {
-    if (isToolResultPart(part)) results.set(part.id, part);
-  }
+  const results = resultsByCall(props.parts);
 
   return (
     <>
@@ -69,7 +70,14 @@ export function MessageParts(props: {
           return <ReasoningRow key={i} text={part.text} />;
         }
         if (isToolCallPart(part)) {
-          return <ToolCallRow key={i} call={part} result={results.get(part.id)} />;
+          return (
+            <ToolCallRow
+              key={i}
+              call={part}
+              result={results.get(i)}
+              running={props.running === true}
+            />
+          );
         }
         if (isImagePart(part)) {
           return <ImageRow key={i} part={part} />;
@@ -93,6 +101,31 @@ export function MessageParts(props: {
       )}
     </>
   );
+}
+
+/**
+ * Each call's result, keyed by the call's index in `parts`.
+ *
+ * Matched by id, so a call renders with its own output and not with
+ * whichever result came next, and by position as well: a result answers the
+ * first call before it with that id that has none yet. Ids are not unique
+ * across a long run (some models number each round's calls from `call_0`),
+ * and keying on the id alone would give every such call the last round's
+ * output.
+ */
+function resultsByCall(parts: readonly MessagePart[]): Map<number, ToolResultPart> {
+  const answered = new Map<number, ToolResultPart>();
+  const open = new Map<string, number[]>();
+  parts.forEach((part, i) => {
+    if (isToolCallPart(part)) {
+      open.set(part.id, [...(open.get(part.id) ?? []), i]);
+    } else if (isToolResultPart(part)) {
+      const waiting = open.get(part.id);
+      const call = waiting?.shift();
+      if (call !== undefined) answered.set(call, part);
+    }
+  });
+  return answered;
 }
 
 /** A collapsed disclosure row: the shape every non-text part uses. */
@@ -160,7 +193,7 @@ function searchSources(name: string, result: ToolResultPart): readonly SearchSou
   return sources.length > 0 ? sources : undefined;
 }
 
-function ToolCallRow(props: { call: ToolCallPart; result?: ToolResultPart }) {
+function ToolCallRow(props: { call: ToolCallPart; result?: ToolResultPart; running: boolean }) {
   const { call, result } = props;
   const sources = result === undefined ? undefined : searchSources(call.name, result);
   return (
@@ -182,9 +215,16 @@ function ToolCallRow(props: { call: ToolCallPart; result?: ToolResultPart }) {
             )}
           </span>
           {result === undefined ? (
-            // The call is on the record but its result has not landed: the
-            // server is running the tool right now.
-            <span className="text-xs italic">running…</span>
+            // The call is on the record but its result is not. While the
+            // message is being written the tool is running; after that it
+            // never returned, and "running" would never stop being shown.
+            props.running ? (
+              <span className="text-xs italic">running…</span>
+            ) : (
+              <span data-mw-tool-no-result="" className="text-xs italic">
+                no result
+              </span>
+            )
           ) : result.is_error ? (
             <span className="text-xs text-mw-danger">failed</span>
           ) : null}

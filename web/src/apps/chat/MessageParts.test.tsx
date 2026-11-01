@@ -24,12 +24,12 @@ afterEach(() => {
   container = null;
 });
 
-function render(parts: readonly MessagePart[]): HTMLElement {
+function render(parts: readonly MessagePart[], options: { running?: boolean } = {}): HTMLElement {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(<MessageParts parts={parts} />);
+    root!.render(<MessageParts parts={parts} running={options.running} />);
   });
   return container;
 }
@@ -67,10 +67,51 @@ describe("MessageParts", () => {
   });
 
   it("says a tool call is still running until its result lands", () => {
-    const el = render([
-      { type: "tool_call", id: "c1", name: "get_current_time", arguments: "{}" },
-    ]);
+    const el = render(
+      [{ type: "tool_call", id: "c1", name: "get_current_time", arguments: "{}" }],
+      { running: true },
+    );
     expect(el.textContent).toContain("running");
+    expect(el.querySelector("[data-mw-tool-no-result]")).toBeNull();
+  });
+
+  it("says a call in a finished message got no result, rather than running forever", () => {
+    // A coding client's run stored mid-round: the call is on the record,
+    // its result never came. The message is done, so nothing is running.
+    const el = render([
+      { type: "text", text: "Running the tests." },
+      { type: "tool_call", id: "c1", name: "read_file", arguments: '{"path":"a.py"}' },
+      { type: "tool_result", id: "c1", output: "x = 1", is_error: false },
+      { type: "tool_call", id: "c2", name: "run_shell", arguments: '{"command":"pytest"}' },
+    ]);
+    const rows = Array.from(el.querySelectorAll("button"));
+    expect(el.textContent).not.toContain("running");
+    expect(rows[0].querySelector("[data-mw-tool-no-result]")).toBeNull();
+    expect(rows[1].querySelector("[data-mw-tool-no-result]")?.textContent).toBe("no result");
+
+    // Expanded, it shows what was asked and no result block.
+    act(() => rows[1].click());
+    expect(el.textContent).toContain("pytest");
+    expect(el.textContent).not.toContain("Result");
+  });
+
+  it("pairs results by position when a run reuses a call id across rounds", () => {
+    const el = render([
+      { type: "tool_call", id: "call_0", name: "read_file", arguments: '{"path":"a.py"}' },
+      { type: "tool_result", id: "call_0", output: "A-CONTENTS", is_error: false },
+      { type: "tool_call", id: "call_0", name: "read_file", arguments: '{"path":"b.py"}' },
+      { type: "tool_result", id: "call_0", output: "B-CONTENTS", is_error: false },
+      { type: "tool_call", id: "call_0", name: "edit", arguments: '{"path":"a.py"}' },
+    ]);
+    const rows = Array.from(el.querySelectorAll("button"));
+    act(() => rows[0].click());
+    expect(el.textContent).toContain("A-CONTENTS");
+    expect(el.textContent).not.toContain("B-CONTENTS");
+    act(() => rows[0].click());
+    act(() => rows[1].click());
+    expect(el.textContent).toContain("B-CONTENTS");
+    expect(el.textContent).not.toContain("A-CONTENTS");
+    expect(rows[2].querySelector("[data-mw-tool-no-result]")).not.toBeNull();
   });
 
   it("marks a failed tool result as failed", () => {
@@ -96,6 +137,37 @@ describe("MessageParts", () => {
 
     act(() => secondRow.click());
     expect(el.textContent).toContain("B-OUTPUT");
+  });
+
+  it("renders a coding client's stored agent run: each call with its own result, text around them", () => {
+    // The shape `/v1` stores for a client's own tool loop: one assistant
+    // message, a round's calls together and then their results.
+    const el = render([
+      { type: "text", text: "Reading it." },
+      { type: "tool_call", id: "c1", name: "read_file", arguments: '{"path":"a.py"}' },
+      { type: "tool_call", id: "c2", name: "read_file", arguments: '{"path":"b.py"}' },
+      { type: "tool_result", id: "c1", output: "A-CONTENTS", is_error: false },
+      { type: "tool_result", id: "c2", output: "B-CONTENTS", is_error: false },
+      { type: "tool_call", id: "c3", name: "edit", arguments: '{"path":"a.py"}' },
+      { type: "tool_result", id: "c3", output: "rejected by the user", is_error: true },
+      { type: "text", text: "Fixed." },
+    ]);
+
+    expect(el.textContent).toContain("Reading it.");
+    expect(el.textContent).toContain("Fixed.");
+    const rows = Array.from(el.querySelectorAll("button"));
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("read_file"),
+      expect.stringContaining("read_file"),
+      expect.stringContaining("edit"),
+    ]);
+    // Every result has landed: nothing reads as still running.
+    expect(el.textContent).not.toContain("running");
+    expect(rows[2].textContent).toContain("failed");
+
+    act(() => rows[1].click());
+    expect(el.textContent).toContain("B-CONTENTS");
+    expect(el.textContent).not.toContain("A-CONTENTS");
   });
 
   it("collapses reasoning by default", () => {

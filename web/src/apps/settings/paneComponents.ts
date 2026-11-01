@@ -3,6 +3,7 @@ import { AccountPane } from "./panes/AccountPane";
 import { ApiKeysPane } from "./panes/ApiKeysPane";
 import { BudgetPane } from "./panes/BudgetPane";
 import { BillingPane } from "./panes/BillingPane";
+import { ConnectionsPane } from "./panes/ConnectionsPane";
 import { CustomInstructionsPane } from "./panes/CustomInstructionsPane";
 import { DataPane } from "./panes/DataPane";
 import { DesktopPane } from "./panes/DesktopPane";
@@ -10,6 +11,7 @@ import { DevicesPane } from "./panes/DevicesPane";
 import { MembersPane } from "./panes/MembersPane";
 import { OrganisationPane } from "./panes/OrganisationPane";
 import { PreferencesPane } from "./panes/PreferencesPane";
+import { PresetsPane } from "./panes/PresetsPane";
 import { UsagePane } from "./panes/UsagePane";
 import { WebhooksPane } from "./panes/WebhooksPane";
 import { desktopDevEnabled } from "../../lib/desktopDev";
@@ -31,7 +33,9 @@ export const paneComponents: Record<string, ComponentType> = {
   data: DataPane,
   organisation: OrganisationPane,
   members: MembersPane,
+  presets: PresetsPane,
   webhooks: WebhooksPane,
+  connections: ConnectionsPane,
   keys: ApiKeysPane,
   devices: DevicesPane,
   usage: UsagePane,

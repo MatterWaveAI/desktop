@@ -3,8 +3,10 @@ import { ApiError, apiFetch, currentToken, requestIdOf } from "./api";
 
 /**
  * Organisation policy and visibility, typed once: the model allow-list
- * (`/api/org/models`), the audit log (`/api/org/audit`) and the per-member
- * usage report (`/api/org/usage`), from routes_org.py and routes_usage.py.
+ * (`/api/org/models`), the switch on local agent tools
+ * (`/api/org/agent-tools`), the audit log (`/api/org/audit`) and the
+ * per-member usage report (`/api/org/usage`), from routes_org.py and
+ * routes_usage.py.
  *
  * Every shape here is read tolerantly. The panes are also mounted against
  * stubbed APIs whose catch-all answers `{data: []}` for a route it does not
@@ -91,6 +93,40 @@ export function allowListAfter(
   const next = models.map((m) => (m.id === changed ? { ...m, allowed: on } : m));
   if (next.every((m) => m.allowed)) return null;
   return next.filter((m) => m.allowed && !m.locked).map((m) => m.id);
+}
+
+// --- local agent tools ---------------------------------------------------------
+
+/**
+ * Whether members' coding clients (the terminal app, the VS Code extension)
+ * may run their agent tools on the member's own computer. The clients read
+ * the same answer from `/api/me`; the server never runs those tools.
+ */
+export interface AgentToolsPolicy {
+  local_agent_tools: boolean;
+}
+
+/** On unless the API says false: the API's own default, read the same way. */
+function asAgentTools(raw: Partial<AgentToolsPolicy> | null | undefined): AgentToolsPolicy {
+  return { local_agent_tools: raw?.local_agent_tools !== false };
+}
+
+export function fetchAgentTools(): Promise<AgentToolsPolicy> {
+  return apiFetch<Partial<AgentToolsPolicy>>("/api/org/agent-tools").then(asAgentTools);
+}
+
+export function setAgentTools(enabled: boolean): Promise<AgentToolsPolicy> {
+  return apiFetch<Partial<AgentToolsPolicy>>("/api/org/agent-tools", {
+    method: "PUT",
+    json: { local_agent_tools: enabled },
+  }).then(asAgentTools);
+}
+
+/** What the switch means for members, in the words the pane shows. */
+export function agentToolsStatusLine(enabled: boolean): string {
+  return enabled
+    ? t`Members can use agent mode in the terminal app and the VS Code extension, where the model reads and edits files and runs commands on the member's own computer.`
+    : t`Agent mode is off. The terminal app and the VS Code extension keep to chat for everyone in this organisation.`;
 }
 
 // --- the audit log -------------------------------------------------------------
@@ -180,6 +216,22 @@ export interface MemberUsage {
   last_active: string | null;
 }
 
+/**
+ * The connector share of the same rows, per connection: a workspace's
+ * mentions answered and charged to their routes' paying members. Named
+ * from the connection while it exists; a deleted one's spend keeps its id.
+ */
+export interface ConnectionUsage {
+  connection_id: string;
+  connector: string | null;
+  display_name: string | null;
+  weighted_tokens: number;
+  tokens: number;
+  cost_micros: number;
+  turns: number;
+  last_active: string | null;
+}
+
 export interface MemberUsageReport {
   /** `YYYY-MM`. */
   period: string;
@@ -189,6 +241,8 @@ export interface MemberUsageReport {
   /** `org` for an owner or admin (everyone's rows); `self` for a member (their own). */
   scope: "org" | "self";
   data: MemberUsage[];
+  /** Scoped as `data` is: every connection for an admin, the ones a member paid for otherwise. */
+  by_connection: ConnectionUsage[];
   totals: { weighted_tokens: number; tokens: number; cost_micros: number; turns: number };
 }
 
@@ -201,6 +255,7 @@ function asMemberReport(raw: Partial<MemberUsageReport> | null | undefined): Mem
     unit: "tokens",
     scope: raw?.scope === "self" ? "self" : "org",
     data,
+    by_connection: Array.isArray(raw?.by_connection) ? raw.by_connection : [],
     totals: raw?.totals ?? {
       weighted_tokens: data.reduce((sum, r) => sum + r.weighted_tokens, 0),
       tokens: data.reduce((sum, r) => sum + r.tokens, 0),

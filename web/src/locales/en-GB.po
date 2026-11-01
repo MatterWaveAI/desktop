@@ -276,6 +276,10 @@ msgstr "{includedTokens} a month, counted by each model's weight"
 msgid "{inputPrice} / {outputPrice} per 1M · counts {multiplier}"
 msgstr "{inputPrice} / {outputPrice} per 1M · counts {multiplier}"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "{instructionsLength} of {instructionsMax} characters"
+msgstr "{instructionsLength} of {instructionsMax} characters"
+
 #: src/apps/admin/OrgBilling.tsx
 msgid "{invoiceNumber} sent again."
 msgstr "{invoiceNumber} sent again."
@@ -674,6 +678,11 @@ msgstr "{what} is not built yet. This pane is where it will live; until then the
 msgid "{window} context"
 msgstr "{window} context"
 
+#. placeholder {0}: workspaceId ? <> (<span className="font-mono">{workspaceId}</span>)</> : null
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "{workspaceName} is connected{0}. Nothing is answered yet: route a channel to a preset and a paying member next."
+msgstr "{workspaceName} is connected{0}. Nothing is answered yet: route a channel to a preset and a paying member next."
+
 #: src/shell/LandingPage.tsx
 msgid "/v1 speaks the OpenAI chat-completions format, so any OpenAI client works with a MatterWave key. Python and TypeScript SDKs, and your conversations as MCP tools."
 msgstr "/v1 speaks the OpenAI chat-completions format, so any OpenAI client works with a MatterWave key. Python and TypeScript SDKs, and your conversations as MCP tools."
@@ -820,6 +829,7 @@ msgstr "A member who has none is not locked out: their next password sign-in pau
 msgid "A member's data export is ready to download."
 msgstr "A member's data export is ready to download."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "A member's role changed."
 msgstr "A member's role changed."
@@ -872,6 +882,10 @@ msgstr "A passkey needs a name."
 msgid "A payment is overdue and a reminder stage was reached."
 msgstr "A payment is overdue and a reminder stage was reached."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "A preset is a named assistant: a model, its instructions and its tools. Members pick one in the composer, beside the model."
+msgstr "A preset is a named assistant: a model, its instructions and its tools. Members pick one in the composer, beside the model."
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "A recovery code lets an owner sign in with a password once while single sign-on is required, for when the provider is broken. Generating a new one retires the previous unused code."
 msgstr "A recovery code lets an owner sign in with a password once while single sign-on is required, for when the provider is broken. Generating a new one retires the previous unused code."
@@ -887,6 +901,10 @@ msgstr "A report is stored with the conversation and answered with a reference y
 #: src/apps/admin/FlagsTab.tsx
 msgid "A row decides its flag; a flag without one keeps its MW_FLAG_* default. Changes reach every API process within fifteen seconds and the SPA at its next load."
 msgstr "A row decides its flag; a flag without one keeps its MW_FLAG_* default. Changes reach every API process within fifteen seconds and the SPA at its next load."
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "A Slack app of your own is created from a manifest MatterWave writes, installed in your workspace, and its token and signing secret pasted back here. Three steps; nothing is answered until a channel is routed."
+msgstr "A Slack app of your own is created from a manifest MatterWave writes, installed in your workspace, and its token and signing secret pasted back here. Three steps; nothing is answered until a channel is routed."
 
 #: src/apps/admin/EnforcementTab.tsx
 msgid "A suspension ends when a person lifts it. Sign-in and every request are refused meanwhile."
@@ -937,6 +955,10 @@ msgstr "Acceptable Use Policy"
 msgid "accepted"
 msgstr "accepted"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Accepted"
+msgstr "Accepted"
+
 #: src/apps/admin/DeletionsTab.tsx
 #: src/apps/admin/IntegrationsTab.tsx
 #: src/apps/admin/ModerationTab.tsx
@@ -982,6 +1004,8 @@ msgstr "Actioned reports"
 #: src/apps/admin/OrgBilling.tsx
 #: src/apps/admin/OrgDetails.tsx
 #: src/apps/admin/OverdueTab.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 #: src/shell/CommandPalette.tsx
 msgid "Actions"
@@ -1006,6 +1030,7 @@ msgid "active"
 msgstr "active"
 
 #: src/apps/settings/panes/BillingPane.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
 msgid "Active"
 msgstr "Active"
 
@@ -1040,6 +1065,14 @@ msgstr "Add an account with this key, time-based, six digits:"
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Add an endpoint"
 msgstr "Add an endpoint"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Add channel"
+msgstr "Add channel"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Add channel…"
+msgstr "Add channel…"
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Add domain"
@@ -1081,6 +1114,7 @@ msgstr "Added {addedAt}"
 msgid "Added <0>{added}</0>"
 msgstr "Added <0>{added}</0>"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Adding…"
 msgstr "Adding…"
@@ -1112,6 +1146,10 @@ msgstr "Administrators invite members and set roles and spending limits. The Tea
 msgid "After {disableAfter} failed deliveries in a row nothing more is sent, and the owners and admins were emailed. Fix the receiver, enable the endpoint, then redeliver what was missed from its delivery log."
 msgstr "After {disableAfter} failed deliveries in a row nothing more is sent, and the owners and admins were emailed. Fix the receiver, enable the endpoint, then redeliver what was missed from its delivery log."
 
+#: src/lib/orgPolicy.ts
+msgid "Agent mode is off. The terminal app and the VS Code extension keep to chat for everyone in this organisation."
+msgstr "Agent mode is off. The terminal app and the VS Code extension keep to chat for everyone in this organisation."
+
 #: src/apps/admin/IntegrationsTab.tsx
 #: src/shell/conversationSidebar.tsx
 msgid "All"
@@ -1126,9 +1164,17 @@ msgstr "All deliveries"
 msgid "All events"
 msgstr "All events"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "All outcomes"
+msgstr "All outcomes"
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Allow {modelLabel}"
 msgstr "Allow {modelLabel}"
+
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "Allow local agent tools"
+msgstr "Allow local agent tools"
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Allow sharing by link"
@@ -1200,6 +1246,7 @@ msgstr "An allowance counts weighted tokens: every prompt and completion token t
 msgid "An API key was created."
 msgstr "An API key was created."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "An API key was revoked."
 msgstr "An API key was revoked."
@@ -1252,9 +1299,25 @@ msgstr "Annual plans include the same monthly allowance with no overage: request
 msgid "Annual price id"
 msgstr "Annual price id"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Answer in {channel}"
+msgstr "Answer in {channel}"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Answer in a channel"
+msgstr "Answer in a channel"
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Answer in British English. Never give legal or financial advice."
 msgstr "Answer in British English. Never give legal or financial advice."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Answer in this channel"
+msgstr "Answer in this channel"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Answered"
+msgstr "Answered"
 
 #: src/shell/Onboarding.tsx
 msgid "Answers use tokens from your organisation's monthly allowance. <0>Settings › Usage</0> shows what has been used and when it resets; the app says so itself at 80% and again at the limit."
@@ -1488,6 +1551,10 @@ msgstr "Back to sign in"
 msgid "Background it should assume in every new conversation — your work, your tools, anything you would otherwise repeat."
 msgstr "Background it should assume in every new conversation — your work, your tools, anything you would otherwise repeat."
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Bad signature"
+msgstr "Bad signature"
+
 #: src/apps/settings/panes/CustomInstructionsPane.tsx
 msgid "Be concise. Show code before prose. Do not apologise."
 msgstr "Be concise. Show code before prose. Do not apologise."
@@ -1495,6 +1562,10 @@ msgstr "Be concise. Show code before prose. Do not apologise."
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Bearer tokens for scripts and other clients. Only the prefix is shown again."
 msgstr "Bearer tokens for scripts and other clients. Only the prefix is shown again."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Between 1 and 10,000."
+msgstr "Between 1 and 10,000."
 
 #: src/apps/admin/OrgDetails.tsx
 msgid "Between 1 and 3650 days, or blank to keep."
@@ -1568,9 +1639,27 @@ msgstr "Billing, plan and budget"
 msgid "Blank uses the platform default, shown as the placeholder. No value may pass {maxDays} days overdue or {maxOutstanding} outstanding."
 msgstr "Blank uses the platform default, shown as the placeholder. No value may pass {maxDays} days overdue or {maxOutstanding} outstanding."
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Block"
+msgstr "Block"
+
 #: src/apps/admin/ModerationTab.tsx
 msgid "blocked"
 msgstr "blocked"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Blocked"
+msgstr "Blocked"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Blocked by moderation"
+msgstr "Blocked by moderation"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Bot token"
+msgstr "Bot token"
 
 #: src/apps/settings/panes/DevicesPane.tsx
 msgid "Box name"
@@ -1603,6 +1692,10 @@ msgstr "Browser"
 #: src/apps/settings/panes.ts
 msgid "Budget"
 msgstr "Budget"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Budget refused"
+msgstr "Budget refused"
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Budget warnings"
@@ -1642,6 +1735,10 @@ msgid "By card, through Checkout and the customer portal."
 msgstr "By card, through Checkout and the customer portal."
 
 #: src/apps/settings/panes/UsagePane.tsx
+msgid "By connection"
+msgstr "By connection"
+
+#: src/apps/settings/panes/UsagePane.tsx
 msgid "By day"
 msgstr "By day"
 
@@ -1664,8 +1761,13 @@ msgstr "Can't scan it? Enter the key by hand"
 #: src/apps/admin/SupportConfirm.tsx
 #: src/apps/settings/panes/AccountPane.tsx
 #: src/apps/settings/panes/ApiKeysPane.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/DevicesPane.tsx
 #: src/apps/settings/panes/OrganisationPane.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 #: src/patterns/DestructiveConfirm.tsx
 #: src/shell/conversationSidebar.tsx
@@ -1757,6 +1859,24 @@ msgstr "Changing the overage cap"
 msgid "Changing…"
 msgstr "Changing…"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Channel"
+msgstr "Channel"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Channel id"
+msgstr "Channel id"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Channel not routed"
+msgstr "Channel not routed"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Channels answered for {displayName}"
+msgstr "Channels answered for {displayName}"
+
 #: src/apps/admin/DisputesTab.tsx
 msgid "Chargeback"
 msgstr "Chargeback"
@@ -1811,11 +1931,16 @@ msgstr "Checked after the organisation's budget. Members at their cap are refuse
 msgid "Checking billing…"
 msgstr "Checking billing…"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Checking with Slack…"
+msgstr "Checking with Slack…"
+
 #: src/shell/JoinPage.tsx
 msgid "Checking your invitation…"
 msgstr "Checking your invitation…"
 
 #: src/apps/settings/panes/AccountPane.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/OrganisationPane.tsx
 #: src/shell/DevicePage.tsx
 #: src/shell/MfaPage.tsx
@@ -1838,9 +1963,22 @@ msgstr "Checkout went through, but the plan has not shown up here yet. It will w
 msgid "Checks every subscribed organisation against the model gateway and repairs any mismatch. Runs hourly on its own; this runs it now."
 msgstr "Checks every subscribed organisation against the model gateway and repairs any mismatch. Runs hourly on its own; this runs it now."
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Choose a member"
+msgstr "Choose a member"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Choose a model"
+msgstr "Choose a model"
+
 #: src/shell/ResetPage.tsx
 msgid "Choose a new password"
 msgstr "Choose a new password"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Choose a preset"
+msgstr "Choose a preset"
 
 #: src/apps/admin/FlagsTab.tsx
 msgid "Choose an organisation"
@@ -1870,6 +2008,7 @@ msgstr "Client ID"
 msgid "Client secret"
 msgstr "Client secret"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/components/ui/dialog.tsx
 #: src/shell/ShortcutsHelp.tsx
 msgid "Close"
@@ -1983,6 +2122,22 @@ msgstr "Confirm new password"
 msgid "Confirm password"
 msgstr "Confirm password"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Connect"
+msgstr "Connect"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connect a Slack workspace to have @MatterWave answered in its channels by a preset of your choosing."
+msgstr "Connect a Slack workspace to have @MatterWave answered in its channels by a preset of your choosing."
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Connect Slack"
+msgstr "Connect Slack"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connect Slack…"
+msgstr "Connect Slack…"
+
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Connect to MCP clients"
 msgstr "Connect to MCP clients"
@@ -1991,9 +2146,34 @@ msgstr "Connect to MCP clients"
 msgid "Connected as {user}."
 msgstr "Connected as {user}."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connected by {installedBy}, {installedAt}"
+msgstr "Connected by {installedBy}, {installedAt}"
+
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Connected."
 msgstr "Connected."
+
+#: src/apps/settings/panes/UsagePane.tsx
+msgid "Connection"
+msgstr "Connection"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Connection disabled"
+msgstr "Connection disabled"
+
+#: src/apps/settings/panes.ts
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connections"
+msgstr "Connections"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connections are for admins"
+msgstr "Connections are for admins"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connectors are not switched on here, so there is no workspace to connect. Whoever runs this deployment can turn them on."
+msgstr "Connectors are not switched on here, so there is no workspace to connect. Whoever runs this deployment can turn them on."
 
 #: src/shell/frontDoorLinks.ts
 msgid "Contact"
@@ -2012,6 +2192,7 @@ msgstr "Contact support"
 msgid "Content moderation"
 msgstr "Content moderation"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
 #: src/shell/DevicePage.tsx
 #: src/shell/LoginPage.tsx
 msgid "Continue"
@@ -2024,6 +2205,10 @@ msgstr "Continue as {accountName}"
 #: src/apps/share/SharePage.tsx
 msgid "Continue in MatterWave"
 msgstr "Continue in MatterWave"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Continue to routing"
+msgstr "Continue to routing"
 
 #: src/shell/MfaPage.tsx
 msgid "Continue to sign in"
@@ -2046,6 +2231,7 @@ msgid "Contract outcome"
 msgstr "Contract outcome"
 
 #: src/apps/admin/ModerationTab.tsx
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
 msgid "Conversation"
 msgstr "Conversation"
 
@@ -2114,6 +2300,10 @@ msgstr "Copy identity org id"
 msgid "Copy link"
 msgstr "Copy link"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Copy manifest"
+msgstr "Copy manifest"
+
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Copy secret"
 msgstr "Copy secret"
@@ -2150,9 +2340,17 @@ msgstr "Copy the recovery code"
 msgid "Copy the secret now. It will not be shown again."
 msgstr "Copy the secret now. It will not be shown again."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Copy URL"
+msgstr "Copy URL"
+
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Copy your new key now. It will not be shown again."
 msgstr "Copy your new key now. It will not be shown again."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not add the channel."
+msgstr "Could not add the channel."
 
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Could not add the endpoint."
@@ -2165,6 +2363,14 @@ msgstr "Could not add the passkey."
 #: src/apps/settings/panes/DataPane.tsx
 msgid "Could not build the export."
 msgstr "Could not build the export."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Could not change the identity."
+msgstr "Could not change the identity."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not change the rate limit."
+msgstr "Could not change the rate limit."
 
 #: src/shell/conversationSidebar.tsx
 msgid "Could not change the tags."
@@ -2186,6 +2392,10 @@ msgstr "Could not create the folder."
 msgid "Could not create the key."
 msgstr "Could not create the key."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not create the preset."
+msgstr "Could not create the preset."
+
 #: src/apps/settings/panes/DataPane.tsx
 msgid "Could not delete the account."
 msgstr "Could not delete the account."
@@ -2198,9 +2408,29 @@ msgstr "Could not delete the endpoint."
 msgid "Could not delete the folder."
 msgstr "Could not delete the folder."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not delete the preset."
+msgstr "Could not delete the preset."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not disable the channel."
+msgstr "Could not disable the channel."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not disable the connection."
+msgstr "Could not disable the connection."
+
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Could not disable the endpoint."
 msgstr "Could not disable the endpoint."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not enable the channel."
+msgstr "Could not enable the channel."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not enable the connection."
+msgstr "Could not enable the connection."
 
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Could not enable the endpoint."
@@ -2273,6 +2503,10 @@ msgstr "Could not load keys"
 msgid "Could not load members"
 msgstr "Could not load members"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Could not load more of the trigger log."
+msgstr "Could not load more of the trigger log."
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Could not load organisation settings"
 msgstr "Could not load organisation settings"
@@ -2323,6 +2557,14 @@ msgstr "Could not load the budget"
 msgid "Could not load the budget."
 msgstr "Could not load the budget."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not load the connections"
+msgstr "Could not load the connections"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not load the connections."
+msgstr "Could not load the connections."
+
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Could not load the deliveries."
 msgstr "Could not load the deliveries."
@@ -2330,6 +2572,10 @@ msgstr "Could not load the deliveries."
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Could not load the endpoints"
 msgstr "Could not load the endpoints"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Could not load the identities."
+msgstr "Could not load the identities."
 
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Could not load the keys"
@@ -2359,13 +2605,29 @@ msgstr "Could not load the paired boxes."
 msgid "Could not load the plan."
 msgstr "Could not load the plan."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not load the presets"
+msgstr "Could not load the presets"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not load the presets."
+msgstr "Could not load the presets."
+
 #: src/apps/admin/RetentionTab.tsx
 msgid "Could not load the retention preview"
 msgstr "Could not load the retention preview"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not load the routing."
+msgstr "Could not load the routing."
+
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Could not load the Salesforce integration"
 msgstr "Could not load the Salesforce integration"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Could not load the trigger log."
+msgstr "Could not load the trigger log."
 
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Could not load the webhook endpoints."
@@ -2455,6 +2717,14 @@ msgstr "Could not redeliver the event."
 msgid "Could not remove the authenticator."
 msgstr "Could not remove the authenticator."
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not remove the channel."
+msgstr "Could not remove the channel."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not remove the connection."
+msgstr "Could not remove the connection."
+
 #: src/apps/settings/panes/AccountPane.tsx
 msgid "Could not remove the passkey."
 msgstr "Could not remove the passkey."
@@ -2470,6 +2740,10 @@ msgstr "Could not rename the folder."
 #: src/apps/settings/panes/AccountPane.tsx
 msgid "Could not rename the passkey."
 msgstr "Could not rename the passkey."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not replace the credentials."
+msgstr "Could not replace the credentials."
 
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Could not revoke the key."
@@ -2487,6 +2761,10 @@ msgstr "Could not rotate the key."
 msgid "Could not rotate the secret."
 msgstr "Could not rotate the secret."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not rotate the URL."
+msgstr "Could not rotate the URL."
+
 #: src/shell/conversationSidebar.tsx
 msgid "Could not save that."
 msgstr "Could not save that."
@@ -2494,6 +2772,10 @@ msgstr "Could not save that."
 #: src/apps/settings/panes/BudgetPane.tsx
 msgid "Could not save the cap."
 msgstr "Could not save the cap."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not save the channel."
+msgstr "Could not save the channel."
 
 #: src/apps/settings/panes/BudgetPane.tsx
 msgid "Could not save the default cap."
@@ -2511,9 +2793,17 @@ msgstr "Could not save the key."
 msgid "Could not save the name."
 msgstr "Could not save the name."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Could not save the notifications."
+msgstr "Could not save the notifications."
+
 #: src/apps/settings/panes/BudgetPane.tsx
 msgid "Could not save the overage cap."
 msgstr "Could not save the overage cap."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not save the preset."
+msgstr "Could not save the preset."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Could not save your preferences."
@@ -2543,6 +2833,10 @@ msgstr "Could not sign that session out."
 msgid "Could not sign the other sessions out."
 msgstr "Could not sign the other sessions out."
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Could not start the connection."
+msgstr "Could not start the connection."
+
 #: src/shell/UserMenu.tsx
 msgid "Could not switch accounts. That account may have been signed out."
 msgstr "Could not switch accounts. That account may have been signed out."
@@ -2558,6 +2852,10 @@ msgstr "Could not unpair this box."
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Create a key"
 msgstr "Create a key"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Create a preset first; it is what answers here."
+msgstr "Create a preset first; it is what answers here."
 
 #: src/apps/billing/PricingPage.tsx
 #: src/shell/FrontDoorChrome.tsx
@@ -2590,14 +2888,30 @@ msgstr "Create link"
 msgid "Create one to call the API from a script or another client."
 msgstr "Create one to call the API from a script or another client."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Create one to give members a ready-made assistant: a model, instructions and the tools it may use."
+msgstr "Create one to give members a ready-made assistant: a model, instructions and the tools it may use."
+
 #: src/apps/settings/panes/AccountPane.tsx
 msgid "Create passkey"
 msgstr "Create passkey"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Create preset"
+msgstr "Create preset"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Create the app in Slack"
+msgstr "Create the app in Slack"
 
 #: src/shell/LandingPage.tsx
 #: src/shell/SignupPage.tsx
 msgid "Create your account"
 msgstr "Create your account"
+
+#: src/apps/settings/panes/ApiKeysPane.tsx
+msgid "Create, change and delete the org's presets. Works only while you are an owner or admin. Off by default."
+msgstr "Create, change and delete the org's presets. Works only while you are an owner or admin. Off by default."
 
 #: src/apps/admin/AdminPage.tsx
 #: src/apps/admin/OrgDetails.tsx
@@ -2613,8 +2927,13 @@ msgid "Creating account…"
 msgstr "Creating account…"
 
 #: src/apps/settings/panes/ApiKeysPane.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 msgid "Creating…"
 msgstr "Creating…"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Credentials (JSON)"
+msgstr "Credentials (JSON)"
 
 #: src/apps/admin/AnnouncementsTab.tsx
 msgid "critical"
@@ -2719,6 +3038,10 @@ msgstr "Default model: {modelLabel}"
 msgid "Default spend cap per member in US dollars"
 msgstr "Default spend cap per member in US dollars"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Default tools"
+msgstr "Default tools"
+
 #: src/apps/admin/FlagsTab.tsx
 msgid "Define flag"
 msgstr "Define flag"
@@ -2736,6 +3059,10 @@ msgstr "Delete"
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Delete {endpointUrl}?"
 msgstr "Delete {endpointUrl}?"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Delete {presetName}?"
+msgstr "Delete {presetName}?"
 
 #: src/shell/conversationSidebar.tsx
 msgid "Delete {title}"
@@ -2757,6 +3084,10 @@ msgstr "Delete endpoint"
 msgid "Delete folder (keeps its conversations)"
 msgstr "Delete folder (keeps its conversations)"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Delete preset"
+msgstr "Delete preset"
+
 #: src/apps/admin/AnnouncementsTab.tsx
 msgid "Delete this announcement?"
 msgstr "Delete this announcement?"
@@ -2777,6 +3108,7 @@ msgstr "Delete your account"
 msgid "Delete your account?"
 msgstr "Delete your account?"
 
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 #: src/shell/conversationSidebar.tsx
 msgid "Delete…"
@@ -2826,6 +3158,7 @@ msgstr "Dependencies"
 msgid "Description"
 msgstr "Description"
 
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Description <0>(optional)</0>"
 msgstr "Description <0>(optional)</0>"
@@ -2875,10 +3208,13 @@ msgstr "Devices"
 msgid "Devices are for admins"
 msgstr "Devices are for admins"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Disable"
 msgstr "Disable"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Disabled"
 msgstr "Disabled"
@@ -2958,6 +3294,7 @@ msgstr "Domains and single sign-on are set up by an administrator of your organi
 
 #: src/apps/settings/panes/AccountPane.tsx
 #: src/apps/settings/panes/ApiKeysPane.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/DevicesPane.tsx
 #: src/apps/settings/panes/OrganisationPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
@@ -2998,9 +3335,21 @@ msgstr "Draft"
 msgid "Due"
 msgstr "Due"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Duplicate"
+msgstr "Duplicate"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "e.g. #support"
+msgstr "e.g. #support"
+
 #: src/apps/settings/panes/DevicesPane.tsx
 msgid "e.g. ABCD-EFGH-JKMN"
 msgstr "e.g. ABCD-EFGH-JKMN"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "e.g. Acme Slack"
+msgstr "e.g. Acme Slack"
 
 #: src/apps/settings/panes/DevicesPane.tsx
 msgid "e.g. https://app.matterwave.ai"
@@ -3018,6 +3367,10 @@ msgstr "e.g. laptop script"
 msgid "e.g. Ops channel"
 msgstr "e.g. Ops channel"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "e.g. Support desk"
+msgstr "e.g. Support desk"
+
 #: src/apps/admin/DeletionsTab.tsx
 msgid "Each account deletion is recorded here with its outcome."
 msgstr "Each account deletion is recorded here with its outcome."
@@ -3025,6 +3378,10 @@ msgstr "Each account deletion is recorded here with its outcome."
 #: src/shell/MfaPage.tsx
 msgid "Each code works once."
 msgstr "Each code works once."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Each connection is one workspace whose mentions are answered by the presets its routing names."
+msgstr "Each connection is one workspace whose mentions are answered by the presets its routing names."
 
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Each endpoint gets a signed POST for every event it subscribes to."
@@ -3066,15 +3423,25 @@ msgstr "Edit announcement"
 msgid "Edit key"
 msgstr "Edit key"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Edit the channel"
+msgstr "Edit the channel"
+
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Edit the endpoint"
 msgstr "Edit the endpoint"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Edit the preset"
+msgstr "Edit the preset"
 
 #: src/shell/shortcuts.ts
 msgid "Edit your last message"
 msgstr "Edit your last message"
 
 #: src/apps/settings/panes/ApiKeysPane.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Edit…"
 msgstr "Edit…"
@@ -3085,6 +3452,7 @@ msgstr "Either nothing has tripped the screen, or screening is off; the Health t
 
 #: src/apps/admin/OrgDetails.tsx
 #: src/apps/settings/panes/AccountPane.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
 #: src/apps/settings/panes/MembersPane.tsx
 #: src/apps/settings/panes/PreferencesPane.tsx
 #: src/shell/ForgotPage.tsx
@@ -3119,10 +3487,12 @@ msgstr "Empty: now."
 msgid "Empty: until someone ends it."
 msgstr "Empty: until someone ends it."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Enable"
 msgstr "Enable"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Enabled"
 msgstr "Enabled"
@@ -3353,6 +3723,10 @@ msgstr "environment default: off"
 msgid "environment default: on"
 msgstr "environment default: on"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Error"
+msgstr "Error"
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Event"
@@ -3370,6 +3744,7 @@ msgstr "Event endpoint"
 msgid "Event id <0>{eventId}</0>, sent as MatterWave-Event-Id and webhook-id."
 msgstr "Event id <0>{eventId}</0>, sent as MatterWave-Event-Id and webhook-id."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Events"
 msgstr "Events"
@@ -3453,6 +3828,14 @@ msgstr "Every request using this key fails from now on. The key stays listed as 
 #: src/apps/admin/PlansTab.tsx
 msgid "Every save takes effect in every API process within the catalog's refresh window and is recorded in the audit trail with what changed. A blank count is unlimited."
 msgstr "Every save takes effect in every API process within the catalog's refresh window and is recorded in the audit trail with what changed. A blank count is unlimited."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Everyone"
+msgstr "Everyone"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Everyone who asked is mapped, a guest or blocked."
+msgstr "Everyone who asked is mapped, a guest or blocked."
 
 #: src/apps/settings/panes/MembersPane.tsx
 msgid "Everything, including billing and handing over ownership."
@@ -3543,6 +3926,11 @@ msgstr "Exporting a conversation"
 msgid "Extend grace for {orgName}"
 msgstr "Extend grace for {orgName}"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "External user"
+msgstr "External user"
+
 #: src/apps/admin/IntegrationsTab.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "failed"
@@ -3617,6 +4005,10 @@ msgstr "Final warning on day"
 #: src/shell/Onboarding.tsx
 msgid "Finish"
 msgstr "Finish"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Finish later"
+msgstr "Finish later"
 
 #: src/shell/LoginPage.tsx
 msgid "Finish signing in in the browser window that opened, then come back here."
@@ -3769,6 +4161,15 @@ msgstr "Good"
 msgid "Got it"
 msgstr "Got it"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Guest"
+msgstr "Guest"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Guests cannot be linked"
+msgstr "Guests cannot be linked"
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "handle {handle}"
 msgstr "handle {handle}"
@@ -3853,6 +4254,10 @@ msgstr "How it was paid"
 msgid "How it was paid (wire reference, cheque number)"
 msgstr "How it was paid (wire reference, cheque number)"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "How many mentions this connection answers per minute across all its channels. Past it, a mention is refused with a note to the person and logged as rate limited."
+msgstr "How many mentions this connection answers per minute across all its channels. Past it, a mention is refused with a note to the person and logged as rate limited."
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "How members sign in"
 msgstr "How members sign in"
@@ -3868,6 +4273,10 @@ msgstr "How the allowance works"
 #: src/shell/DevicePage.tsx
 msgid "How the device's key is listed in Settings, under API keys."
 msgstr "How the device's key is listed in Settings, under API keys."
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "How this connection is listed here."
+msgstr "How this connection is listed here."
 
 #: src/apps/admin/AnnouncementsTab.tsx
 msgid "https://status.example.com or /help"
@@ -3888,6 +4297,10 @@ msgstr "I have read and accept the <0>Terms of Service</0> and <1>Privacy Policy
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "I have stored this code somewhere safe."
 msgstr "I have stored this code somewhere safe."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Identities"
+msgstr "Identities"
 
 #: src/apps/admin/DeletionsTab.tsx
 #: src/apps/settings/panes/AccountPane.tsx
@@ -3950,6 +4363,10 @@ msgstr "In force now"
 #: src/apps/admin/OrgBilling.tsx
 msgid "In good standing: nothing is overdue."
 msgstr "In good standing: nothing is overdue."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "In Slack, open the channel's details; the id is at the bottom."
+msgstr "In Slack, open the channel's details; the id is at the bottom."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "In the app"
@@ -4046,6 +4463,7 @@ msgid "Instance"
 msgstr "Instance"
 
 #: src/apps/settings/panes/OrganisationPane.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 msgid "Instructions"
 msgstr "Instructions"
 
@@ -4127,6 +4545,10 @@ msgstr "It cannot be required yet, because enforcing it now would lock people ou
 msgid "It disappears from every banner and from this list. End it instead to keep the record."
 msgstr "It disappears from every banner and from this list. End it instead to keep the record."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "It is no longer offered for new conversations. Conversations already on it keep answering with it as it is now."
+msgstr "It is no longer offered for new conversations. Conversations already on it keep answering with it as it is now."
+
 #: src/apps/settings/panes/DataPane.tsx
 msgid "It leaves out what would let someone sign in as you, such as share-link tokens and session ids."
 msgstr "It leaves out what would let someone sign in as you, such as share-link tokens and session ids."
@@ -4150,6 +4572,10 @@ msgstr "Its limits change on its next request. Nothing is created or changed in 
 #: src/apps/admin/OrgPlan.tsx
 msgid "Its limits change on its next request. Nothing is created or changed in Stripe: this is for an invoiced deal or a comp. Recorded in the plan history and audit trail under your name."
 msgstr "Its limits change on its next request. Nothing is created or changed in Stripe: this is for an invoiced deal or a comp. Recorded in the plan history and audit trail under your name."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Its routing, identities and trigger log go with it, and the workspace is no longer answered. The conversations it opened stay with their paying members. Uninstall the app from the workspace as well."
+msgstr "Its routing, identities and trigger log go with it, and the workspace is no longer answered. The conversations it opened stay with their paying members. Uninstall the app from the workspace as well."
 
 #: src/shell/JoinPage.tsx
 #: src/shell/SignupPage.tsx
@@ -4223,6 +4649,10 @@ msgstr "Keyboard shortcuts and help (?)"
 msgid "Kind"
 msgstr "Kind"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Label <0>(optional)</0>"
+msgstr "Label <0>(optional)</0>"
+
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Language"
 msgstr "Language"
@@ -4239,6 +4669,10 @@ msgstr "Last error"
 #: src/lib/edgeSync.ts
 msgid "Last error: {lastError}."
 msgstr "Last error: {lastError}."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Last event {lastEvent}"
+msgstr "Last event {lastEvent}"
 
 #: src/shell/SignupPage.tsx
 msgid "Last name"
@@ -4382,6 +4816,10 @@ msgstr "Limited until paid: {restrictions}. Pay {amount} to restore full access 
 msgid "Limited until paid: {restrictions}. Pay {amount} to restore full access."
 msgstr "Limited until paid: {restrictions}. Pay {amount} to restore full access."
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Link"
+msgstr "Link"
+
 #: src/apps/admin/AnnouncementsTab.tsx
 msgid "Link (optional)"
 msgstr "Link (optional)"
@@ -4389,6 +4827,14 @@ msgstr "Link (optional)"
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Link an organisation to its Account"
 msgstr "Link an organisation to its Account"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Link to a member…"
+msgstr "Link to a member…"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Link to another member…"
+msgstr "Link to another member…"
 
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Linked organisations only"
@@ -4401,6 +4847,10 @@ msgstr "Linked to Account {linkedAccount} (it already was)."
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Linked to Account {linkedAccount}."
 msgstr "Linked to Account {linkedAccount}."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Linking…"
+msgstr "Linking…"
 
 #: src/apps/settings/panes/BillingPane.tsx
 msgid "Links"
@@ -4430,6 +4880,7 @@ msgstr "Listed"
 msgid "Listed on /pricing"
 msgstr "Listed on /pricing"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
 #: src/shell/conversationSidebar.tsx
 msgid "Load more"
 msgstr "Load more"
@@ -4480,6 +4931,7 @@ msgstr "Loading two-factor settings…"
 
 #: src/apps/admin/AdminPage.tsx
 #: src/apps/admin/OrgPlan.tsx
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
 #: src/apps/settings/panes/OrganisationPane.tsx
 #: src/apps/share/MySharesSection.tsx
 #: src/components/AppError.tsx
@@ -4487,6 +4939,10 @@ msgstr "Loading two-factor settings…"
 #: src/shell/conversationSidebar.tsx
 msgid "Loading…"
 msgstr "Loading…"
+
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "Local agent tools"
+msgstr "Local agent tools"
 
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Login"
@@ -4541,6 +4997,10 @@ msgstr "Make a pairing code"
 msgid "Malware scanner"
 msgstr "Malware scanner"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Manage"
+msgstr "Manage"
+
 #: src/apps/admin/AdminPage.tsx
 #: src/apps/admin/OverdueTab.tsx
 msgid "Manage {orgName}"
@@ -4554,6 +5014,10 @@ msgstr "Manage billing"
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Manage the org's webhook endpoints. Works only while you are an owner or admin. Off by default."
 msgstr "Manage the org's webhook endpoints. Works only while you are an owner or admin. Off by default."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Mapped"
+msgstr "Mapped"
 
 #: src/apps/admin/OrgBilling.tsx
 msgid "Mark {invoiceNumber} paid"
@@ -4626,10 +5090,19 @@ msgstr "Max uses"
 
 #: src/apps/settings/panes/AccountPane.tsx
 #: src/apps/settings/panes/BudgetPane.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
 #: src/apps/settings/panes/MembersPane.tsx
 #: src/apps/settings/panes/UsagePane.tsx
 msgid "Member"
 msgstr "Member"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Member for {who}"
+msgstr "Member for {who}"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Member suspended"
+msgstr "Member suspended"
 
 #: src/apps/admin/AdminPage.tsx
 #: src/apps/settings/panes.ts
@@ -4658,6 +5131,10 @@ msgstr "Members can share a conversation as a public, read-only link: a snapshot
 msgid "Members can share a conversation by public link. Each link is a snapshot, and whoever made it can revoke it."
 msgstr "Members can share a conversation by public link. Each link is a snapshot, and whoever made it can revoke it."
 
+#: src/lib/orgPolicy.ts
+msgid "Members can use agent mode in the terminal app and the VS Code extension, where the model reads and edits files and runs commands on the member's own computer."
+msgstr "Members can use agent mode in the terminal app and the VS Code extension, where the model reads and edits files and runs commands on the member's own computer."
+
 #: src/apps/admin/integrationsApi.ts
 msgid "Members changed"
 msgstr "Members changed"
@@ -4665,6 +5142,10 @@ msgstr "Members changed"
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Members may use only the models switched on above."
 msgstr "Members may use only the models switched on above."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Members who pick it get this model, these instructions after the organisation's, and only these tools."
+msgstr "Members who pick it get this model, these instructions after the organisation's, and only these tools."
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Members whose email is on a verified domain see Sign in with your organisation on the login page and are sent to your identity provider."
@@ -4681,6 +5162,18 @@ msgstr "Members without an authenticator app will be asked to set one up at thei
 #: src/apps/settings/panes/MembersPane.tsx
 msgid "Members, invites and keys."
 msgstr "Members, invites and keys."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Mentions in this channel are answered by the preset, and each answer is charged to the paying member and counts against their cap."
+msgstr "Mentions in this channel are answered by the preset, and each answer is charged to the paying member and counts against their cap."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Mentions per minute"
+msgstr "Mentions per minute"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Mentions there are refused from now on. The conversations already opened stay with their paying member."
+msgstr "Mentions there are refused from now on. The conversations already opened stay with their paying member."
 
 #: src/apps/admin/AnnouncementsTab.tsx
 #: src/apps/admin/IntegrationsTab.tsx
@@ -4713,6 +5206,7 @@ msgstr "Mix letters with numbers or symbols."
 
 #: src/apps/admin/AdminPage.tsx
 #: src/apps/billing/PriceTables.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/apps/settings/panes/UsagePane.tsx
 #: src/shell/LandingPage.tsx
 msgid "Model"
@@ -4726,9 +5220,17 @@ msgstr "Model gateway"
 msgid "Model gateway down"
 msgstr "Model gateway down"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Model not allowed"
+msgstr "Model not allowed"
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Model prices"
 msgstr "Model prices"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Model: {modelLabel}"
+msgstr "Model: {modelLabel}"
 
 #: src/apps/billing/planComparison.ts
 #: src/apps/billing/PriceTables.tsx
@@ -4832,6 +5334,7 @@ msgstr "MW_LITELLM_VIRTUAL_KEYS is off, so the app's own gate is the only enforc
 #: src/apps/billing/EnterpriseContact.tsx
 #: src/apps/settings/panes/ApiKeysPane.tsx
 #: src/apps/settings/panes/OrganisationPane.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 msgid "Name"
 msgstr "Name"
 
@@ -4943,6 +5446,14 @@ msgstr "New name for {title}"
 msgid "New password"
 msgstr "New password"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "New preset"
+msgstr "New preset"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "New preset…"
+msgstr "New preset…"
+
 #: src/apps/settings/panes/AccountPane.tsx
 msgid "New recovery codes"
 msgstr "New recovery codes"
@@ -5023,6 +5534,22 @@ msgstr "No cap applies to your own usage this month: only the organisation's bud
 msgid "No changes yet."
 msgstr "No changes yet."
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "No channels yet. Mentions in this workspace are refused until one is added."
+msgstr "No channels yet. Mentions in this workspace are refused until one is added."
+
+#: src/apps/settings/panes/UsagePane.tsx
+msgid "No connection was used in {month}."
+msgstr "No connection was used in {month}."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "No connections yet"
+msgstr "No connections yet"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "No connector is available on this deployment."
+msgstr "No connector is available on this deployment."
+
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "No contract events yet"
 msgstr "No contract events yet"
@@ -5067,6 +5594,14 @@ msgstr "No domains claimed yet."
 msgid "No endpoints yet"
 msgstr "No endpoints yet"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "No events with this outcome."
+msgstr "No events with this outcome."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "No events yet"
+msgstr "No events yet"
+
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "No failed deliveries."
 msgstr "No failed deliveries."
@@ -5086,6 +5621,10 @@ msgstr "No further events are sent to it, and its delivery log goes with it. Thi
 #: src/apps/admin/OrgBilling.tsx
 msgid "No further step."
 msgstr "No further step."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "No guests have asked."
+msgstr "No guests have asked."
 
 #: src/lib/orgSso.ts
 msgid "No identity provider attached"
@@ -5183,6 +5722,11 @@ msgstr "No organisations yet"
 msgid "No pending deliveries."
 msgstr "No pending deliveries."
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "No presets yet"
+msgstr "No presets yet"
+
 #: src/apps/admin/BillingTab.tsx
 msgid "no price"
 msgstr "no price"
@@ -5231,6 +5775,10 @@ msgstr "No support address is set up for this deployment. Copy the details and s
 msgid "No tags yet."
 msgstr "No tags yet."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "No tools"
+msgstr "No tools"
+
 #: src/apps/admin/AdminPage.tsx
 msgid "No users match \"{submitted}\""
 msgstr "No users match \"{submitted}\""
@@ -5246,6 +5794,18 @@ msgstr "No verified domain yet"
 #: src/apps/settings/panes/MembersPane.tsx
 msgid "Nobody else can join with it, including anyone it was sent to who has not used it yet. {revokingSummary}."
 msgstr "Nobody else can join with it, including anyone it was sent to who has not used it yet. {revokingSummary}."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Nobody has mentioned this connection yet."
+msgstr "Nobody has mentioned this connection yet."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Nobody is blocked."
+msgstr "Nobody is blocked."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Nobody is mapped to a member yet."
+msgstr "Nobody is mapped to a member yet."
 
 #: src/apps/admin/OverdueTab.tsx
 msgid "Nobody is overdue"
@@ -5266,6 +5826,10 @@ msgstr "None"
 msgid "Not {email}? <0>Sign in as someone else</0>"
 msgstr "Not {email}? <0>Sign in as someone else</0>"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Not a member"
+msgstr "Not a member"
+
 #: src/apps/admin/enforcementApi.ts
 msgid "Not a violation. Closes the report; touches no account."
 msgstr "Not a violation. Closes the report; touches no account."
@@ -5274,6 +5838,8 @@ msgstr "Not a violation. Closes the report; touches no account."
 msgid "Not an IP address or CIDR range: {badCidr}"
 msgstr "Not an IP address or CIDR range: {badCidr}"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Not available on this deployment"
 msgstr "Not available on this deployment"
@@ -5315,6 +5881,10 @@ msgstr "Not sold through Checkout."
 msgid "Not verified"
 msgstr "Not verified"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Not working"
+msgstr "Not working"
+
 #: src/apps/admin/ModerationTab.tsx
 msgid "Note for report {reportId}"
 msgstr "Note for report {reportId}"
@@ -5355,6 +5925,10 @@ msgstr "Nothing has been delivered to the webhook on this deployment."
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Nothing has been delivered to this endpoint yet."
 msgstr "Nothing has been delivered to this endpoint yet."
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Nothing has been received on this connection yet."
+msgstr "Nothing has been received on this connection yet."
 
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Nothing here"
@@ -5405,6 +5979,7 @@ msgstr "Nothing used in {month}."
 msgid "Nothing used yet this period."
 msgstr "Nothing used yet this period."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/PreferencesPane.tsx
 #: src/shell/NotificationsMenu.tsx
 msgid "Notifications"
@@ -5535,6 +6110,10 @@ msgstr "Once you are verified, you can ask things like"
 msgid "One account or organisation"
 msgstr "One account or organisation"
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "One line per event, posted to a channel of the workspace. Only these administrative events can be sent; nothing about conversations ever is."
+msgstr "One line per event, posted to a channel of the workspace. Only these administrative events can be sent; nothing about conversations ever is."
+
 #: src/apps/settings/panes/MembersPane.tsx
 msgid "One link for a whole team, until its uses run out or it expires."
 msgstr "One link for a whole team, until its uses run out or it expires."
@@ -5582,6 +6161,14 @@ msgstr "Only an owner hands over ownership."
 #: src/shell/DevicePage.tsx
 msgid "Only approve if this matches the code on your device and you started the sign-in."
 msgstr "Only approve if this matches the code on your device and you started the sign-in."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Only channels listed here are answered. Spend is charged to the paying member and counts against their cap."
+msgstr "Only channels listed here are answered. Spend is charged to the paying member and counts against their cap."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Only channels listed in a connection's routing are answered, and only people mapped to a member of this organisation are. Each answer is charged to the route's paying member and counts against their cap."
+msgstr "Only channels listed in a connection's routing are answered, and only people mapped to a member of this organisation are. Each answer is charged to the route's paying member and counts against their cap."
 
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Only from <0>{allowedCidrs}</0>"
@@ -5770,6 +6357,7 @@ msgid "Outbox filter"
 msgstr "Outbox filter"
 
 #: src/apps/admin/BillingTab.tsx
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
 msgid "Outcome"
 msgstr "Outcome"
 
@@ -6061,6 +6649,11 @@ msgstr "Pay"
 msgid "Pay the invoice"
 msgstr "Pay the invoice"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Paying member"
+msgstr "Paying member"
+
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Payloads carry ids, roles, counts and plan codes, never conversation content. A failed delivery is retried after about 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours. After five consecutive failures an endpoint is disabled and the owners and admins are told."
 msgstr "Payloads carry ids, roles, counts and plan codes, never conversation content. A failed delivery is retried after about 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours. After five consecutive failures an endpoint is disabled and the owners and admins are told."
@@ -6102,6 +6695,10 @@ msgstr "People can dismiss it on their device"
 #: src/apps/settings/panes.ts
 msgid "People in your organisation and what they can do."
 msgstr "People in your organisation and what they can do."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "People who asked through {displayName}"
+msgstr "People who asked through {displayName}"
 
 #: src/apps/settings/panes/BudgetPane.tsx
 msgid "Period"
@@ -6260,6 +6857,28 @@ msgstr "Preparing your export. This can take a minute."
 msgid "Preparing…"
 msgstr "Preparing…"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Preset"
+msgstr "Preset"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Preset deleted"
+msgstr "Preset deleted"
+
+#: src/apps/settings/panes.ts
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Presets"
+msgstr "Presets"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Presets are set up by an owner or admin. Pick one in the composer to answer with its model, instructions and tools."
+msgstr "Presets are set up by an owner or admin. Pick one in the composer to answer with its model, instructions and tools."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Presets need a database this deployment does not have, so there are none to set up here."
+msgstr "Presets need a database this deployment does not have, so there are none to set up here."
+
 #: src/apps/admin/DisputesTab.tsx
 msgid "Prevented"
 msgstr "Prevented"
@@ -6333,6 +6952,10 @@ msgstr "Public, read-only snapshots of a conversation, open to anyone with the l
 msgid "Put {orgName} on {chosenName}?"
 msgstr "Put {orgName} on {chosenName}?"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Put this in the app's Request URL in the workspace. Until then, nothing it sends is accepted."
+msgstr "Put this in the app's Request URL in the workspace. Until then, nothing it sends is accepted."
+
 #: src/shell/MfaPage.tsx
 msgid "QR code for your authenticator app"
 msgstr "QR code for your authenticator app"
@@ -6354,10 +6977,16 @@ msgid "Raise the cap"
 msgstr "Raise the cap"
 
 #: src/apps/admin/enforcementApi.ts
+#: src/apps/settings/panes/ConnectionsPane.tsx
 msgid "Rate limit"
 msgstr "Rate limit"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rate limit…"
+msgstr "Rate limit…"
+
 #: src/apps/admin/enforcementApi.ts
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
 #: src/shell/policy.ts
 msgid "Rate limited"
 msgstr "Rate limited"
@@ -6393,6 +7022,10 @@ msgstr "Readiness"
 #: src/apps/settings/panes/MembersPane.tsx
 msgid "Reads shared work."
 msgstr "Reads shared work."
+
+#: src/apps/settings/panes.ts
+msgid "Ready-made assistants: a model, instructions and tools, picked in the composer."
+msgstr "Ready-made assistants: a model, instructions and tools, picked in the composer."
 
 #: src/apps/admin/AdminPage.tsx
 #: src/apps/admin/DisputesTab.tsx
@@ -6496,6 +7129,8 @@ msgstr "Redeliver"
 msgid "Redelivering…"
 msgstr "Redelivering…"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Refresh"
 msgstr "Refresh"
@@ -6537,6 +7172,10 @@ msgstr "Remaining"
 msgid "Remove"
 msgstr "Remove"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Remove {displayName}?"
+msgstr "Remove {displayName}?"
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Remove {domain}"
 msgstr "Remove {domain}"
@@ -6565,6 +7204,14 @@ msgstr "Remove {rowName}"
 msgid "Remove authenticator"
 msgstr "Remove authenticator"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Remove channel"
+msgstr "Remove channel"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Remove connection"
+msgstr "Remove connection"
+
 #: src/apps/settings/panes/MembersPane.tsx
 msgid "Remove member"
 msgstr "Remove member"
@@ -6581,9 +7228,18 @@ msgstr "Remove the authenticator"
 msgid "Remove this member?"
 msgstr "Remove this member?"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Remove…"
+msgstr "Remove…"
+
 #: src/apps/admin/DeletionsTab.tsx
 msgid "removed"
 msgstr "removed"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Removed from the workspace"
+msgstr "Removed from the workspace"
 
 #: src/apps/settings/panes/AccountPane.tsx
 #: src/shell/conversationSidebar.tsx
@@ -6606,9 +7262,21 @@ msgstr "Rename…"
 msgid "renews {periodEnd}"
 msgstr "renews {periodEnd}"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Replace credentials"
+msgstr "Replace credentials"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Replace credentials…"
+msgstr "Replace credentials…"
+
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Replace it with the value above, or add the value as a second record."
 msgstr "Replace it with the value above, or add the value as a second record."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Replace the credentials"
+msgstr "Replace the credentials"
 
 #: src/apps/admin/ModerationTab.tsx
 msgid "Report {reportId}"
@@ -6930,6 +7598,18 @@ msgstr "Rotate secret…"
 msgid "Rotate the signing secret?"
 msgstr "Rotate the signing secret?"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rotate the URL of {displayName}?"
+msgstr "Rotate the URL of {displayName}?"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rotate URL"
+msgstr "Rotate URL"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rotate URL…"
+msgstr "Rotate URL…"
+
 #: src/apps/settings/panes/ApiKeysPane.tsx
 msgid "Rotate…"
 msgstr "Rotate…"
@@ -6942,6 +7622,10 @@ msgstr "Rotated {rotatedOn} · the old key <0>{previousPrefix}…</0> works unti
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Rotating…"
 msgstr "Rotating…"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Routing"
+msgstr "Routing"
 
 #: src/apps/admin/FlagsTab.tsx
 msgid "row"
@@ -6984,6 +7668,8 @@ msgid "Save cap"
 msgstr "Save cap"
 
 #: src/apps/settings/panes/ApiKeysPane.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Save changes"
 msgstr "Save changes"
@@ -6997,6 +7683,10 @@ msgstr "Save default"
 msgid "Save instructions"
 msgstr "Save instructions"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Save limit"
+msgstr "Save limit"
+
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Save link"
 msgstr "Save link"
@@ -7005,6 +7695,10 @@ msgstr "Save link"
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Save name"
 msgstr "Save name"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Save notifications"
+msgstr "Save notifications"
 
 #: src/apps/admin/OrgDetails.tsx
 msgid "Save overage cap for {orgName}"
@@ -7035,6 +7729,7 @@ msgid "Saved to your account."
 msgstr "Saved to your account."
 
 #: src/apps/settings/panes/BudgetPane.tsx
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/organisation/formParts.tsx
 msgid "Saved."
 msgstr "Saved."
@@ -7051,9 +7746,13 @@ msgstr "Saved. New conversations will use these."
 #: src/apps/settings/panes/AccountPane.tsx
 #: src/apps/settings/panes/ApiKeysPane.tsx
 #: src/apps/settings/panes/BudgetPane.tsx
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/CustomInstructionsPane.tsx
 #: src/apps/settings/panes/OrganisationPane.tsx
 #: src/apps/settings/panes/PreferencesPane.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 #: src/shell/AcceptTermsNotice.tsx
 #: src/shell/Onboarding.tsx
@@ -7133,6 +7832,10 @@ msgstr "Seats, roles and budgets"
 #: src/shell/termsChanges.ts
 msgid "Section 5 now describes the self-serve plans: paid monthly plans continue past the allowance at list price up to an overage cap, annual plans stop at the allowance, and a cancelled subscription runs to the end of the period paid for."
 msgstr "Section 5 now describes the self-serve plans: paid monthly plans continue past the allowance at list price up to an overage cap, annual plans stop at the allowance, and a cancelled subscription runs to the end of the period paid for."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Sections of {displayName}"
+msgstr "Sections of {displayName}"
 
 #: src/shell/LandingPage.tsx
 msgid "SECURE"
@@ -7319,6 +8022,7 @@ msgstr "Shift+Enter adds a line instead."
 msgid "Shortcuts with a modifier, and the Esc ones, work while you are typing; the others wait until you are not."
 msgstr "Shortcuts with a modifier, and the Esc ones, work while you are typing; the others wait until you are not."
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 #: src/shell/AuthForm.tsx
 msgid "Show"
@@ -7347,6 +8051,10 @@ msgstr "Show or hide the sidebar"
 #: src/apps/admin/AnnouncementsTab.tsx
 msgid "Shown above the app to everyone signed in, most severe first, from its start until its end. Users see a change within two minutes."
 msgstr "Shown above the app to everyone signed in, most severe first, from its start until its end. Users see a change within two minutes."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Shown in a new conversation on this preset."
+msgstr "Shown in a new conversation on this preset."
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Shown on invitations and in the account menu."
@@ -7479,6 +8187,11 @@ msgstr "Signing in as {email}. Open your authenticator app and enter the code it
 msgid "Signing in…"
 msgstr "Signing in…"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Signing secret"
+msgstr "Signing secret"
+
 #: src/apps/admin/EnforcementTab.tsx
 msgid "Since"
 msgstr "Since"
@@ -7521,6 +8234,18 @@ msgstr "skipped"
 msgid "Skipped"
 msgstr "Skipped"
 
+#: src/apps/settings/panes/connections/connectionsApi.ts
+msgid "Slack"
+msgstr "Slack"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Slack cannot reach this deployment"
+msgstr "Slack cannot reach this deployment"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Slack could not confirm these credentials."
+msgstr "Slack could not confirm these credentials."
+
 #: src/apps/share/SharePage.tsx
 msgid "Snapshot from {sharedOn}"
 msgstr "Snapshot from {sharedOn}"
@@ -7529,6 +8254,7 @@ msgstr "Snapshot from {sharedOn}"
 msgid "Some members are not on a verified domain"
 msgstr "Some members are not on a verified domain"
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Someone accepted an invitation."
 msgstr "Someone accepted an invitation."
@@ -7541,6 +8267,7 @@ msgstr "Someone made a public link to a conversation."
 msgid "Someone started a conversation (its id, never its content)."
 msgstr "Someone started a conversation (its id, never its content)."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Someone was removed from the organisation."
 msgstr "Someone was removed from the organisation."
@@ -7590,6 +8317,7 @@ msgstr "Spend caps by member"
 msgid "Spend caps per member"
 msgstr "Spend caps per member"
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "Spend crossed 80% of the monthly budget."
 msgstr "Spend crossed 80% of the monthly budget."
@@ -7601,6 +8329,10 @@ msgstr "Spent this month"
 #: src/apps/admin/OverdueTab.tsx
 msgid "Stage"
 msgstr "Stage"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Stale signature"
+msgstr "Stale signature"
 
 #: src/shell/shortcuts.ts
 msgid "Start a new chat"
@@ -7634,6 +8366,10 @@ msgstr "Start with your email: we will send a code there to confirm it."
 msgid "Starting sign-in…"
 msgstr "Starting sign-in…"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Starting…"
+msgstr "Starting…"
+
 #: src/apps/admin/AnnouncementsTab.tsx
 msgid "Starts"
 msgstr "Starts"
@@ -7650,6 +8386,7 @@ msgstr "State"
 #: src/apps/admin/OrgBilling.tsx
 #: src/apps/admin/OrgDetails.tsx
 #: src/apps/settings/panes/BillingPane.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
 #: src/apps/settings/panes/DevicesPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 #: src/shell/frontDoorLinks.ts
@@ -7664,9 +8401,25 @@ msgstr "Status change"
 msgid "Step {stepNumber} of {total}"
 msgstr "Step {stepNumber} of {total}"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Step 1 of 3: create the app in Slack"
+msgstr "Step 1 of 3: create the app in Slack"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Step 2 of 3: paste the app's credentials"
+msgstr "Step 2 of 3: paste the app's credentials"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Step 3 of 3: connected"
+msgstr "Step 3 of 3: connected"
+
 #: src/apps/settings/panes/DataPane.tsx
 msgid "Still being prepared. We will email you a download link when it is ready."
 msgstr "Still being prepared. We will email you a download link when it is ready."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Stop answering in {channel}?"
+msgstr "Stop answering in {channel}?"
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Stop requiring"
@@ -7939,6 +8692,14 @@ msgstr "The API may be down, or this origin may not be allowed by CORS."
 msgid "The app hit an error it could not recover from."
 msgstr "The app hit an error it could not recover from."
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "The app is installed"
+msgstr "The app is installed"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "The app must be a member of the channel."
+msgstr "The app must be a member of the channel."
+
 #: src/shell/conversationSidebar.tsx
 msgid "The archive could not be loaded."
 msgstr "The archive could not be loaded."
@@ -7946,6 +8707,10 @@ msgstr "The archive could not be loaded."
 #: src/apps/admin/AdminPage.tsx
 msgid "The billing data could not be read. Retry."
 msgstr "The billing data could not be read. Retry."
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "The bot token is under OAuth & Permissions once the app is installed; the signing secret is under Basic Information. Both are checked with Slack and kept encrypted."
+msgstr "The bot token is under OAuth & Permissions once the app is installed; the signing secret is under Basic Information. Both are checked with Slack and kept encrypted."
 
 #: src/apps/settings/panes/BillingPane.tsx
 msgid "The card on file is charged when the trial ends, unless the plan is cancelled first."
@@ -7986,6 +8751,10 @@ msgstr "The conversations are in your list, each carrying a note of where it cam
 #: src/shell/PolicyPage.tsx
 msgid "The counts could not be loaded right now."
 msgstr "The counts could not be loaded right now."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "The current URL stops accepting events now. The app's Request URL in the workspace (for Slack, under Event Subscriptions) must be updated to the new one, which is shown next."
+msgstr "The current URL stops accepting events now. The app's Request URL in the workspace (for Slack, under Event Subscriptions) must be updated to the new one, which is shown next."
 
 #: src/apps/admin/AdminPage.tsx
 msgid "The deletions data could not be read. Retry."
@@ -8103,6 +8872,10 @@ msgstr "The list could not be fetched. Your conversations are safe — this is o
 msgid "the mail sent when your organisation nears its budget or plan allowance"
 msgstr "the mail sent when your organisation nears its budget or plan allowance"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "The manifest carries this connection's Request URL. Create the app from it, install the app to the workspace, then come back for step 2."
+msgstr "The manifest carries this connection's Request URL. Create the app from it, install the app to the workspace, then come back for step 2."
+
 #: src/shell/ReadyBadge.tsx
 msgid "The model gateway is down."
 msgstr "The model gateway is down."
@@ -8111,6 +8884,7 @@ msgstr "The model gateway is down."
 msgid "The moderation data could not be read. Retry."
 msgstr "The moderation data could not be read. Retry."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "The monthly budget is used up."
 msgstr "The monthly budget is used up."
@@ -8134,6 +8908,10 @@ msgstr "The most your own usage may cost this month at each model's list price; 
 #: src/apps/settings/panes/AccountPane.tsx
 msgid "The new address has to receive a code first; until then your current address keeps working."
 msgstr "The new address has to receive a code first; until then your current address keeps working."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "The new Request URL"
+msgstr "The new Request URL"
 
 #: src/apps/admin/OrgBilling.tsx
 msgid "The next invoice is charged to the card on file. If there is none, it fails into the late-payment schedule, so ask the owner to add one in Settings > Billing first."
@@ -8183,6 +8961,7 @@ msgstr "The organisation id is needed."
 msgid "the organisation is flagged as limited"
 msgstr "the organisation is flagged as limited"
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "The organisation's plan moved."
 msgstr "The organisation's plan moved."
@@ -8252,6 +9031,10 @@ msgstr "The receiver accepted the test event"
 msgid "The reported message has since been deleted or purged. The report stands; its text does not."
 msgstr "The reported message has since been deleted or purged. The report stands; its text does not."
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "The Request URL <0>{requestUrl}</0> is not on a public host, so Slack will not be able to deliver events to it. The app can be created, but nothing will be answered until this deployment is reachable from the internet."
+msgstr "The Request URL <0>{requestUrl}</0> is not on a public host, so Slack will not be able to deliver events to it. The app can be created, but nothing will be answered until this deployment is reachable from the internet."
+
 #: src/apps/admin/AdminPage.tsx
 msgid "The retention data could not be read. Retry."
 msgstr "The retention data could not be read. Retry."
@@ -8280,6 +9063,10 @@ msgstr "The spend data could not be read. Retry."
 msgid "The support page opens in a new tab: paste the details into your request."
 msgstr "The support page opens in a new tab: paste the details into your request."
 
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "The terminal app and the VS Code extension have an agent mode: the model reads and edits files and runs commands in the folder a member opens, on that member's computer. MatterWave never runs these tools itself; the files the model reads are sent to it like any other message. Switch it off and the clients keep agent mode off for everyone in this organisation, while chat in them still works."
+msgstr "The terminal app and the VS Code extension have an agent mode: the model reads and edits files and runs commands in the folder a member opens, on that member's computer. MatterWave never runs these tools itself; the files the model reads are sent to it like any other message. Switch it off and the clients keep agent mode off for everyone in this organisation, while chat in them still works."
+
 #: src/shell/AcceptTermsNotice.tsx
 msgid "The terms have <0>changed</0>"
 msgstr "The terms have <0>changed</0>"
@@ -8295,6 +9082,10 @@ msgstr "The test event was not accepted"
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "The trail covers the name, domains, provider, single sign-on, instructions, models, members, budget and plan."
 msgstr "The trail covers the name, domains, provider, single sign-on, instructions, models, members, budget and plan."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "The trigger log keeps ids and outcomes, never what anyone wrote. What was said lives in the conversation, which belongs to the paying member."
+msgstr "The trigger log keeps ids and outcomes, never what anyone wrote. What was said lives in the conversation, which belongs to the paying member."
 
 #: src/apps/admin/AdminPage.tsx
 msgid "The users data could not be read. Retry."
@@ -8349,6 +9140,10 @@ msgstr "These apply to new conversations; a single conversation can override the
 msgid "These details let support find exactly what failed. They name your account and the request, never what you wrote."
 msgstr "These details let support find exactly what failed. They name your account and the request, never what you wrote."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "They are checked with the workspace before anything changes, and kept encrypted. The old ones stop being used at once."
+msgstr "They are checked with the workspace before anything changes, and kept encrypted. The old ones stop being used at once."
+
 #: src/apps/settings/panes/MembersPane.tsx
 msgid "They become an owner and you become an admin, in one step. Only they can hand it back."
 msgstr "They become an owner and you become an admin, in one step. Only they can hand it back."
@@ -8372,6 +9167,10 @@ msgstr "This browser cannot show notifications."
 #: src/apps/share/share.ts
 msgid "This conversation could not be found."
 msgstr "This conversation could not be found."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "This deployment's default tools"
+msgstr "This deployment's default tools"
 
 #: src/apps/settings/panes/AccountPane.tsx
 msgid "This device"
@@ -8464,6 +9263,10 @@ msgstr "This month"
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "This organisation has {maxEndpoints} endpoints, the most it may have. Delete one, or subscribe an existing one to more events."
 msgstr "This organisation has {maxEndpoints} endpoints, the most it may have. Delete one, or subscribe an existing one to more events."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "This organisation has {maxPresets} presets, the most it may have. Delete one first."
+msgstr "This organisation has {maxPresets} presets, the most it may have. Delete one first."
 
 #: src/lib/billing.ts
 msgid "This organisation is limited until a late payment is made: {restrictions}. Ask an org admin to pay."
@@ -8614,6 +9417,10 @@ msgstr "Too many attempts. Try again in a few minutes."
 msgid "Too many shared pages opened"
 msgstr "Too many shared pages opened"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Tools"
+msgstr "Tools"
+
 #: src/apps/settings/panes/UsagePane.tsx
 msgid "Total"
 msgstr "Total"
@@ -8649,6 +9456,14 @@ msgstr "trial ends {trialEnd}"
 #: src/apps/admin/OrgPlan.tsx
 msgid "trialing"
 msgstr "trialing"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Trigger log"
+msgstr "Trigger log"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Trigger log for {displayName}"
+msgstr "Trigger log for {displayName}"
 
 #: src/apps/billing/PricingPage.tsx
 #: src/shell/conversationSidebar.tsx
@@ -8742,6 +9557,10 @@ msgstr "Unarchive"
 msgid "Unarchive {title}"
 msgstr "Unarchive {title}"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Unblock"
+msgstr "Unblock"
+
 #: src/apps/admin/OrgBilling.tsx
 msgid "uncollectible"
 msgstr "uncollectible"
@@ -8780,6 +9599,10 @@ msgstr "Unlimited conversations"
 msgid "Unlimited seats"
 msgstr "Unlimited seats"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Unlink"
+msgstr "Unlink"
+
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Unlinked."
 msgstr "Unlinked."
@@ -8787,6 +9610,10 @@ msgstr "Unlinked."
 #: src/apps/admin/PlansTab.tsx
 msgid "unlisted"
 msgstr "unlisted"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Unmapped"
+msgstr "Unmapped"
 
 #: src/apps/admin/OrgPlan.tsx
 msgid "unpaid"
@@ -8964,6 +9791,10 @@ msgstr "usage alerts"
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Usage alerts"
 msgstr "Usage alerts"
+
+#: src/apps/settings/panes/UsagePane.tsx
+msgid "Usage by connection"
+msgstr "Usage by connection"
 
 #: src/apps/settings/panes/UsagePane.tsx
 msgid "Usage by day"
@@ -9177,6 +10008,10 @@ msgstr "waiting for a link"
 msgid "Waiting for Stripe to confirm."
 msgstr "Waiting for Stripe to confirm."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Waiting for the app to be installed"
+msgstr "Waiting for the app to be installed"
+
 #: src/lib/edgeSync.ts
 msgid "Waiting for the first sync"
 msgstr "Waiting for the first sync"
@@ -9276,9 +10111,17 @@ msgstr "Weighted tokens and requests this period, oldest first."
 msgid "Weighted tokens, cost, turns and last turn per member for {month}, biggest first."
 msgstr "Weighted tokens, cost, turns and last turn per member for {month}, biggest first."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Welcome message <0>(optional)</0>"
+msgstr "Welcome message <0>(optional)</0>"
+
 #: src/shell/JoinPage.tsx
 msgid "Welcome to {orgName}"
 msgstr "Welcome to {orgName}"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Welcome: “{welcome}”"
+msgstr "Welcome: “{welcome}”"
 
 #: src/apps/billing/PricingPage.tsx
 msgid "What"
@@ -9296,9 +10139,17 @@ msgstr "What changed"
 msgid "What closing does"
 msgstr "What closing does"
 
+#: src/apps/settings/panes/UsagePane.tsx
+msgid "What connected workspaces charged to you in {month}. Part of your usage above, not on top of it."
+msgstr "What connected workspaces charged to you in {month}. Part of your usage above, not on top of it."
+
 #: src/apps/billing/EnterpriseContact.tsx
 msgid "What do you need?"
 msgstr "What do you need?"
+
+#: src/apps/settings/panes/UsagePane.tsx
+msgid "What each connected workspace's mentions cost in {month}, biggest first. Part of the rows above, not on top of them."
+msgstr "What each connected workspace's mentions cost in {month}, biggest first. Part of the rows above, not on top of them."
 
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "What each event means and the data it carries. Payloads never include conversation content."
@@ -9352,6 +10203,10 @@ msgstr "What should we call you?"
 msgid "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
 msgstr "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
 
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "What the coding clients may do on a member's own computer."
+msgstr "What the coding clients may do on a member's own computer."
+
 #: src/apps/admin/ModerationTab.tsx
 msgid "What the screening provider flagged, newest first: the category and score, and whether the prompt was blocked or only counted. No text is stored, so none is shown."
 msgstr "What the screening provider flagged, newest first: the category and score, and whether the prompt was blocked or only counted. No text is stored, so none is shown."
@@ -9359,6 +10214,10 @@ msgstr "What the screening provider flagged, newest first: the category and scor
 #: src/apps/admin/BillingTab.tsx
 msgid "What the webhook received and what it did. The first thing to check when someone says they paid and nothing happened."
 msgstr "What the webhook received and what it did. The first thing to check when someone says they paid and nothing happened."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "What this assistant is for, and how it should answer."
+msgstr "What this assistant is for, and how it should answer."
 
 #: src/apps/admin/FlagsTab.tsx
 msgid "What this flag turns on, and when it can be removed"
@@ -9390,10 +10249,15 @@ msgstr "What you have spent against your plan this period."
 
 #: src/apps/admin/EnforcementTab.tsx
 #: src/apps/admin/ModerationTab.tsx
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
 #: src/apps/settings/panes/OrganisationPane.tsx
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "When"
 msgstr "When"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "When an administrator creates one, it is offered in the composer."
+msgstr "When an administrator creates one, it is offered in the composer."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "When an answer is ready"
@@ -9503,6 +10367,18 @@ msgstr "Work email"
 #: src/shell/DevicePage.tsx
 msgid "Working…"
 msgstr "Working…"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Workspace name"
+msgstr "Workspace name"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Workspaces that can ask this organisation's presets a question are connected by an administrator. Ask one to make changes here."
+msgstr "Workspaces that can ask this organisation's presets a question are connected by an administrator. Ask one to make changes here."
+
+#: src/apps/settings/panes.ts
+msgid "Workspaces that can ask your presets a question, which channels are answered, and on whose budget."
+msgstr "Workspaces that can ask your presets a question, which channels are answered, and on whose budget."
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Yes. An organisation owner or admin can cancel or change the plan from Settings, Billing; a member cannot. A cancelled subscription runs to the end of the period already paid for. An upgrade takes effect on the next request. A downgrade never deletes anything: if the organisation holds more conversations than the new plan allows, the existing ones stay readable and exportable and creating new ones waits until you upgrade or remove some."
@@ -9793,6 +10669,10 @@ msgstr "Your spend cap"
 #: src/apps/settings/panes/UsagePane.tsx
 msgid "Your usage"
 msgstr "Your usage"
+
+#: src/apps/settings/panes/UsagePane.tsx
+msgid "Your usage by connection"
+msgstr "Your usage by connection"
 
 #: src/shell/LandingPage.tsx
 msgid "YOURS"

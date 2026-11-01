@@ -39,10 +39,17 @@ export function ModelPicker({
   value,
   onChange,
   onModelsLoaded,
+  fixed = null,
 }: {
   conversationId: string | null;
   value: string | null;
   onChange: (model: string | null) => void;
+  /**
+   * A model the conversation's preset fixes, and the preset's name: the
+   * pill shows that model and cannot be opened, since the API answers with
+   * the preset's model whatever the body says. Null when no preset is on.
+   */
+  fixed?: { model: string; by: string } | null;
   /**
    * The whole list, once. The composer's attachment control has
    * to know whether the selected model accepts images BEFORE a file is
@@ -96,12 +103,16 @@ export function ModelPicker({
   // the case this exists for: it must be readable while the model is in force,
   // not only in the instant the option was open.
   const all = [...(models ?? []), ...partners, ...previews];
-  const selected = value === null ? null : all.find((m) => m.id === value);
+  // The preset's model when one is on: the pill reads it, the list does not open.
+  const fixedEntry = fixed === null ? undefined : all.find((m) => m.id === fixed.model);
+  const selected = fixed !== null ? (fixedEntry ?? null) : value === null ? null : all.find((m) => m.id === value);
   // The default by its label when the list names it; the id otherwise.
   const defaultEntry = serverDefault === null ? undefined : all.find((m) => m.id === serverDefault);
   const defaultName = serverDefault === null ? null : (defaultEntry?.label ?? serverDefault);
   const selectedDescription =
-    selected === undefined || selected === null
+    fixed !== null
+      ? `Set by the ${fixed.by} preset: ${fixedEntry === undefined ? fixed.model : describeModel(fixedEntry)}`
+      : selected === undefined || selected === null
       ? defaultName === null
         ? "Using the default model."
         : `Using ${defaultName}, the default model.`
@@ -124,9 +135,11 @@ export function ModelPicker({
   // What the pill reads: the model in force, by its label. "Default" is a
   // word in the list, not on the pill -- the pill answers "which model".
   const pillLabel =
-    selected !== undefined && selected !== null
-      ? selected.label
-      : (defaultName ?? (models === null ? "Model" : "Default"));
+    fixed !== null
+      ? (fixedEntry?.label ?? fixed.model)
+      : selected !== undefined && selected !== null
+        ? selected.label
+        : (defaultName ?? (models === null ? "Model" : "Default"));
   // A research preview in force is the one choice the pill must not call
   // healthy: amber, and the warning is its description.
   const dotTone = models === null ? "neutral" : selected?.research_preview ? "warning" : "positive";
@@ -152,12 +165,12 @@ export function ModelPicker({
 
   return (
     <Select
-      value={value ?? DEFAULT_VALUE}
+      value={fixed !== null ? fixed.model : (value ?? DEFAULT_VALUE)}
       onValueChange={(next) => {
         if (next === null) return;
         void select(next === DEFAULT_VALUE ? null : String(next));
       }}
-      disabled={models === null}
+      disabled={models === null || fixed !== null}
     >
       {/* One pill: the status dot, the model's name, the chevron. The
           price, the window and a research preview's warning are each
@@ -168,7 +181,9 @@ export function ModelPicker({
         aria-label="Model"
         aria-describedby="mw-model-description"
         data-mw-model-picker=""
-        className="inline-flex h-10 max-w-44 min-w-0 shrink items-center gap-2 rounded-full border border-mw-border-emphasis bg-mw-surface-raised pr-3 pl-3.5 text-sm text-mw-text transition-colors outline-none select-none hover:bg-mw-surface-hover focus-visible:ring-2 focus-visible:ring-mw-focus focus-visible:ring-offset-2 focus-visible:ring-offset-mw-surface disabled:cursor-progress data-popup-open:bg-mw-surface-hover sm:max-w-64 pointer-coarse:h-11"
+        data-mw-model-fixed={fixed === null ? undefined : ""}
+        title={fixed === null ? undefined : `Set by the ${fixed.by} preset`}
+        className="inline-flex h-10 max-w-44 min-w-0 shrink items-center gap-2 rounded-full border border-mw-border-emphasis bg-mw-surface-raised pr-3 pl-3.5 text-sm text-mw-text transition-colors outline-none select-none hover:bg-mw-surface-hover focus-visible:ring-2 focus-visible:ring-mw-focus focus-visible:ring-offset-2 focus-visible:ring-offset-mw-surface disabled:cursor-progress data-[mw-model-fixed]:cursor-default data-popup-open:bg-mw-surface-hover sm:max-w-64 pointer-coarse:h-11"
       >
         <StatusDot tone={dotTone} />
         <span className="min-w-0 truncate" data-mw-model-label="">
@@ -194,6 +209,13 @@ export function ModelPicker({
         >
           {defaultName === null ? "Default" : `Default (${defaultName})`}
         </SelectItem>
+        {/* The fixed model has to be an entry for the control to name it,
+            even though the list never opens while it is fixed. */}
+        {fixed !== null && fixedEntry === undefined && (
+          <SelectItem value={fixed.model} data-mw-model={fixed.model} description="Set by the preset.">
+            {fixed.model}
+          </SelectItem>
+        )}
         {models?.map(itemFor)}
         {partners.length > 0 && (
           // Another provider's models: offered for testing and usable only

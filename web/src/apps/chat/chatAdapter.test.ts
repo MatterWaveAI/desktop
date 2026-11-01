@@ -204,6 +204,48 @@ describe("createChatAdapter", () => {
     expect(results.map(textOf)).toEqual(["partial"]);
   });
 
+  it("hands a connector's refusal to onConnectorConversation, not onError, and settles", async () => {
+    const h = hooks({ getConversationId: vi.fn(() => "c1"), onConnectorConversation: vi.fn() });
+    const source = { connector: "slack", connection_id: "conn-1", channel_label: "#support", url: "https://acme.slack.com/archives/C01/p1" };
+    stubFetch((url) => {
+      if (url === "/api/conversations/c1/messages")
+        return jsonResponse(
+          {
+            detail: "This conversation is answered from slack in #support; reply there.",
+            code: "connector_conversation",
+            source,
+            request_id: "req-409",
+          },
+          409,
+        );
+      return jsonResponse({ detail: `no mock for ${url}` }, 404);
+    });
+
+    const adapter = createChatAdapter(h);
+    const results = await collect(adapter, runOptions("any news?"));
+
+    // The thread is answered elsewhere: the page points there rather than
+    // reporting a failed turn, and the composer's replacement is not a Retry.
+    expect(h.onConnectorConversation).toHaveBeenCalledExactlyOnceWith(source);
+    expect(h.onError).not.toHaveBeenCalled();
+    expect(h.onSettled).toHaveBeenCalledExactlyOnceWith();
+    expect(results).toEqual([]);
+  });
+
+  it("reports a 409 that is not a connector's as the failure it is", async () => {
+    const h = hooks({ getConversationId: vi.fn(() => "c1"), onConnectorConversation: vi.fn() });
+    stubFetch((url) => {
+      if (url === "/api/conversations/c1/messages")
+        return jsonResponse({ detail: "A temporary conversation is not kept.", request_id: "req-409" }, 409);
+      return jsonResponse({ detail: `no mock for ${url}` }, 404);
+    });
+
+    await collect(createChatAdapter(h), runOptions("any news?"));
+
+    expect(h.onConnectorConversation).not.toHaveBeenCalled();
+    expect(h.onError).toHaveBeenCalledOnce();
+  });
+
   it("sends nothing when the prompt is empty", async () => {
     const h = hooks();
     const fetchMock = stubFetch(() => jsonResponse({}, 200));

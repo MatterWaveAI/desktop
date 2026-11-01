@@ -254,3 +254,45 @@ describe("UsagePane, by member", () => {
     expect(text()).toMatch(/19,840,000 tokens left/);
   });
 });
+
+describe("UsagePane, by connection", () => {
+  const connection = (id: string, name: string | null, weighted: number, turns: number) => ({
+    connection_id: id,
+    connector: name === null ? null : "slack",
+    display_name: name,
+    weighted_tokens: weighted,
+    tokens: weighted,
+    cost_micros: weighted / 4,
+    turns,
+    last_active: "2026-10-02T09:30:00+00:00",
+  });
+
+  it("shows an admin what each connected workspace cost, next to the members", async () => {
+    stub({
+      "/api/me/usage": usage,
+      "/api/org/usage?period=2026-10": {
+        ...orgReport,
+        by_connection: [connection("c-1", "Acme Slack", 100_000, 5), connection("c-gone", null, 20_000, 1)],
+      },
+    });
+    await render("admin");
+    await vi.waitFor(() => expect(container!.querySelectorAll("tr[data-connection]").length).toBe(2));
+    expect(text()).toContain("By connection");
+    const rows = [...container!.querySelectorAll("tr[data-connection]")];
+    expect(rows[0].textContent).toContain("Acme Slack");
+    expect(rows[0].textContent).toContain("slack");
+    expect(rows[0].textContent).toContain("100,000");
+    expect(rows[0].textContent).toContain("5");
+    // A deleted connection keeps its id and no connector.
+    expect(rows[1].textContent).toContain("c-gone");
+    expect(rows[1].textContent).not.toContain("slack");
+  });
+
+  it("says when no connection was used, and reads an older API without the field as none", async () => {
+    stub({ "/api/me/usage": usage, "/api/org/usage?period=2026-10": selfReport });
+    await render("member");
+    await vi.waitFor(() => expect(rows().length).toBe(1));
+    expect(text()).toContain("Your usage by connection");
+    expect(text()).toContain("No connection was used in October 2026.");
+  });
+});

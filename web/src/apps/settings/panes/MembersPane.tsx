@@ -19,6 +19,7 @@ import { useShell } from "../../../shell/shellContext";
 import { LearnMore, PaneSection } from "../PaneSection";
 import { PaneActions } from "../paneActions";
 import { Activity, Initials, Row, RowList } from "../rows";
+import { CONNECTOR_LABELS, fetchLinkedAccounts, type LinkedAccount } from "./connections/connectionsApi";
 
 /**
  * Members: who is in the org
@@ -28,6 +29,10 @@ import { Activity, Initials, Row, RowList } from "../rows";
  * which say nothing about the org (tenancy.md rule 1). The API enforces
  * the same rules on every route, so hiding a control here is courtesy,
  * never the gate.
+ *
+ * An owner or admin also sees each member's linked accounts on connected
+ * workspaces ("Slack: jane"), read once per pane load from the connectors
+ * registry, which only they may read.
  */
 
 export type OrgRole = "owner" | "admin" | "member" | "viewer";
@@ -92,6 +97,8 @@ interface MembersState {
   /** The caller's own org role. */
   role: OrgRole;
   seats: Seats;
+  /** Each member's accounts on connected workspaces, by subject; empty for a caller who may not read them. */
+  linked: Map<string, LinkedAccount[]>;
 }
 
 async function fetchMembers(): Promise<MembersState> {
@@ -99,7 +106,8 @@ async function fetchMembers(): Promise<MembersState> {
     apiFetch<{ data: Member[]; role: OrgRole; seats: Seats }>("/api/org/members"),
     apiFetch<{ data: Invite[] }>("/api/org/invites"),
   ]);
-  return { members: members.data, invites: invites.data, role: members.role, seats: members.seats };
+  const linked = canManage(members.role) ? await fetchLinkedAccounts() : new Map<string, LinkedAccount[]>();
+  return { members: members.data, invites: invites.data, role: members.role, seats: members.seats, linked };
 }
 
 /** The API's rules, mirrored so the pane offers only what will succeed. */
@@ -208,6 +216,7 @@ export function MembersPane() {
         seats={state.seats}
         actor={state.role}
         self={principal.subject}
+        linked={state.linked}
         onChanged={reload}
       />
       {manager && <InviteSection actor={state.role} seats={state.seats} onChanged={reload} />}
@@ -373,11 +382,39 @@ function visibleMembers(members: Member[], query: string, sort: MemberSort): Mem
   });
 }
 
+/** "Slack: jane" for each account, the connection named when the org has more than one of a kind. */
+function LinkedAccounts(props: { accounts: LinkedAccount[] }) {
+  const { i18n } = useLingui();
+  const connectors = new Map<string, number>();
+  for (const account of props.accounts) {
+    connectors.set(account.connector, (connectors.get(account.connector) ?? 0) + 1);
+  }
+  return (
+    <span data-testid="linked-accounts" className="text-xs text-mw-text-muted">
+      {props.accounts.map((account, index) => {
+        const connector = CONNECTOR_LABELS[account.connector]
+          ? i18n._(CONNECTOR_LABELS[account.connector])
+          : account.connector;
+        const who = account.identity.display_name || account.identity.external_user_id;
+        const where = (connectors.get(account.connector) ?? 0) > 1 ? ` (${account.connection_name})` : "";
+        return (
+          <span key={account.identity.id}>
+            {index > 0 && " · "}
+            {connector}
+            {where}: {who}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function MembersSection(props: {
   members: Member[];
   seats: Seats;
   actor: OrgRole;
   self: string;
+  linked: Map<string, LinkedAccount[]>;
   onChanged: () => void;
 }) {
   const shell = useShell();
@@ -515,13 +552,18 @@ function MembersSection(props: {
                 </>
               }
               extra={
-                pinned && (
-                  <span data-testid="sole-owner" className="text-xs text-mw-text-muted">
-                    <Trans>
-                      The only owner. Transfer ownership to someone before leaving or changing your role.
-                    </Trans>
-                  </span>
-                )
+                <>
+                  {pinned && (
+                    <span data-testid="sole-owner" className="text-xs text-mw-text-muted">
+                      <Trans>
+                        The only owner. Transfer ownership to someone before leaving or changing your role.
+                      </Trans>
+                    </span>
+                  )}
+                  {(props.linked.get(member.subject)?.length ?? 0) > 0 && (
+                    <LinkedAccounts accounts={props.linked.get(member.subject) ?? []} />
+                  )}
+                </>
               }
               trailing={
                 <>

@@ -223,6 +223,8 @@ function stubOrgApi(answers: Record<string, Record<string, unknown>> = {}) {
     // Sharing by link: on, with no links made, unless a test says otherwise.
     if (key === "GET /api/org/sharing") return jsonResponse({ enabled: true });
     if (key === "GET /api/org/shares") return jsonResponse({ data: [] });
+    // Local agent tools: allowed, unless a test says otherwise.
+    if (key === "GET /api/org/agent-tools") return jsonResponse({ local_agent_tools: true });
     if (path === "GET /api/org/audit") return jsonResponse(AUDIT_PAGE);
     return jsonResponse({ detail: `no mock for ${key}` }, 404);
   });
@@ -1547,6 +1549,71 @@ describe("sharing by link", () => {
     expect(container!.querySelector("[data-org-share-status='revoked']")?.textContent).toContain(
       "Revoked",
     );
+  });
+});
+
+describe("local agent tools", () => {
+  async function renderAgentTools(
+    enabled: boolean,
+    answers: Record<string, Record<string, unknown>> = {},
+  ) {
+    answers["GET /api/org/agent-tools"] ??= jsonResponse({ local_agent_tools: enabled });
+    const fetchMock = stubOrgApi(answers);
+    await render("admin");
+    await vi.waitFor(() => {
+      expect(container!.querySelector("[data-agent-tools-enabled]")).not.toBeNull();
+    });
+    return fetchMock;
+  }
+
+  function agentToolsSwitch(): HTMLButtonElement {
+    const label = [...container!.querySelectorAll("label")].find(
+      (l) => l.textContent === "Allow local agent tools",
+    );
+    expect(label, "the agent tools switch's label").toBeDefined();
+    const control = document.getElementById(label!.htmlFor);
+    expect(control!.getAttribute("role")).toBe("switch");
+    return control as HTMLButtonElement;
+  }
+
+  it("shows the switch on and says what the clients may do", async () => {
+    await renderAgentTools(true);
+    expect(agentToolsSwitch().getAttribute("aria-checked")).toBe("true");
+    expect(container!.querySelector("[data-agent-tools-enabled='true']")?.textContent).toContain(
+      "agent mode",
+    );
+  });
+
+  it("an admin switches it off and the pane says what that does", async () => {
+    const fetchMock = await renderAgentTools(true, {
+      "PUT /api/org/agent-tools": jsonResponse({ local_agent_tools: false }),
+    });
+    await click(agentToolsSwitch());
+    expect(calls(fetchMock).find((c) => c.key === "PUT /api/org/agent-tools")?.body).toEqual({
+      local_agent_tools: false,
+    });
+    await vi.waitFor(() => {
+      expect(container!.querySelector("[data-agent-tools-enabled='false']")).not.toBeNull();
+    });
+    expect(container!.querySelector("[data-agent-tools-enabled='false']")?.textContent).toContain(
+      "keep to chat",
+    );
+    expect(container!.querySelector("[data-saved='agent-tools']")?.textContent).toBe("Saved.");
+  });
+
+  it("a refused save puts the switch back and says why", async () => {
+    await renderAgentTools(true, {
+      "PUT /api/org/agent-tools": jsonResponse(
+        { detail: "Organisation settings need Postgres; set MW_DATABASE_URL." },
+        503,
+      ),
+    });
+    await click(agentToolsSwitch());
+    await vi.waitFor(() => {
+      expect(container!.textContent).toContain("Organisation settings need Postgres");
+    });
+    expect(agentToolsSwitch().getAttribute("aria-checked")).toBe("true");
+    expect(container!.querySelector("[data-agent-tools-enabled='true']")).not.toBeNull();
   });
 });
 

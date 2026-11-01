@@ -24,6 +24,15 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
 
 ### Changed
 
+- **The bundled SPA carries the platform's connectors work** (platform
+  commit `39f3966`): organisation presets (Settings → Presets, and the
+  composer's picker, whose preset fixes the model), conversations started
+  from a connector marked with their source and answered in their own
+  thread (the composer gives way to a notice; a fork continues here),
+  Settings → Connections (connecting Slack, routing, identities,
+  notifications and the event log), and a tool call that never got a
+  result saying so. Copied by `pnpm spa:pull`, the desktop's changes
+  replayed on top.
 - **The bundled SPA is the platform's develop again** (platform commit
   `518e2a8`): the localised interface (en-GB, en-US, es-ES), the
   compaction fixes, Get help, the answer-ready signals, the terms notice,
@@ -34,6 +43,11 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   `web/` is synced to, `spa/patches/` holds the desktop's changes one file
   at a time, and CI fails when `web/` is anything other than that commit
   plus those patches (`pnpm spa:check`).
+- **The desktop's changes to the SPA are a list CI holds it to**
+  (`pnpm spa:drift`, `scripts/web-drift.mjs`): every file in `web/` that
+  differs from the platform is either in `spa/adapted.json`, with the
+  reason, or fails the build. Pointed at a platform checkout and a commit,
+  the same script measures how far `web/` is behind.
 
 - **Releases cover every desktop target and sign what the secrets
   allow**: Windows arm64 (NSIS), macOS universal (Apple silicon and Intel

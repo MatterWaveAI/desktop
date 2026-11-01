@@ -1,5 +1,5 @@
 diff --git a/src/apps/chat/MessageControls.tsx b/src/apps/chat/MessageControls.tsx
-index 19188b1..083b9d7 100644
+index cf3a6ea..1bd4bb5 100644
 --- a/src/apps/chat/MessageControls.tsx
 +++ b/src/apps/chat/MessageControls.tsx
 @@ -5,11 +5,13 @@ import type { BranchPosition } from "./branches";
@@ -18,7 +18,7 @@ index 19188b1..083b9d7 100644
   *
   * Presentational, like `BranchControls`: ChatPage decides which rows may
   * regenerate (every stored reply, not only the last) and what each action
-@@ -39,6 +41,16 @@ export function MessageControls(props: {
+@@ -41,6 +43,16 @@ export function MessageControls(props: {
      current: Feedback | null;
      onChange: (next: Feedback | null) => void;
    };
@@ -35,9 +35,9 @@ index 19188b1..083b9d7 100644
  }) {
    const { message, branch } = props;
    const isUser = message.role === "user";
-@@ -81,6 +93,13 @@ export function MessageControls(props: {
+@@ -85,6 +97,13 @@ export function MessageControls(props: {
+         <MessageAction label="Edit" disabled={props.busy} onClick={props.onEdit} />
        )}
-       {isUser && <MessageAction label="Edit" disabled={props.busy} onClick={props.onEdit} />}
        {isStoredReply && <CopyAction text={message.content} disabled={props.busy} />}
 +      {isStoredReply && props.readAloud && (
 +        <ReadAloudAction

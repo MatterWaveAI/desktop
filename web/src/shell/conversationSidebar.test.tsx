@@ -259,6 +259,31 @@ describe("the conversation sidebar", () => {
     expect(byLabel("Pin Pinned one")).toBeNull();
   });
 
+  it("badges a connector's conversation with where it is answered", async () => {
+    stubFetch({
+      "/api/conversations": {
+        body: {
+          data: [
+            conversation({
+              id: "s",
+              title: "Deploy question",
+              source: { connector: "slack", connection_id: "conn-1", channel_label: "#support", url: null },
+            }),
+            conversation({ id: "p", title: "Own chat", source: null }),
+          ],
+        },
+      },
+    });
+    renderShell();
+    await settle();
+
+    const badges = [...document.querySelectorAll<HTMLElement>("[data-mw-source-badge]")];
+    expect(badges.map((badge) => badge.textContent)).toEqual(["Slack #support"]);
+    // The badge rides the row it belongs to, inside its link.
+    expect(badges[0]!.closest("a")?.textContent).toContain("Deploy question");
+    expect(byLabel("Open Own chat") ?? text()).toContain("Own chat");
+  });
+
   it("pins through PUT and unpins through DELETE, so a retry is idempotent", async () => {
     const row = conversation({ id: "a", title: "Infra" });
     const { calls } = stubFetch({

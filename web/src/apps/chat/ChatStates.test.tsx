@@ -142,6 +142,16 @@ describe("the new-conversation empty state", () => {
     expect(container!.textContent).not.toMatch(/deployment/i);
   });
 
+  it("carries the preset's welcome message in the product line's place", () => {
+    render(<NewConversationState onPickPrompt={() => undefined} welcome={"Hello!\nAsk me about billing."} />);
+    const welcome = container!.querySelector("[data-mw-preset-welcome]")!;
+    expect(welcome.textContent).toBe("Hello!\nAsk me about billing.");
+    expect(container!.textContent).not.toContain("MatterWave is a chat workspace");
+    // The rest of the surface is unchanged: the disclosure and the prompts stay.
+    expect(container!.textContent).toContain("AI");
+    expect(container!.querySelectorAll("button").length).toBe(EXAMPLE_PROMPTS.length);
+  });
+
   it("links the help page, which is otherwise reachable only by a keystroke", () => {
     render(<NewConversationState onPickPrompt={() => undefined} />);
     const link = [...container!.querySelectorAll("a")].find((a) =>

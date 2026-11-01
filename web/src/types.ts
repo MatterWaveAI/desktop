@@ -169,6 +169,21 @@ export interface LoginIdp {
   name: string;
 }
 
+/**
+ * Where a connector opened a conversation: which connector (`slack`), the
+ * connection it came through, the channel as a person would name it
+ * (`#support`), and a link to the thread when the connector has one. Such
+ * a conversation is answered in that thread alone -- the API refuses a
+ * send, edit or regenerate in it with a 409 `connector_conversation` --
+ * and a fork of it is an ordinary conversation with no source.
+ */
+export interface ConversationSource {
+  connector: string;
+  connection_id: string | null;
+  channel_label: string | null;
+  url: string | null;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -181,7 +196,7 @@ export interface Conversation {
    */
   current_leaf_message_id?: string | null;
   /**
-   * Pin and archive are nullable timestamps, not booleans — the API
+   * Pin and archive are nullable timestamps, not booleans â€” the API
    * sends the ISO string or null, and "when" is what orders two pinned rows.
    * Optional here because the seeder and older fixtures predate the columns.
    */
@@ -198,6 +213,66 @@ export interface Conversation {
    * Optional because an API that predates temporary chat does not send it.
    */
   temporary?: boolean;
+  /**
+   * The org preset this conversation answers with: its model, instructions
+   * and tools replace the conversation's own while it is set. Optional
+   * because an API that predates presets does not send it.
+   */
+  preset_id?: string | null;
+  preset?: PresetRef | null;
+  /**
+   * Where a connector opened the conversation; null for one a person
+   * started. Optional because an API that predates connectors does not
+   * send it.
+   */
+  source?: ConversationSource | null;
+}
+
+/** What a conversation carries of its preset: enough to label it. */
+export interface PresetRef {
+  id: string;
+  name: string | null;
+}
+
+/** One org preset, as `GET /api/org/presets` lists it. */
+export interface Preset {
+  id: string;
+  name: string;
+  description: string;
+  model: string;
+  instructions: string;
+  /** The tool names it allows; null is the platform's default set, [] none. */
+  tools: string[] | null;
+  welcome_message: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  /** Set on a deleted preset, which only a conversation already on it reads. */
+  deleted_at: string | null;
+}
+
+/** A tool a preset may name, with what it does. */
+export interface PresetTool {
+  name: string;
+  description: string;
+}
+
+/** The limits `GET /api/org/presets` states beside the list. */
+export interface PresetLimits {
+  max_presets: number;
+  name_max_len: number;
+  description_max_len: number;
+  instructions_max_len: number;
+  welcome_max_len: number;
+}
+
+/** `GET /api/org/presets`. */
+export interface PresetListing {
+  data: Preset[];
+  tools: PresetTool[];
+  limits: PresetLimits;
+  /** Whether this caller may create, change and delete them. */
+  can_manage: boolean;
 }
 
 /**
@@ -285,6 +360,8 @@ export interface UserInstructions {
  */
 export interface EffectiveInstructions {
   org: string;
+  /** The conversation's preset's instructions, after the org's; absent from an older API. */
+  preset?: string;
   user: UserInstructions;
   conversation: string;
   /** True when a conversation prompt is displacing the user's own. */
