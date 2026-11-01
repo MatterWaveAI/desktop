@@ -4,6 +4,7 @@ import type { ChatMessage, ChatModelAdapter, MessagePart } from "./chatAdapter";
 import { useChatThread, type ThreadPhase } from "./useChatThread";
 import type {
   Conversation,
+  ConversationSource,
   ConversationWithMessages,
   EffectiveInstructions,
   Message,
@@ -68,6 +69,7 @@ import { ConversationActions, type ExportFormat } from "./ConversationActions";
 import { ReportDialog } from "./ReportDialog";
 import { ShareDialog } from "./ShareDialog";
 import { TemporaryNotice, TemporaryToggle } from "./TemporaryChat";
+import { ConnectorNotice } from "./ConnectorSource";
 import { fetchFeedback, type Feedback } from "./feedback";
 import { COMPACT_HINT, CompactionDivider, ContextMeter, SummaryMarker } from "./CompactionDivider";
 import { DictationButton, DictationNotices } from "./DictationButton";
@@ -190,6 +192,9 @@ function ChatSession(props: {
   const [temporary, setTemporary] = useState(false);
   // The preset the stored conversation is on, from the same GET.
   const [preset, setPreset] = useState<PresetRef | null>(null);
+  // Where a connector opened the stored conversation, from the same GET:
+  // null for one a person started.
+  const [source, setSource] = useState<ConversationSource | null>(null);
   // The load failure keeps its kind, not its raw body: the transcript error
   // component owns the wording (the "never show a raw error body" rule).
   const [loadError, setLoadError] = useState<StreamFailure | null>(null);
@@ -263,6 +268,7 @@ function ChatSession(props: {
         setInstructions(conversation.instructions);
         setTemporary(conversation.temporary === true);
         setPreset(conversation.preset ?? null);
+        setSource(conversation.source ?? null);
         setAwaitingReply(conversation.messages.at(-1)?.role === "user");
       })
       .catch((err: unknown) => {
@@ -371,6 +377,7 @@ function ChatSession(props: {
       onInstructionsChanged={setInstructions}
       temporary={temporary}
       preset={preset}
+      source={source}
       onConversationCreated={props.onConversationCreated}
       onSettled={props.onSettled}
       onRenamed={shell.onConversationRenamed}
@@ -395,6 +402,8 @@ function ThreadRuntime(props: {
   temporary: boolean;
   /** The preset the stored conversation is on; null for none, or a new chat. */
   preset: PresetRef | null;
+  /** Where a connector opened the stored conversation; null for one a person started, and for a new chat. */
+  source: ConversationSource | null;
   onConversationCreated: (conversation: Conversation) => void;
   onSettled: () => void;
   onRenamed: (conversationId: string, title: string) => void;
@@ -441,6 +450,11 @@ function ThreadRuntime(props: {
   // conversation; the state is what the header and the notice render.
   const [temporary, setTemporary] = useState(props.temporary);
   const temporaryRef = useRef(props.temporary);
+  // A connector's conversation: the stored flag, or what the API answered
+  // a send with when the list was stale. Either way the thread is answered
+  // in its own channel, so the composer gives way to the notice and the
+  // fork is the way to continue here.
+  const [source, setSource] = useState(props.source);
   // The preset in force: the stored conversation's, or the picker's choice
   // on a new chat. The ref is what the adapter sends on the create; the
   // state is what the pickers and the empty state render. The full preset
@@ -518,6 +532,10 @@ function ThreadRuntime(props: {
         onContext: (frame) => setContext(readingOfFrame(frame)),
         onNotice: setNotice,
         onLengthTruncated: (id) => setLengthCut((current) => new Set(current).add(id)),
+        onConnectorConversation: (found) => {
+          setSource(found);
+          setError(null);
+        },
       }),
     [],
   );
@@ -681,6 +699,9 @@ function ThreadRuntime(props: {
   // An operator's support session is read only: the API refuses every
   // write, so the composer says so instead of offering a send that fails.
   const readOnly = useSupportReadOnly(shell.principal);
+  // Nothing may be sent, edited or regenerated in a connector's
+  // conversation either; unlike a support session it can still be forked.
+  const locked = readOnly || source !== null;
 
   // What is being reported: the whole conversation, or one reply by id.
   // Null closes the dialog, and the dialog is unmounted with it so the next
@@ -760,6 +781,13 @@ function ThreadRuntime(props: {
     } finally {
       setBranching(false);
     }
+  };
+
+  // The fork a connector's notice offers: from the leaf, so the copy is
+  // the whole thread as it stands.
+  const forkFromLeaf = () => {
+    const leaf = branches.path.at(-1)?.message.id ?? props.history.at(-1)?.id;
+    if (leaf !== undefined) void branchFrom(leaf);
   };
 
   const meterContext: ContextReading = {
@@ -883,7 +911,10 @@ function ThreadRuntime(props: {
       <ThreadView
         conversationId={conversationId}
         reattaching={props.reattaching}
-        readOnly={readOnly}
+        readOnly={locked}
+        source={source}
+        onFork={conversationId === null || readOnly ? undefined : forkFromLeaf}
+        forking={branching}
         onGiveUp={giveUp}
         models={models}
         selectedModel={activePreset?.model ?? selectedModel}
@@ -895,7 +926,7 @@ function ThreadRuntime(props: {
         error={error}
         canRetry={thread.canRetry}
         context={meterContext}
-        onCompact={conversationId === null || readOnly ? undefined : () => void compactNow()}
+        onCompact={conversationId === null || locked ? undefined : () => void compactNow()}
         compactDisabled={sending || branches.running || compacting}
         keepPairs={keepPairs}
         notice={notice}
@@ -973,8 +1004,13 @@ function ThreadView(props: {
   conversationId: string | null;
   /** Looking for the reply that was streaming when the page reloaded. */
   reattaching: boolean;
-  /** An operator's support session: nothing may be sent. */
+  /** An operator's support session, or a connector's conversation: nothing may be sent. */
   readOnly: boolean;
+  /** Where a connector opened the conversation: its notice stands where the composer would. */
+  source: ConversationSource | null;
+  /** The notice's fork; absent where the conversation cannot be forked. */
+  onFork?: () => void;
+  forking: boolean;
   /** A minute with no first token: stop and say so. */
   onGiveUp: () => void;
   /** The gateway's models, for the vision gate; null until loaded. */
@@ -1046,7 +1082,10 @@ function ThreadView(props: {
   // The row whose bubble is a textarea, here rather than in the row so the
   // composer's ArrowUp can open the last one.
   const [editingId, setEditingId] = useState<string | null>(null);
-  const editLastId = props.busy ? null : lastEditableId(props.branched);
+  // A connector's conversation takes no edit either: the thread is answered
+  // in its own channel, and a rewritten question would be refused the way a
+  // new one is.
+  const editLastId = props.busy || props.source !== null ? null : lastEditableId(props.branched);
   // Read-aloud for the stored replies. One hook above the transcript owns
   // the synth, so starting one reply stops the previous; a new generation
   // (the busy flag) stops whichever was reading.
@@ -1207,8 +1246,10 @@ function ThreadView(props: {
                       to regenerate. */
                   canRegenerate={
                     row.entry.message.role === "assistant" &&
-                    !row.entry.message.id.startsWith("pending-")
+                    !row.entry.message.id.startsWith("pending-") &&
+                    props.source === null
                   }
+                  canEdit={props.source === null}
                   busy={props.busy}
                   editing={editingId === row.entry.message.id}
                   onEditingChange={(editing) =>
@@ -1285,43 +1326,50 @@ function ThreadView(props: {
           stick.jumpToLatest();
         }}
       />
-      <Composer
-        draft={draft}
-        onDraftChange={setDraft}
-        running={props.busy}
-        readOnly={props.readOnly}
-        online={props.online}
-        context={props.context}
-        onCompact={props.onCompact}
-        compactDisabled={props.compactDisabled}
-        compactable={compactable}
-        attachments={attachments}
-        onSend={(text) => {
-          // The ids are read BEFORE the draft is cleared, and only `ready`
-          // entries have one. There is no await between these three lines and
-          // nothing here can throw, which is the whole design of the send
-          // path: every way an attachment can fail has already happened by
-          // now, in the upload, and left its chip behind. The text cannot be
-          // lost to an upload because by the time this runs there is no
-          // upload left to fail.
-          const ids = readyIds(attachments.pending);
-          const parts = attachmentParts(attachments.pending);
-          setDraft("");
-          attachments.clear();
-          props.onSend(text, ids, parts);
-        }}
-        onCommand={(command) => {
-          // The line was a command, not a message: the box clears, the
-          // attachments stay for the message the reader is still composing.
-          // An unknown `/word` keeps the line -- it may be a typo of a
-          // command, or a message that happens to start with a slash, and
-          // either way the person's text is not ours to throw away.
-          if (command.kind !== "unknown") setDraft("");
-          props.onCommand(command);
-        }}
-        onCancel={props.onCancel}
-        onEditLast={editLastId === null ? undefined : () => setEditingId(editLastId)}
-      />
+      {/* A connector's conversation takes no message here: the notice says
+          where it is answered, and the fork is how to continue in this
+          app. The draft is kept for the fork to find. */}
+      {props.source !== null ? (
+        <ConnectorNotice source={props.source} onFork={props.onFork} forking={props.forking} />
+      ) : (
+        <Composer
+          draft={draft}
+          onDraftChange={setDraft}
+          running={props.busy}
+          readOnly={props.readOnly}
+          online={props.online}
+          context={props.context}
+          onCompact={props.onCompact}
+          compactDisabled={props.compactDisabled}
+          compactable={compactable}
+          attachments={attachments}
+          onSend={(text) => {
+            // The ids are read BEFORE the draft is cleared, and only `ready`
+            // entries have one. There is no await between these three lines and
+            // nothing here can throw, which is the whole design of the send
+            // path: every way an attachment can fail has already happened by
+            // now, in the upload, and left its chip behind. The text cannot be
+            // lost to an upload because by the time this runs there is no
+            // upload left to fail.
+            const ids = readyIds(attachments.pending);
+            const parts = attachmentParts(attachments.pending);
+            setDraft("");
+            attachments.clear();
+            props.onSend(text, ids, parts);
+          }}
+          onCommand={(command) => {
+            // The line was a command, not a message: the box clears, the
+            // attachments stay for the message the reader is still composing.
+            // An unknown `/word` keeps the line -- it may be a typo of a
+            // command, or a message that happens to start with a slash, and
+            // either way the person's text is not ours to throw away.
+            if (command.kind !== "unknown") setDraft("");
+            props.onCommand(command);
+          }}
+          onCancel={props.onCancel}
+          onEditLast={editLastId === null ? undefined : () => setEditingId(editLastId)}
+        />
+      )}
     </div>
   );
 }
@@ -1771,6 +1819,8 @@ function BranchedRow(props: {
     speaking: boolean;
     onToggle: () => void;
   };
+  /** False where the reader's own turns may not be rewritten: a connector's conversation. */
+  canEdit: boolean;
 }) {
   const { editing, onEditingChange: setEditing } = props;
   const { message, branch } = props.entry;
@@ -1803,6 +1853,7 @@ function BranchedRow(props: {
       message={message}
       branch={branch}
       canRegenerate={props.canRegenerate}
+      canEdit={props.canEdit}
       busy={props.busy}
       onSwitchBranch={props.onSwitchBranch}
       onEdit={() => setEditing(true)}

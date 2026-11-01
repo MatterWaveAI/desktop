@@ -3,6 +3,7 @@ import type { Conversation, Folder, LibraryState, SearchHit, Tag } from "../type
 import { apiFetch, ApiError } from "../lib/api";
 import { useShell } from "./shellContext";
 import { ConversationListSkeleton, RequestReference } from "../apps/chat/ChatStates";
+import { SourceBadge } from "../apps/chat/ConnectorSource";
 import { DestructiveConfirm, EmptyState, ErrorState } from "../patterns";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { conversationHref, writeChatHref, writeConversationUrl } from "./useShellState";
@@ -1017,6 +1018,10 @@ function ConversationRow(props: {
         <span className="flex min-w-0 items-center gap-1">
           {pinned && <PinIcon filled />}
           <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
+          {/* A connector's conversation says where it is answered: the
+              badge is the one mark the row carries that is not the person's
+              own doing. */}
+          {conversation.source && <SourceBadge source={conversation.source} />}
         </span>
         {tags.length > 0 && (
           <span className="mt-0.5 flex flex-wrap gap-1" aria-label="Tags">

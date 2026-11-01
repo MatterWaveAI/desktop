@@ -21,6 +21,8 @@ export function MessageControls(props: {
   message: Message;
   branch: BranchPosition | null;
   canRegenerate: boolean;
+  /** False where the reader's own turns may not be rewritten: a connector's conversation. */
+  canEdit?: boolean;
   /** True while any turn is in flight: a send, an edit or a regenerate. */
   busy: boolean;
   onSwitchBranch: (message: Message, delta: number) => void;
@@ -83,7 +85,9 @@ export function MessageControls(props: {
           onNext={() => props.onSwitchBranch(message, +1)}
         />
       )}
-      {isUser && <MessageAction label="Edit" disabled={props.busy} onClick={props.onEdit} />}
+      {isUser && props.canEdit !== false && (
+        <MessageAction label="Edit" disabled={props.busy} onClick={props.onEdit} />
+      )}
       {isStoredReply && <CopyAction text={message.content} disabled={props.busy} />}
       {isStoredReply && props.readAloud && (
         <ReadAloudAction

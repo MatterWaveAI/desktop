@@ -164,6 +164,21 @@ export interface LoginIdp {
   name: string;
 }
 
+/**
+ * Where a connector opened a conversation: which connector (`slack`), the
+ * connection it came through, the channel as a person would name it
+ * (`#support`), and a link to the thread when the connector has one. Such
+ * a conversation is answered in that thread alone -- the API refuses a
+ * send, edit or regenerate in it with a 409 `connector_conversation` --
+ * and a fork of it is an ordinary conversation with no source.
+ */
+export interface ConversationSource {
+  connector: string;
+  connection_id: string | null;
+  channel_label: string | null;
+  url: string | null;
+}
+
 export interface Conversation {
   id: string;
   title: string;
@@ -200,6 +215,12 @@ export interface Conversation {
    */
   preset_id?: string | null;
   preset?: PresetRef | null;
+  /**
+   * Where a connector opened the conversation; null for one a person
+   * started. Optional because an API that predates connectors does not
+   * send it.
+   */
+  source?: ConversationSource | null;
 }
 
 /** What a conversation carries of its preset: enough to label it. */

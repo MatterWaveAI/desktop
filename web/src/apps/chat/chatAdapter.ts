@@ -145,12 +145,13 @@ export type ChatModelAdapter = {
     abortSignal: AbortSignal;
   }): AsyncGenerator<ChatModelRunResult, void, unknown>;
 };
-import type { Conversation } from "../../types";
+import type { Conversation, ConversationSource } from "../../types";
 import { ApiError, apiFetch, apiStream } from "../../lib/api";
 import { notifyGenerationComplete } from "../../lib/desktopAuth";
 import { parseSSEStream } from "../../lib/sse";
 import { REFUSAL_CODE, TRUNCATED_CODE } from "./streamErrors";
 import { noticeText, type CompactionFrame, type ContextFrame } from "./compaction";
+import { connectorSourceOfError } from "./connectorConversation";
 
 export interface ChatAdapterHooks {
   getConversationId: () => string | null;
@@ -191,6 +192,13 @@ export interface ChatAdapterHooks {
   onNotice?: (message: string) => void;
   /** The answer, by its stored id, ran out of tokens before it finished. */
   onLengthTruncated?: (messageId: string) => void;
+  /**
+   * The API refused the send because the conversation is a connector's --
+   * one started from Slack, answered in its own thread -- and said which
+   * thread. Not a failure of the turn: the composer gives way to a notice
+   * pointing there, so `onError` is not called for it.
+   */
+  onConnectorConversation?: (source: ConversationSource) => void;
 }
 
 /** The prompt we send: the user's text, which is all a user turn carries. */
@@ -476,8 +484,11 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
           });
         }
       } catch (err) {
+        const source = connectorSourceOfError(err);
         if (err instanceof DOMException && err.name === "AbortError") {
           yield { status: { type: "incomplete", reason: "cancelled" } };
+        } else if (source !== null && hooks.onConnectorConversation) {
+          hooks.onConnectorConversation(source);
         } else {
           hooks.onError(err instanceof Error ? err.message : "Streaming failed.", {
             // An ApiError knows its own id; a thrown read falls back to the
