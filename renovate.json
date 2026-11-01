@@ -1,0 +1,78 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "T-061 shared policy. Three managers: root pnpm (package.json + pnpm-lock.yaml), desktop/web pnpm, and cargo (src-tauri). rangeStrategy is 'auto' (not 'pin') because these repos commit lockfiles while manifests keep version ranges: Renovate updates the range in the manifest and the resolved version in the lockfile together.",
+  "extends": [
+    "config:recommended",
+    ":pinDigests",
+    "replacements:all",
+    ":semanticCommitsDisabled"
+  ],
+  "timezone": "UTC",
+  "schedule": [
+    "after 3am and before 6am on saturday"
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true
+  },
+  "osvVulnerabilityAlerts": true,
+  "separateMajorMinor": true,
+  "major": {
+    "prConcurrentLimit": 1
+  },
+  "rangeStrategy": "auto",
+  "labels": [
+    "dependencies"
+  ],
+  "commitMessagePrefix": "deps:",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "after 3am and before 6am on saturday"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "All minor+patch updates grouped into a single PR per ecosystem.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "all minor+patch"
+    },
+    {
+      "description": "Security updates need no extra rule: with vulnerabilityAlerts enabled, Renovate natively raises dedicated immediate PRs for vulnerable dependencies, bypassing the weekend schedule and the minor+patch group, labelled security.",
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch"
+      ]
+    },
+    {
+      "description": "Tauri major updates are NOT disabled — they are grouped: the JS side (@tauri-apps/*) and the Rust side (src-tauri/Cargo.toml) must land together in one coordinated PR.",
+      "matchPackageNames": [
+        "@tauri-apps/*"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "tauri major (js + rust)"
+    },
+    {
+      "description": "Rust half of the Tauri major-update group: tauri and tauri-build/plugins in src-tauri/Cargo.toml share the same groupName as the @tauri-apps/* JS packages so Renovate combines them into a single PR.",
+      "matchPackageNames": [
+        "tauri",
+        "tauri-build",
+        "tauri-plugin-deep-link",
+        "tauri-plugin-updater",
+        "tauri-plugin-notification",
+        "tauri-plugin-global-shortcut",
+        "tauri-plugin-window-state",
+        "tauri-plugin-single-instance"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "tauri major (js + rust)"
+    }
+  ]
+}
