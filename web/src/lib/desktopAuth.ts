@@ -472,6 +472,20 @@ export async function desktopSetGlobalShortcut(
 }
 
 /**
+ * Where the native side asks the SPA to go (src-tauri/src/navigation.rs): a
+ * `matterwave://` link opened from outside the app. The native side names
+ * the target; `desktopNavigation.ts` turns it into a route.
+ */
+export type DesktopNavigationTarget =
+  | { kind: "conversation"; id: string; message?: string }
+  | { kind: "share"; token: string };
+
+/** The waiting request, taken (each opens once), or null. */
+export async function desktopTakeNavigation(): Promise<DesktopNavigationTarget | null> {
+  return call<DesktopNavigationTarget | null>("take_navigation");
+}
+
+/**
  * Tell the native side that a generation finished, so it can raise the OS
  * notification -- which it does only when its window is unfocused, the one
  * state in which a reply can land unseen (`lib.rs`). Fire-and-forget: a

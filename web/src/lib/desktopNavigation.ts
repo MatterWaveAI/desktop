@@ -1,0 +1,60 @@
+/**
+ * The desktop shell sending the SPA somewhere: a `matterwave://` link
+ * opened from outside the app, warm or the one that launched it
+ * (src-tauri/src/navigation.rs). The native side keeps one request and
+ * announces it as the `navigate` event; this module takes it on start-up
+ * and on every event, so the launch link opens once the page is up and a
+ * later link opens exactly once.
+ *
+ * The native side has already refused every shape it does not know; the
+ * ids are checked again here because they become part of a URL.
+ */
+import {
+  desktopTakeNavigation,
+  isDesktop,
+  listenOrWarn,
+  type DesktopNavigationTarget,
+} from "./desktopAuth";
+
+/** The chat app's route (apps/registry.ts); a test holds the two together. */
+export const CHAT_PATH = "/apps/chat";
+
+const ID = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** The route for a target, or null for anything malformed. */
+export function hrefFor(target: DesktopNavigationTarget | null): string | null {
+  if (!target) return null;
+  switch (target.kind) {
+    case "conversation": {
+      if (!ID.test(target.id)) return null;
+      const message = target.message && ID.test(target.message) ? `&m=${target.message}` : "";
+      return `${CHAT_PATH}?c=${target.id}${message}`;
+    }
+    case "share":
+      return ID.test(target.token) ? `/share/${target.token}` : null;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Follow the native side's navigation requests for the life of the page.
+ * `navigate` is the router's; nothing happens in a browser.
+ */
+export function installDesktopNavigation(navigate: (href: string) => void): void {
+  if (!isDesktop()) return;
+  const open = () => {
+    desktopTakeNavigation()
+      .then((target) => {
+        const href = hrefFor(target);
+        if (href) navigate(href);
+      })
+      .catch((err: unknown) => {
+        console.warn("[desktop] could not read the link to open", err);
+      });
+  };
+  // Listen first, then take: a link that lands between the two is still
+  // announced, and an announced request already taken answers null.
+  listenOrWarn("navigate", open, () => {});
+  open();
+}

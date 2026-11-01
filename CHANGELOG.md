@@ -48,6 +48,14 @@ the API's `MW_RELEASE` all report it).
   drop for itself (`dragDropEnabled` defaults to on), so the composer's
   drop-to-attach and Settings → Data's drop-to-import never fired. The
   window now leaves drops to the webview.
+- **`matterwave://` links open what they name**: the native side emitted
+  every link other than the sign-in callback as an event nothing listened
+  to, and never read the link that launched the app. Conversation
+  (`matterwave://conversation/<id>`, optionally `?m=<message>`) and share
+  (`matterwave://share/<token>`) links are now parsed against an
+  allow-list (`src-tauri/src/navigation.rs`), kept until the SPA takes
+  them and routed there (`web/src/lib/desktopNavigation.ts`), warm or
+  cold; anything else opens nothing.
 
 ## [0.3.0] - 2026-10-31
 

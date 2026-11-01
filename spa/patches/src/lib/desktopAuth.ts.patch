@@ -1,8 +1,8 @@
 diff --git a/src/lib/desktopAuth.ts b/src/lib/desktopAuth.ts
-index e67f627..c0752a0 100644
+index e67f627..c3ae6be 100644
 --- a/src/lib/desktopAuth.ts
 +++ b/src/lib/desktopAuth.ts
-@@ -212,6 +212,281 @@ export async function desktopSignOut(): Promise<void> {
+@@ -212,6 +212,295 @@ export async function desktopSignOut(): Promise<void> {
    await call<void>("sign_out");
  }
  
@@ -263,6 +263,20 @@ index e67f627..c0752a0 100644
 +  shortcut: string | null,
 +): Promise<DesktopGlobalShortcutState> {
 +  return call<DesktopGlobalShortcutState>("set_global_shortcut", { shortcut });
++}
++
++/**
++ * Where the native side asks the SPA to go (src-tauri/src/navigation.rs): a
++ * `matterwave://` link opened from outside the app. The native side names
++ * the target; `desktopNavigation.ts` turns it into a route.
++ */
++export type DesktopNavigationTarget =
++  | { kind: "conversation"; id: string; message?: string }
++  | { kind: "share"; token: string };
++
++/** The waiting request, taken (each opens once), or null. */
++export async function desktopTakeNavigation(): Promise<DesktopNavigationTarget | null> {
++  return call<DesktopNavigationTarget | null>("take_navigation");
 +}
 +
 +/**

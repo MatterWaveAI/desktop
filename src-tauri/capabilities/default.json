@@ -23,6 +23,7 @@
     "allow-device-pairing-state",
     "allow-unpair-device",
     "allow-global-shortcut-state",
-    "allow-set-global-shortcut"
+    "allow-set-global-shortcut",
+    "allow-take-navigation"
   ]
 }

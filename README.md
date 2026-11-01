@@ -163,6 +163,17 @@ on the platform's Devices pane beside the paired boxes. Unpairing revokes with t
 unreachable; a re-pairing keeps the machine's device id. The section is open to any signed-in
 person because redemption needs no role; only minting codes is an admin act.
 
+## Links into the app
+
+`matterwave://conversation/<id>` (optionally `?m=<message id>`) opens that conversation and
+`matterwave://share/<token>` opens a shared one, whether the app is running or the link is what
+starts it. The native side parses the link against that allow-list (`src-tauri/src/navigation.rs`;
+anything else opens nothing, not even the window), keeps the target until the SPA takes it, and
+announces it as the `navigate` event; the SPA takes it on start-up and on every event and routes
+it itself (`web/src/lib/desktopNavigation.ts`). A link that needs a session while signed out is
+remembered by the front door and opened after sign-in, as in the browser.
+`matterwave://auth/callback` is the sign-in's own and never reaches the SPA.
+
 ## Notifications
 
 One OS notification, and one case for it: a generation finished while the window was not

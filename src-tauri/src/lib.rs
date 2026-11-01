@@ -11,6 +11,7 @@ mod device_pairing;
 mod hotkey;
 mod keychain;
 mod loopback;
+mod navigation;
 mod oidc;
 mod pkce;
 mod summon;
@@ -20,7 +21,7 @@ mod updater;
 use oidc::{NativeClient, RefreshError};
 use serde::Serialize;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tokens::TokenSet;
 use tokio::sync::{oneshot, Mutex, MutexGuard};
@@ -587,6 +588,16 @@ fn build_tray(app: &tauri::App) -> Result<(), tauri::Error> {
     Ok(())
 }
 
+/// The SPA's half of a navigation request (navigation.rs): the target a
+/// link asked for, taken, or nothing.
+#[tauri::command]
+fn take_navigation() -> Option<navigation::Target> {
+    navigation::take()
+}
+
+/// One `matterwave://` URL: the sign-in callback goes to the sign-in
+/// waiting for it; a conversation or share link goes to the SPA; anything
+/// else opens nothing, not even the window.
 fn route_deep_link(app: &AppHandle, url: &str) {
     if url.starts_with(DEEP_LINK_CALLBACK) {
         let sender = app
@@ -598,9 +609,10 @@ fn route_deep_link(app: &AppHandle, url: &str) {
         if let Some(tx) = sender {
             let _ = tx.send(url.to_string());
         }
+    } else if let Some(target) = navigation::from_deep_link(url) {
+        navigation::request(app, target);
     } else {
-        // Conversation links and the like belong to the SPA's router.
-        let _ = app.emit("deep-link", url.to_string());
+        return;
     }
     summon::summon_main(app);
 }
@@ -658,6 +670,14 @@ pub fn run() {
                     route_deep_link(&handle, url.as_str());
                 }
             });
+            // The link that launched the app (Windows and Linux hand it over
+            // as the first argument) was read before the listener above
+            // existed: route it now, and the SPA takes it once it is up.
+            if let Ok(Some(urls)) = app.deep_link().get_current() {
+                for url in urls {
+                    route_deep_link(app.handle(), url.as_str());
+                }
+            }
             if updater::enabled() {
                 updater::check_on_launch(app.handle().clone());
             }
@@ -688,7 +708,8 @@ pub fn run() {
             device_pairing_state,
             unpair_device,
             global_shortcut_state,
-            set_global_shortcut
+            set_global_shortcut,
+            take_navigation
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MatterWave desktop app");
