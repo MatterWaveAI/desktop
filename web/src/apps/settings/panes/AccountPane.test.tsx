@@ -51,6 +51,10 @@ const desktop = vi.hoisted(() => ({
   ),
   desktopClearApiKey: vi.fn(async () => undefined),
   desktopReload: vi.fn(() => {}),
+  desktopAppInfo: vi.fn<() => Promise<{ version: string; api_base_url: string | null } | null>>(
+    async () => ({ version: "0.3.0", api_base_url: "https://app.example.test" }),
+  ),
+  desktopOpenExternal: vi.fn<(url: string) => Promise<void>>(async () => undefined),
 }));
 
 vi.mock("../../../lib/desktopAuth", async (importOriginal) => {
@@ -1232,6 +1236,40 @@ describe("passkeys", () => {
     expect(calls.some((c) => c.method === "DELETE" && c.url === "/api/me/passkeys/pk-1")).toBe(true);
     expect(section().textContent).toContain("No passkeys.");
     expect(section().textContent).toContain("removed");
+  });
+
+  it("in the desktop app, offers to add one in the browser, on this pane of the web app", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    vi.mocked(passkeysSupported).mockReturnValue(false);
+    stubPasskeys([LAPTOP]);
+    mounted = await mount(<AccountPane />, principalWith([]), { passkey_login: true });
+    expect([...section().querySelectorAll("button")].map((b) => b.textContent)).not.toContain("Add a passkey");
+    await vi.waitFor(() => expect(buttonNamed(section(), "Add a passkey in your browser").disabled).toBe(false));
+    const add = buttonNamed(section(), "Add a passkey in your browser");
+    expect(section().querySelector("[data-mw-passkey-why]")?.textContent).toContain(
+      "Passkeys are created in your browser",
+    );
+    // The list stays: renaming and removing are API calls.
+    expect(section().textContent).toContain("Work laptop");
+
+    click(add);
+    await vi.waitFor(() =>
+      expect(desktop.desktopOpenExternal).toHaveBeenCalledWith("https://app.example.test/settings/account"),
+    );
+    desktop.isDesktop.mockReturnValue(false);
+    vi.mocked(passkeysSupported).mockReturnValue(true);
+  });
+
+  it("in a desktop build without an API base, keeps the browser button off", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopAppInfo.mockResolvedValueOnce({ version: "0.3.0", api_base_url: null });
+    vi.mocked(passkeysSupported).mockReturnValue(false);
+    stubPasskeys([]);
+    mounted = await mount(<AccountPane />, principalWith([]), { passkey_login: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(buttonNamed(section(), "Add a passkey in your browser").disabled).toBe(true);
+    desktop.isDesktop.mockReturnValue(false);
+    vi.mocked(passkeysSupported).mockReturnValue(true);
   });
 
   it("says why on a browser that cannot make passkeys", async () => {

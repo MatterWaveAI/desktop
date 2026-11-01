@@ -34,12 +34,14 @@ import {
 import { PasskeyCancelled, passkeysSupported } from "../../../lib/webauthn";
 import {
   desktopApiKeyState,
+  desktopAppInfo,
   desktopClearApiKey,
   desktopReload,
   desktopSetApiKey,
   isDesktop,
   type DesktopApiKeyState,
 } from "../../../lib/desktopAuth";
+import { openOutside } from "../../../lib/desktopLinks";
 import { useShell } from "../../../shell/shellContext";
 import type { SessionInfo } from "../../../types";
 import { LearnMore, PaneSection } from "../PaneSection";
@@ -1303,12 +1305,14 @@ type PasskeysView =
  * way in, and removing the last one leaves the password sign-in as it
  * was. Hidden with a line saying why on a browser that cannot take part.
  *
- * In the desktop shell the "Add a passkey" option is gated off
+ * In the desktop shell a passkey cannot be made in the window
  * (`passkeysSupported` is false there): a ceremony is bound to the origin
  * it runs in and the webview's is not the rpId passkeys are made for, so
- * the browser refuses it and the provider would refuse it anyway. The
- * list, rename and remove stay: they are API calls, which the bearer
- * carries as well as the cookie does.
+ * the browser refuses it and the provider would refuse it anyway. The add
+ * button becomes "Add a passkey in your browser" instead, which opens this
+ * pane on the web app (`AddPasskeyInBrowser`). The list, rename and
+ * remove stay: they are API calls, which the bearer carries as well as the
+ * cookie does.
  */
 export function PasskeysCard() {
   const { t } = useLingui();
@@ -1586,22 +1590,26 @@ export function PasskeysCard() {
             )}
             {view.kind === "list" && list !== null && (
               <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || !supported || full}
-                  onClick={() => {
-                    setError(null);
-                    setNotice(null);
-                    setView({ kind: "add" });
-                  }}
-                >
-                  <Trans>Add a passkey</Trans>
-                </Button>
+                {isDesktop() ? (
+                  <AddPasskeyInBrowser disabled={busy || full} />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || !supported || full}
+                    onClick={() => {
+                      setError(null);
+                      setNotice(null);
+                      setView({ kind: "add" });
+                    }}
+                  >
+                    <Trans>Add a passkey</Trans>
+                  </Button>
+                )}
                 {!supported && (
-                  <span className="text-xs text-mw-text-muted">
+                  <span className="text-xs text-mw-text-muted" data-mw-passkey-why="">
                     {isDesktop() ? (
-                      "Passkeys are made in a browser, not in the desktop app: the window's origin is not the one they are bound to. Add one in the web app and it signs you in from the browser."
+                      "Passkeys are created in your browser: this window's address is not the one a passkey is bound to. One added there also signs you in to this app, whose sign-in runs in your browser too."
                     ) : (
                       <Trans>
                         This browser cannot make passkeys here; a secure (https) connection and a
@@ -1751,6 +1759,40 @@ export function AccountPane() {
 
       <DesktopApiKeyCard />
     </div>
+  );
+}
+
+/**
+ * The desktop's way to a new passkey: this pane on the web app, in the
+ * system browser, where the ceremony runs on the origin passkeys are bound
+ * to. The address is the API base the app was built with -- the platform
+ * serves the web app from the same origin. A build without one has nowhere
+ * to send the person, so the button stays off.
+ */
+function AddPasskeyInBrowser(props: { disabled: boolean }) {
+  const [base, setBase] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    desktopAppInfo()
+      .then((info) => {
+        if (alive) setBase(info?.api_base_url ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={props.disabled || base === null}
+      onClick={() => {
+        if (base) openOutside(new URL("/settings/account", base).toString());
+      }}
+    >
+      Add a passkey in your browser
+    </Button>
   );
 }
 

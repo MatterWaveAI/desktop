@@ -174,6 +174,12 @@ tokens involved. Only the id half is shown again (`api_key_state`). Removing the
 to the browser session -- which stays signed in underneath -- while `sign_out` clears key and
 tokens together. OIDC stays the default: a completed browser sign-in supersedes a stored key.
 
+Passkeys are made in the browser, not in the window: a passkey is bound to the platform's origin and
+the webview's is the app's own. Settings → Account lists, renames and removes them as on the web,
+and its "Add a passkey in your browser" opens that pane of the web app (`MW_DESKTOP_BASE_URL` +
+`/settings/account`) in the system browser. A passkey added there also serves the app, whose
+sign-in runs in the browser.
+
 The webview may call only the app's own commands and the event plugin's listen and unlisten
 (`src-tauri/capabilities/default.json`, one `allow-<command>` per command declared in
 `src-tauri/build.rs`); no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP

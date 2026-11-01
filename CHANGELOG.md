@@ -17,6 +17,10 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   recent conversations, `Ctrl/Cmd` with `+`, `-` and `0` to zoom, and a
   Preferences switch to open the app at login. A click on the
   reply-ready notification opens its conversation.
+- **Add a passkey from the desktop app**: Settings → Account offers
+  "Add a passkey in your browser", which opens the same pane of the web
+  app in the system browser, where passkeys can be made; the note beside
+  it says why the window cannot make one itself.
 
 ### Changed
 
