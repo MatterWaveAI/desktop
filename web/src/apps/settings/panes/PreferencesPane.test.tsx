@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { activateLocale, SOURCE_LOCALE } from "../../../i18n/locale";
+import { activateLocale, followAccountLocale, SOURCE_LOCALE } from "../../../i18n/locale";
 import type { Preferences } from "../../../types";
 import { PreferencesPane } from "./PreferencesPane";
 import { act } from "react";
@@ -36,6 +36,8 @@ const desktop = vi.hoisted(() => ({
     accelerator: shortcut,
     default: "CommandOrControl+Shift+M",
   })),
+  desktopAutostartState: vi.fn<() => Promise<boolean>>(async () => false),
+  desktopSetAutostart: vi.fn<(enabled: boolean) => Promise<boolean>>(async (enabled) => enabled),
 }));
 
 vi.mock("../../../lib/desktopAuth", async (importOriginal) => {
@@ -66,6 +68,8 @@ afterEach(async () => {
     accelerator: shortcut,
     default: "CommandOrControl+Shift+M",
   }));
+  desktop.desktopAutostartState.mockResolvedValue(false);
+  desktop.desktopSetAutostart.mockImplementation(async (enabled) => enabled);
   await activateLocale(SOURCE_LOCALE);
 });
 
@@ -155,7 +159,8 @@ describe("email preferences", () => {
     expect(mounted.container.querySelector("[role='alert']")?.textContent).toContain(
       "Preferences unavailable.",
     );
-    expect(mounted.container.querySelector("input[type='checkbox']")).toBeNull();
+    // No email form; the device-only answer-ready toggles are not part of it.
+    expect(mounted.container.querySelector("form input[type='checkbox']")).toBeNull();
   });
 });
 
@@ -172,9 +177,12 @@ describe("the language", () => {
    * microtasks.
    */
   async function settle(done: () => boolean): Promise<void> {
-    for (let i = 0; i < 50 && !done(); i += 1) {
+    // The es-ES chunk is the whole catalogue, compiled on import: under a
+    // full parallel run that alone can take a second or more.
+    const deadline = Date.now() + 4_000;
+    while (!done() && Date.now() < deadline) {
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await new Promise((resolve) => setTimeout(resolve, 10));
       });
     }
   }
@@ -219,6 +227,54 @@ describe("the language", () => {
     // re-renders here: the harness mounts no I18nProvider, which in the app
     // is what re-renders everything else on a switch.)
     expect(mounted.container.textContent).toContain("Guardado en tu cuenta.");
+  });
+
+  it("keeps a language picked while the account's saved locale is still on its way", async () => {
+    stubApi(({ method, url, body }) => {
+      if (method === "GET" && url === "/api/me/preferences") return { status: 200, body: STORED };
+      if (method === "PUT" && url === "/api/me/preferences") return { status: 200, body };
+      return undefined;
+    });
+    // Boot asks the account for its locale as the session lands; the answer
+    // (en-US, saved on another device) is slow, and Settings opens first.
+    let answer!: (preferences: Preferences) => void;
+    const late = new Promise<Preferences>((resolve) => {
+      answer = resolve;
+    });
+    const following = followAccountLocale(() => late);
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+
+    await chooseLanguage("Español (borrador)");
+    await settle(() => mounted!.container.textContent?.includes("Guardado en tu cuenta.") ?? false);
+    await act(async () => {
+      answer({ ...STORED, locale: "en-US" });
+      await following;
+    });
+
+    expect(localStorage.getItem("mw-locale")).toBe("es-ES");
+    expect(document.documentElement.lang).toBe("es-ES");
+    // The select is labelled in Spanish by now, so it is found by its id.
+    expect(selectShown(mounted.container.querySelector<HTMLElement>("#preferences-language")!)).toBe(
+      "Español (borrador)",
+    );
+  });
+
+  it("puts the current language back with an email change, not the one loaded with the page", async () => {
+    const calls = stubApi(({ method, url, body }) => {
+      if (method === "GET" && url === "/api/me/preferences") return { status: 200, body: STORED };
+      if (method === "PUT" && url === "/api/me/preferences") return { status: 200, body };
+      return undefined;
+    });
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await chooseLanguage("English (US)");
+    await settle(() => mounted!.container.textContent?.includes("Saved to your account.") ?? false);
+
+    click(toggle("Product updates"));
+    submit(buttonNamed(mounted.container, "Save preferences").form!);
+    await flush();
+
+    const puts = calls.filter((c) => c.method === "PUT");
+    expect(puts.at(-1)?.body).toMatchObject({ locale: "en-US" });
   });
 
   it("keeps the device's choice and says so when the account cannot be updated", async () => {
@@ -325,6 +381,60 @@ describe("read aloud", () => {
     expect(mounted.container.textContent).toContain(
       "This voice is not available right now; Automatic is used until it is.",
     );
+  });
+});
+
+describe("start at login (desktop only)", () => {
+  function prefsAnswer() {
+    stubApi(({ method, url }) =>
+      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
+    );
+  }
+
+  it("is absent in a browser, and in the app shows what the OS reports", async () => {
+    prefsAnswer();
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await flush();
+    expect(mounted.container.textContent).not.toContain("Start with your computer");
+    expect(desktop.desktopAutostartState).not.toHaveBeenCalled();
+
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopAutostartState.mockResolvedValue(true);
+    mounted.unmount();
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await flush();
+    expect(mounted.container.textContent).toContain("Start with your computer");
+    expect(toggle("Open MatterWave at login").checked).toBe(true);
+  });
+
+  it("turns it on and off through the native side, and shows the state it answers", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    prefsAnswer();
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await flush();
+
+    await act(async () => toggle("Open MatterWave at login").click());
+    expect(desktop.desktopSetAutostart).toHaveBeenCalledExactlyOnceWith(true);
+    expect(toggle("Open MatterWave at login").checked).toBe(true);
+    expect(mounted.container.textContent).toContain("On: the app starts when you log in");
+
+    // The OS kept it on (a policy, say): the switch follows the OS, not the click.
+    desktop.desktopSetAutostart.mockResolvedValue(true);
+    await act(async () => toggle("Open MatterWave at login").click());
+    expect(desktop.desktopSetAutostart).toHaveBeenLastCalledWith(false);
+    expect(toggle("Open MatterWave at login").checked).toBe(true);
+  });
+
+  it("says why when the OS refuses", async () => {
+    desktop.isDesktop.mockReturnValue(true);
+    desktop.desktopSetAutostart.mockRejectedValue("access denied");
+    prefsAnswer();
+    mounted = await mount(<PreferencesPane />, principalWith([]));
+    await flush();
+
+    await act(async () => toggle("Open MatterWave at login").click());
+    expect(mounted.container.querySelector("[role='alert']")?.textContent).toBe("access denied");
+    expect(toggle("Open MatterWave at login").checked).toBe(false);
   });
 });
 

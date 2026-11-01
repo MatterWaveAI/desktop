@@ -1,3 +1,4 @@
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   Dialog,
   DialogContent,
@@ -38,30 +39,39 @@ export function ShortcutsHelp(props: {
   /** Overrides platform detection; tests pass it, the shell does not. */
   mac?: boolean;
 }) {
+  const { i18n } = useLingui();
   const mac = props.mac ?? isMacPlatform();
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent showCloseButton={false} data-mw-shortcuts-help="">
         <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
+          <DialogTitle>
+            <Trans>Keyboard shortcuts</Trans>
+          </DialogTitle>
           <DialogDescription>
-            Shortcuts with a modifier, and the Esc ones, work while you are typing; the others wait
-            until you are not.
+            <Trans>
+              Shortcuts with a modifier, and the Esc ones, work while you are typing; the others wait
+              until you are not.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <dl className="flex flex-col gap-2">
           {SHORTCUTS.map((shortcut) => (
             <div key={shortcut.id} className="flex items-start justify-between gap-4">
               <dt className="text-sm">
-                {shortcut.label}
+                {i18n._(shortcut.label)}
                 {shortcut.hint && (
-                  <span className="block text-xs text-mw-text-muted">{shortcut.hint}</span>
+                  <span className="block text-xs text-mw-text-muted">{i18n._(shortcut.hint)}</span>
                 )}
               </dt>
               <dd className="flex shrink-0 items-center gap-1.5">
                 {shortcut.chords.map((chord, index) => (
                   <span key={index} className="contents">
-                    {index > 0 && <span className="text-xs text-mw-text-muted">or</span>}
+                    {index > 0 && (
+                      <span className="text-xs text-mw-text-muted">
+                        <Trans>or</Trans>
+                      </span>
+                    )}
                     <ChordKeys chord={chord} mac={mac} />
                   </span>
                 ))}
@@ -73,10 +83,10 @@ export function ShortcutsHelp(props: {
           {/* A plain anchor: this dialog renders in unit tests without a
               RouterProvider, where <Link> throws. */}
           <a href={HELP_PATH} className="text-sm text-mw-text-muted underline hover:text-mw-text">
-            Help: reporting, exporting, usage
+            <Trans>Help: reporting, exporting, usage</Trans>
           </a>
           <Button variant="outline" onClick={() => props.onOpenChange(false)}>
-            Close
+            <Trans>Close</Trans>
           </Button>
         </DialogFooter>
       </DialogContent>

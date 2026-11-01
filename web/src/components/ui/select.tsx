@@ -63,12 +63,20 @@ function SelectContent({
   align = "center",
   alignOffset = 0,
   alignItemWithTrigger = true,
+  footer,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
     SelectPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
-  >) {
+  > & {
+    /**
+     * Below the list and outside it: a note or a link about the choices
+     * (a plan that would unlock more of them). Outside the listbox so it
+     * may hold a link, which an option may not.
+     */
+    footer?: React.ReactNode
+  }) {
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Positioner
@@ -88,6 +96,7 @@ function SelectContent({
           <SelectScrollUpButton />
           <SelectPrimitive.List>{children}</SelectPrimitive.List>
           <SelectScrollDownButton />
+          {footer}
         </SelectPrimitive.Popup>
       </SelectPrimitive.Positioner>
     </SelectPrimitive.Portal>
@@ -110,8 +119,15 @@ function SelectLabel({
 function SelectItem({
   className,
   children,
+  description,
   ...props
-}: SelectPrimitive.Item.Props) {
+}: SelectPrimitive.Item.Props & {
+  /**
+   * A second, muted line under the option's name (a price, a warning).
+   * Outside the item text, so the trigger's value shows the name alone.
+   */
+  description?: React.ReactNode
+}) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
@@ -121,9 +137,20 @@ function SelectItem({
       )}
       {...props}
     >
-      <SelectPrimitive.ItemText className="flex flex-1 shrink-0 gap-2 whitespace-nowrap">
-        {children}
-      </SelectPrimitive.ItemText>
+      {description === undefined ? (
+        <SelectPrimitive.ItemText className="flex flex-1 shrink-0 gap-2 whitespace-nowrap">
+          {children}
+        </SelectPrimitive.ItemText>
+      ) : (
+        <div data-slot="select-item-body" className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <SelectPrimitive.ItemText className="flex gap-2 whitespace-nowrap">
+            {children}
+          </SelectPrimitive.ItemText>
+          <div data-slot="select-item-description" className="text-xs whitespace-normal text-mw-text-muted">
+            {description}
+          </div>
+        </div>
+      )}
       <SelectPrimitive.ItemIndicator
         render={
           <span className="pointer-events-none absolute right-2.5 flex size-4 items-center justify-center text-mw-link" />

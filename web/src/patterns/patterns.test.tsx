@@ -73,7 +73,9 @@ describe("ErrorState", () => {
 
   it("renders without a retry action when none is given", () => {
     render(<ErrorState message="Gone." />);
-    expect(container!.querySelector("button")).toBeNull();
+    expect(container!.querySelector("button:not([data-get-help])")).toBeNull();
+    // Get help is there whether or not a retry is.
+    expect(container!.querySelector("[data-get-help]")).not.toBeNull();
   });
 });
 

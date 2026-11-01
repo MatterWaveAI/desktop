@@ -10,6 +10,7 @@ import { SettingsPage } from "./SettingsPage";
 import { PaneActions } from "./paneActions";
 import { paneComponents } from "./paneComponents";
 import { settingsPanes } from "./panes";
+import { i18n } from "../../i18n/runtime";
 
 /**
  * Every pane is reachable by URL, and deletion cannot fire
@@ -202,10 +203,10 @@ describe("each pane is reachable by URL", () => {
     const pane = settingsPanes.find((p) => p.id === id)!;
     const current = container!.querySelector("a[aria-current='page']");
     expect(current?.getAttribute("href")).toBe(`/settings/${id}`);
-    expect(current?.textContent).toBe(pane.title);
+    expect(current?.textContent).toBe(i18n._(pane.title));
     // The pane's title is the page's h1, and names the region the pane is in.
     const h1 = container!.querySelector("h1")!;
-    expect(h1.textContent).toBe(pane.title);
+    expect(h1.textContent).toBe(i18n._(pane.title));
     expect(container!.querySelector(`section[aria-labelledby='${h1.id}']`)).not.toBeNull();
     expect(container!.querySelectorAll("h1")).toHaveLength(1);
   });

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BillingStatus, DunningState, UsageSummary } from "../lib/billing";
 import { BillingBanner } from "./BillingBanner";
+import { formatDate } from "../i18n/format";
 import { noticeFor } from "./billingNotice";
 import { cleanup, jsonResponse, mount, stubApi, view } from "./frontDoorHarness";
 
@@ -134,10 +135,11 @@ describe("noticeFor", () => {
       pay_url: "https://invoice.stripe.test/i/in_1",
       ...over,
     });
-    const limitedOn = new Date("2026-10-15T09:00:00+00:00").toLocaleDateString(undefined, {
+    const limitedOn = formatDate("2026-10-15T09:00:00+00:00", {
       day: "numeric",
       month: "short",
       year: "numeric",
+      timeZone: "UTC",
     });
     const exhausted = usage({ used: 30_000_000, percent: 150, exhausted: true });
 

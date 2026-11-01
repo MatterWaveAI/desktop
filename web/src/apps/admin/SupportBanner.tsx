@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Trans } from "@lingui/react/macro";
 import { Button } from "../../components/ui/button";
+import { formatTime } from "../../i18n/format";
 import { failureMessage } from "../../shell/authForms";
 import { useShell } from "../../shell/shellContext";
 import { endSupport, fetchSupportSession, navigateTo, type SupportSession } from "./adminApi";
@@ -47,6 +49,8 @@ export function SupportBanner() {
   }
 
   const until = new Date(session.expires_at);
+  const orgName = session.org_name;
+  const untilTime = formatTime(until);
   return (
     <div
       role="status"
@@ -54,14 +58,17 @@ export function SupportBanner() {
       className="flex items-center gap-3 border-b border-mw-danger bg-mw-danger-subtle px-3 py-1.5 text-sm text-mw-danger"
     >
       <p className="min-w-0 flex-1">
-        Viewing {session.org_name} as support — read only
+        <Trans>Viewing {orgName} as support — read only</Trans>
         {!Number.isNaN(until.getTime()) && (
-          <span className="text-xs"> (until {until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })})</span>
+          <span className="text-xs">
+            {" "}
+            <Trans>(until {untilTime})</Trans>
+          </span>
         )}
         {error && <span role="alert"> · {error}</span>}
       </p>
       <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void exit()}>
-        Exit support
+        <Trans>Exit support</Trans>
       </Button>
     </div>
   );

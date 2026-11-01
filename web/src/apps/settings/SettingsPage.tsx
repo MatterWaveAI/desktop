@@ -6,7 +6,8 @@ import { useState } from "react";
 import { navItemVariants } from "../../components/ui/nav-item";
 import { paneComponents } from "./paneComponents";
 import { PaneActionsSlot } from "./paneActions";
-import { SETTINGS_GROUPS, findPane, settingsPanes } from "./panes";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { SETTINGS_GROUPS, SETTINGS_GROUP_LABELS, findPane, settingsPanes } from "./panes";
 
 /**
  * The settings page. Not a settings *framework* — the slots an installed
@@ -46,7 +47,9 @@ import { SETTINGS_GROUPS, findPane, settingsPanes } from "./panes";
  * pane crashing leaves the nav working and clears when you switch away.
  */
 export function SettingsPage(props: { paneId?: string }) {
+  const { t, i18n } = useLingui();
   const active = findPane(props.paneId);
+  const activeTitle = i18n._(active.title);
   const Pane = paneComponents[active.id];
   // The header's action slot: a pane portals its primary action into it.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
@@ -61,7 +64,7 @@ export function SettingsPage(props: { paneId?: string }) {
   return (
     <div className="h-full overflow-y-auto">
       <div className="flex min-h-full flex-col md:flex-row">
-        <TabStrip aria-label="Settings sections" className="mx-4 mt-3 md:hidden">
+        <TabStrip aria-label={t`Settings sections`} className="mx-4 mt-3 md:hidden">
           {/* One flat list, not fragments per group: the strip finds the
               active item among its direct children to scroll it into view. */}
           {settingsPanes.flatMap((pane, index) => [
@@ -73,18 +76,18 @@ export function SettingsPage(props: { paneId?: string }) {
                     data-slot="tab-strip-group"
                     className="shrink-0 self-center pr-1 pl-3 text-xs font-medium whitespace-nowrap text-mw-text-muted first:pl-1"
                   >
-                    {pane.group}
+                    {i18n._(SETTINGS_GROUP_LABELS[pane.group])}
                   </span>,
                 ]
               : []),
             <TabStripItem key={pane.id} active={pane.id === active.id} render={link(pane.id)}>
-              {pane.title}
+              {i18n._(pane.title)}
             </TabStripItem>,
           ])}
         </TabStrip>
 
         <nav
-          aria-label="Settings sections"
+          aria-label={t`Settings sections`}
           data-layout="side"
           className="hidden w-60 shrink-0 border-r border-border bg-mw-surface-raised md:block lg:w-66"
         >
@@ -94,12 +97,17 @@ export function SettingsPage(props: { paneId?: string }) {
               className="inline-flex min-h-10 items-center gap-2 rounded-md px-2 text-sm text-mw-text-secondary outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >
               <ChevronLeftIcon aria-hidden className="size-4" />
-              Back to chat
+              <Trans>Back to chat</Trans>
             </Link>
             {SETTINGS_GROUPS.map((group) => (
-              <div key={group} role="group" aria-label={group} className="flex flex-col gap-0.5">
+              <div
+                key={group}
+                role="group"
+                aria-label={i18n._(SETTINGS_GROUP_LABELS[group])}
+                className="flex flex-col gap-0.5"
+              >
                 <p aria-hidden="true" className="px-2.5 pb-1.5 text-xs font-medium text-mw-text-muted">
-                  {group}
+                  {i18n._(SETTINGS_GROUP_LABELS[group])}
                 </p>
                 {settingsPanes
                   .filter((pane) => pane.group === group)
@@ -113,7 +121,7 @@ export function SettingsPage(props: { paneId?: string }) {
                         aria-current={selected ? "page" : undefined}
                         className={navItemVariants({ active: selected })}
                       >
-                        {pane.title}
+                        {i18n._(pane.title)}
                       </Link>
                     );
                   })}
@@ -133,9 +141,9 @@ export function SettingsPage(props: { paneId?: string }) {
                   id="settings-pane-title"
                   className="font-display text-display-md text-foreground md:text-display-lg"
                 >
-                  {active.title}
+                  {activeTitle}
                 </h1>
-                <p className="mt-1.5 text-mw-text-subtle">{active.description}</p>
+                <p className="mt-1.5 text-mw-text-subtle">{i18n._(active.description)}</p>
               </div>
               <div
                 ref={setActionsSlot}
@@ -144,7 +152,7 @@ export function SettingsPage(props: { paneId?: string }) {
               />
             </header>
             <PaneActionsSlot.Provider value={actionsSlot}>
-              <ErrorBoundary name={active.title} resetKeys={[active.id]}>
+              <ErrorBoundary name={activeTitle} resetKeys={[active.id]}>
                 {Pane && <Pane />}
               </ErrorBoundary>
             </PaneActionsSlot.Provider>

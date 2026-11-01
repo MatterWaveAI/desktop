@@ -1,3 +1,5 @@
+import { t } from "@lingui/core/macro";
+import { formatDate as formatLocaleDate } from "../../i18n/format";
 import { ApiError, apiFetch } from "../../lib/api";
 
 /**
@@ -86,11 +88,33 @@ export interface ExpiryPreset {
   readonly seconds: number | null;
 }
 
+// Getters, so the label is read in the active language when the dialog
+// renders rather than once when this module loads, before any catalogue.
 export const EXPIRY_PRESETS: readonly ExpiryPreset[] = [
-  { label: "1 day", seconds: 24 * 60 * 60 },
-  { label: "7 days", seconds: 7 * 24 * 60 * 60 },
-  { label: "30 days", seconds: 30 * 24 * 60 * 60 },
-  { label: "Until revoked", seconds: null },
+  {
+    get label() {
+      return t`1 day`;
+    },
+    seconds: 24 * 60 * 60,
+  },
+  {
+    get label() {
+      return t`7 days`;
+    },
+    seconds: 7 * 24 * 60 * 60,
+  },
+  {
+    get label() {
+      return t`30 days`;
+    },
+    seconds: 30 * 24 * 60 * 60,
+  },
+  {
+    get label() {
+      return t`Until revoked`;
+    },
+    seconds: null,
+  },
 ];
 
 export const DEFAULT_EXPIRY_INDEX = 1;
@@ -157,8 +181,8 @@ export function revokeOrgShare(shareId: string): Promise<{ status: "revoked" }> 
 /** What switching sharing off does, in the words the pane shows. */
 export function sharingStatusLine(enabled: boolean): string {
   return enabled
-    ? "Members can share a conversation by public link. Each link is a snapshot, and whoever made it can revoke it."
-    : "Sharing by link is off. Nobody can make a new link, and every existing link stops opening until sharing is switched back on.";
+    ? t`Members can share a conversation by public link. Each link is a snapshot, and whoever made it can revoke it.`
+    : t`Sharing by link is off. Nobody can make a new link, and every existing link stops opening until sharing is switched back on.`;
 }
 
 // --- helpers ------------------------------------------------------------------------
@@ -176,27 +200,25 @@ export const SHARE_PATH_PREFIX = "/share/";
 
 /** Short, for a list: "Expires 12 Oct 2026" / "Until revoked" / "Revoked" / "Expired". */
 export function describeExpiry(share: ShareRecord): string {
-  if (share.status === "revoked") return "Revoked";
-  if (share.status === "expired") return "Expired";
-  if (share.expires_at === null) return "Until revoked";
-  return `Expires ${formatDate(share.expires_at)}`;
+  if (share.status === "revoked") return t`Revoked`;
+  if (share.status === "expired") return t`Expired`;
+  if (share.expires_at === null) return t`Until revoked`;
+  const expiresOn = formatDate(share.expires_at);
+  return t`Expires ${expiresOn}`;
 }
 
+/** "12 Oct 2026", in the reader's language. */
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatLocaleDate(iso, { day: "numeric", month: "short", year: "numeric" });
 }
 
 /** The line to show when a share request failed; the 404 is the one worth naming. */
 export function shareFailureMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 404) return "This conversation could not be found.";
+    if (err.status === 404) return t`This conversation could not be found.`;
     if (err.status === 403) return err.message;
     if (err.status === 422) return err.message;
     if (err.status === 429) return err.message;
   }
-  return "The link could not be created. Try again in a moment.";
+  return t`The link could not be created. Try again in a moment.`;
 }

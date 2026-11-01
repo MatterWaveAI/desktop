@@ -1,6 +1,6 @@
 /**
- * The SPA inside the desktop shell (clients/desktop): a bearer instead of the
- * cookie.
+ * The SPA inside the desktop shell (MatterWaveAI/desktop): a bearer instead of
+ * the cookie.
  *
  * In a browser the session is the BFF's httponly cookie. The desktop app
  * bundles this build, so its origin is the webview's (`tauri://localhost`,
@@ -341,27 +341,58 @@ interface TauriInternals {
   transformCallback?: (callback: (event: TauriEvent) => void, once?: boolean) => number;
 }
 
+/** What the event plugin injects beside the internals: its own listener table. */
+interface TauriEventInternals {
+  unregisterListener?: (event: string, eventId: number) => void;
+}
+
 /**
  * One native event, through the same bridge the commands use: the event
- * plugin's listen/unlisten over `__TAURI_INTERNALS__`, with the callback
- * registered the way `@tauri-apps/api/event` does it. Without internals
- * there is nothing to hear -- a browser, or a bridge this build does not
- * know -- and the unlisten is a no-op.
+ * plugin's listen/unlisten over `__TAURI_INTERNALS__`, called the way
+ * `@tauri-apps/api/event` calls them -- the capability file must allow both
+ * (`core:event:allow-listen`, `core:event:allow-unlisten`), or every event
+ * is refused. Without internals there is nothing to hear -- a browser, or
+ * a bridge this build does not know -- and the unlisten is a no-op.
  */
-async function listenEvent(event: string, cb: (payload: unknown) => void): Promise<UnlistenFn> {
+export async function listenEvent(
+  event: string,
+  cb: (payload: unknown) => void,
+): Promise<UnlistenFn> {
   const internals = (window as unknown as TauriWindow).__TAURI_INTERNALS__ as
     | TauriInternals
     | undefined;
   if (!internals?.invoke || !internals.transformCallback) return () => {};
   const handler = internals.transformCallback((e) => cb(e.payload));
-  const id = await internals.invoke<number>("plugin:event|listen", {
+  const eventId = await internals.invoke<number>("plugin:event|listen", {
     event,
     target: { kind: "Any" },
     handler,
   });
   return () => {
-    internals.invoke("plugin:event|unlisten", { id }).catch(() => {});
+    const plugin = (window as unknown as { __TAURI_EVENT_PLUGIN_INTERNALS__?: TauriEventInternals })
+      .__TAURI_EVENT_PLUGIN_INTERNALS__;
+    plugin?.unregisterListener?.(event, eventId);
+    internals.invoke("plugin:event|unlisten", { event, eventId }).catch((err: unknown) => {
+      console.warn(`[desktop] could not stop listening for ${event}`, err);
+    });
   };
+}
+
+/**
+ * Listen, and say so when the bridge refuses: a refused listen is a
+ * capability missing from the build, and swallowing it is how update
+ * events once vanished without a trace.
+ */
+export function listenOrWarn(
+  event: string,
+  cb: (payload: unknown) => void,
+  onUnlisten: (unlisten: UnlistenFn) => void,
+): void {
+  listenEvent(event, cb)
+    .then(onUnlisten)
+    .catch((err: unknown) => {
+      console.warn(`[desktop] could not listen for ${event}`, err);
+    });
 }
 
 /**
@@ -375,12 +406,10 @@ export function watchUpdates(handlers: UpdateHandlers): UnlistenFn {
   const unlistens: UnlistenFn[] = [];
   let cancelled = false;
   const add = (event: string, cb: (payload: unknown) => void) => {
-    listenEvent(event, cb)
-      .then((unlisten) => {
-        if (cancelled) unlisten();
-        else unlistens.push(unlisten);
-      })
-      .catch(() => {});
+    listenOrWarn(event, cb, (unlisten) => {
+      if (cancelled) unlisten();
+      else unlistens.push(unlisten);
+    });
   };
   if (handlers.onAvailable) add("update-available", (p) => handlers.onAvailable?.(String(p)));
   if (handlers.onProgress)
@@ -455,18 +484,71 @@ export async function desktopSetGlobalShortcut(
 }
 
 /**
+ * Open a web or mail link in the system browser (`open_external`): the
+ * native side refuses any other scheme. Resolves once the OS has it.
+ */
+export async function desktopOpenExternal(url: string): Promise<void> {
+  await call<void>("open_external", { url });
+}
+
+/**
+ * Where the native side asks the SPA to go (src-tauri/src/navigation.rs): a
+ * `matterwave://` link opened from outside the app. The native side names
+ * the target; `desktopNavigation.ts` turns it into a route.
+ */
+export type DesktopNavigationTarget =
+  | { kind: "conversation"; id: string; message?: string }
+  | { kind: "share"; token: string }
+  | { kind: "billing" }
+  | { kind: "new-chat" }
+  | { kind: "settings" };
+
+/**
+ * Whether the app starts at login (the OS's own login items), and the
+ * switch for it; the answer is the state after.
+ */
+export async function desktopAutostartState(): Promise<boolean> {
+  return call<boolean>("autostart_state");
+}
+
+export async function desktopSetAutostart(enabled: boolean): Promise<boolean> {
+  return call<boolean>("set_autostart", { enabled });
+}
+
+/** A conversation the tray lists: its id and title, nothing else. */
+export interface DesktopRecentConversation {
+  id: string;
+  title: string;
+}
+
+/** Hand the tray the conversations the sidebar lists first. */
+export async function desktopSetRecentConversations(
+  conversations: DesktopRecentConversation[],
+): Promise<void> {
+  await call<void>("set_recent_conversations", { conversations });
+}
+
+/** The waiting request, taken (each opens once), or null. */
+export async function desktopTakeNavigation(): Promise<DesktopNavigationTarget | null> {
+  return call<DesktopNavigationTarget | null>("take_navigation");
+}
+
+/**
  * Tell the native side that a generation finished, so it can raise the OS
  * notification -- which it does only when its window is unfocused, the one
  * state in which a reply can land unseen (`lib.rs`). Fire-and-forget: a
  * notification is never worth an error path, and in a browser there is no
  * native side, so this is nothing at all. The copy is fixed here; reply
- * content never goes into a notification.
+ * content never goes into a notification; its conversation's id goes along,
+ * so a click on the notification opens it.
  */
-export function notifyGenerationComplete(): void {
+export function notifyGenerationComplete(conversationId?: string | null): void {
   if (!isDesktop()) return;
   call<void>("notify_generation_complete", {
     title: "MatterWave",
     body: "Your reply is ready.",
+    // Which conversation a click on the notification opens; the id only.
+    conversationId: conversationId ?? null,
   }).catch(() => {});
 }
 

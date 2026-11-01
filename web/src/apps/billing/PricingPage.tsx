@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { plural, t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -17,10 +17,10 @@ import {
   fetchPlans,
   formatPrice,
   formatTokenAllowance,
-  ANNUAL_OVERAGE_NOTE,
+  ANNUAL_OVERAGE_NOTE_MSG,
   overageSummary,
-  PARTNER_MODELS_HEADING,
-  PARTNER_MODELS_NOTE,
+  PARTNER_MODELS_HEADING_MSG,
+  PARTNER_MODELS_NOTE_MSG,
   planAllowance,
   planModelLabels,
   splitPartners,
@@ -30,6 +30,7 @@ import {
   type PlanCatalog,
   type PlanSummary,
 } from "../../lib/billing";
+import { goToStripe, useRefreshOnReturn } from "../../lib/desktopBilling";
 import { EnterpriseContact } from "./EnterpriseContact";
 import { ModelPriceTable } from "./PriceTables";
 import { ScrollFade } from "../../components/ui/scroll-fade";
@@ -87,7 +88,7 @@ function limitLine(plan: PlanSummary, catalog: PlanCatalog, annual: boolean): st
 }
 
 export function PricingPage() {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   // Null outside the shell: no session, or a session held at a gate.
   const shell = useContext(ShellContext);
   // Non-null wherever there is a principal, gated or not.
@@ -105,7 +106,8 @@ export function PricingPage() {
   const [statusVersion, setStatusVersion] = useState(0);
   const [annual, setAnnual] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [checkout, setCheckout] = useState<{ plan: string } | { error: string } | null>(null);
+  // `outside`: the desktop app opened Checkout in the system browser for this plan.
+  const [checkout, setCheckout] = useState<{ plan: string } | { error: string } | { outside: string } | null>(null);
   // The front door's header needs to know how to sign in; Boot fetched the
   // config before this rendered, so this is a read, not a request.
   const config: AuthConfig | null = session?.config ?? shell?.authConfig ?? getAuthConfig();
@@ -138,6 +140,13 @@ export function PricingPage() {
     setStatusError(null);
     setStatusVersion((v) => v + 1);
   }
+
+  // The desktop app's return from Checkout in the browser: the window
+  // coming back to the front reads the subscription again.
+  const recheckStatus = useCallback(() => setStatusVersion((v) => v + 1), []);
+  useRefreshOnReturn(recheckStatus);
+  const outsideFor = checkout && "outside" in checkout ? checkout.outside : null;
+  const outsideDone = outsideFor !== null && status !== null && !status.implicit && status.plan === outsideFor;
 
   const maxSaving = catalog
     ? catalog.plans
@@ -236,7 +245,8 @@ export function PricingPage() {
   async function subscribe(code: string) {
     setCheckout({ plan: code });
     try {
-      window.location.assign(await startCheckout(code, annual));
+      const url = await startCheckout(code, annual);
+      if (goToStripe(url)) setCheckout({ outside: code });
     } catch (err) {
       setCheckout({ error: failureMessage(err) });
     }
@@ -330,6 +340,14 @@ export function PricingPage() {
             </Alert>
           )}
 
+          {outsideFor && (
+            <Alert data-checkout-outside role="status" variant={outsideDone ? "success" : "info"} className="mb-4">
+              {outsideDone
+                ? "Your subscription is active. Thank you."
+                : "Checkout is open in your browser. Finish there, then come back: this page shows the new plan once the payment is confirmed."}
+            </Alert>
+          )}
+
           {loadError ? (
             <ErrorState title={t`Could not load plans`} message={loadError} />
           ) : !catalog ? (
@@ -374,7 +392,7 @@ export function PricingPage() {
                     <h2 className="font-display text-display-sm">{plan.name}</h2>
                     {isRecommended && (
                       <p data-plan-reason className="mt-0.5 text-xs text-mw-text-muted">
-                        {RECOMMENDED_REASON}
+                        {i18n._(RECOMMENDED_REASON)}
                       </p>
                     )}
                     <p className="mt-2 text-3xl font-semibold tabular-nums">
@@ -408,7 +426,7 @@ export function PricingPage() {
                         <li key={line}>{line}</li>
                       ))}
                     </ul>
-                    <div className="mt-5">{action(plan, free, current, busy)}</div>
+                    <div data-plan-action className="mt-5">{action(plan, free, current, busy)}</div>
                   </li>
                 );
               })}
@@ -428,7 +446,7 @@ export function PricingPage() {
                   list price, up to an overage cap that starts at the plan's monthly price and that
                   an administrator can raise or lower.
                 </Trans>{" "}
-                {ANNUAL_OVERAGE_NOTE}
+                {i18n._(ANNUAL_OVERAGE_NOTE_MSG)}
               </p>
             </section>
           )}
@@ -494,9 +512,9 @@ export function PricingPage() {
           {catalog && splitPartners(catalog.models).partners.length > 0 && (
             <section aria-labelledby="partner-prices" className="mt-12 flex flex-col gap-3">
               <h2 id="partner-prices" className="font-display text-display-sm">
-                {PARTNER_MODELS_HEADING}
+                {i18n._(PARTNER_MODELS_HEADING_MSG)}
               </h2>
-              <p className="text-sm text-mw-text-muted">{PARTNER_MODELS_NOTE}</p>
+              <p className="text-sm text-mw-text-muted">{i18n._(PARTNER_MODELS_NOTE_MSG)}</p>
               <ModelPriceTable
                 name={t`Partner model prices`}
                 models={splitPartners(catalog.models).partners}

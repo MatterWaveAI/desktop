@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "../../../components/ui/button";
 import { ApiError, apiFetch } from "../../../lib/api";
 import { DestructiveConfirm } from "../../../patterns";
@@ -16,7 +17,10 @@ import { ImportSection } from "./ImportSection";
  */
 const RETENTION_DAYS = 30;
 
-/** What the account-deletion confirmation makes the user type. */
+/**
+ * What the account-deletion confirmation makes the user type. Not translated:
+ * the API checks this exact phrase.
+ */
 const DELETE_PHRASE = "delete my account";
 
 /** An export the worker builds (POST /api/me/export). */
@@ -35,6 +39,7 @@ function wait(ms: number): Promise<void> {
 }
 
 export function DataPane() {
+  const { t } = useLingui();
   const shell = useShell();
   const [exportState, setExportState] = useState<
     "idle" | "working" | "ready" | "mailed"
@@ -75,11 +80,11 @@ export function DataPane() {
       setExportState("ready");
     } catch (err) {
       setExportError(
-        err instanceof ApiError ? err.message : "Could not build the export.",
+        err instanceof ApiError ? err.message : t`Could not build the export.`,
       );
       setExportState("idle");
     }
-  }, []);
+  }, [t]);
 
   const runDelete = useCallback(async () => {
     setDeleting(true);
@@ -94,14 +99,16 @@ export function DataPane() {
       await shell.signOut();
     } catch (err) {
       setDeleteError(
-        err instanceof ApiError ? err.message : "Could not delete the account.",
+        err instanceof ApiError ? err.message : t`Could not delete the account.`,
       );
     } finally {
       setDeleting(false);
     }
-  }, [shell]);
+  }, [shell, t]);
 
   const phraseMatches = typed.trim().toLowerCase() === DELETE_PHRASE;
+  const retentionDays = RETENTION_DAYS;
+  const who = shell.principal.email ?? shell.principal.subject;
 
   return (
     <div className="flex flex-col gap-7">
@@ -109,45 +116,54 @@ export function DataPane() {
           pane's title; its progress and download stay in the card below. */}
       <PaneActions>
         <Button onClick={() => void runExport()} disabled={exportState === "working"}>
-          {exportState === "working" ? "Preparing…" : "Prepare export"}
+          {exportState === "working" ? t`Preparing…` : t`Prepare export`}
         </Button>
       </PaneActions>
 
       <PaneSection
-        title="Export your data"
-        description="A JSON file with everything stored for this account, prepared in the background."
+        title={t`Export your data`}
+        description={t`A JSON file with everything stored for this account, prepared in the background.`}
       >
         <div className="flex flex-col gap-3">
-          <LearnMore label="What is in it">
+          <LearnMore label={t`What is in it`}>
             <p>
-              Your profile and the terms you accepted, every conversation and message (archived
-              ones and branches too), custom instructions, preferences, library folders and tags,
-              your feedback on replies, your share links, signed-in devices, notifications, your
-              monthly usage, and your attachments — each file's details and a link to download it
-              while you are signed in.
+              <Trans>
+                Your profile and the terms you accepted, every conversation and message (archived
+                ones and branches too), custom instructions, preferences, library folders and tags,
+                your feedback on replies, your share links, signed-in devices, notifications, your
+                monthly usage, and your attachments — each file's details and a link to download it
+                while you are signed in.
+              </Trans>
             </p>
-            <p>It leaves out what would let someone sign in as you, such as share-link tokens and session ids.</p>
             <p>
-              You also get an email and a notification with a download link, which works for 7 days
-              while you are signed in.
+              <Trans>
+                It leaves out what would let someone sign in as you, such as share-link tokens and
+                session ids.
+              </Trans>
+            </p>
+            <p>
+              <Trans>
+                You also get an email and a notification with a download link, which works for 7
+                days while you are signed in.
+              </Trans>
             </p>
           </LearnMore>
           <div className="flex flex-wrap items-center gap-3">
             {exportState === "ready" && exportUrl && (
               <a className="text-sm font-medium text-mw-link underline-offset-4 hover:underline" href={exportUrl} download>
-                Download export
+                <Trans>Download export</Trans>
               </a>
             )}
             {/* One polite live region for every outcome: a link appearing
                 is silent to a screen reader, a status line is not. */}
             <span role="status" aria-live="polite" className="text-sm text-mw-text-muted">
-              {exportState === "working" && "Preparing your export. This can take a minute."}
+              {exportState === "working" && t`Preparing your export. This can take a minute.`}
               {exportState === "ready" &&
                 (exportUrl
-                  ? "Your export is ready."
-                  : "Your export is ready. The download link is in your email and notifications.")}
+                  ? t`Your export is ready.`
+                  : t`Your export is ready. The download link is in your email and notifications.`)}
               {exportState === "mailed" &&
-                "Still being prepared. We will email you a download link when it is ready."}
+                t`Still being prepared. We will email you a download link when it is ready.`}
             </span>
             {exportError && (
               <span role="alert" className="text-sm text-mw-danger">
@@ -164,8 +180,8 @@ export function DataPane() {
 
       <PaneSection
         tone="danger"
-        title="Delete your account"
-        description={`Your conversations and messages stop being readable immediately and are erased ${RETENTION_DAYS} days later.`}
+        title={t`Delete your account`}
+        description={t`Your conversations and messages stop being readable immediately and are erased ${retentionDays} days later.`}
         actions={
           <Button
             variant="destructive"
@@ -175,14 +191,16 @@ export function DataPane() {
               setConfirmOpen(true);
             }}
           >
-            Delete account…
+            <Trans>Delete account…</Trans>
           </Button>
         }
       >
         <LearnMore>
           <p>
-            Within those {RETENTION_DAYS} days support can restore them; after that they are gone.
-            Backups may hold copies until they age out.
+            <Trans>
+              Within those {retentionDays} days support can restore them; after that they are gone.
+              Backups may hold copies until they age out.
+            </Trans>
           </p>
         </LearnMore>
         {deleteError && (
@@ -198,9 +216,9 @@ export function DataPane() {
           if (!open) setTyped("");
           setConfirmOpen(open);
         }}
-        title="Delete your account?"
-        description={`This signs you out and stops every conversation and message on ${shell.principal.email ?? shell.principal.subject} being readable. They are erased permanently after ${RETENTION_DAYS} days, and until then support can restore them. Backups may hold copies until they age out.`}
-        confirmLabel="Delete account"
+        title={t`Delete your account?`}
+        description={t`This signs you out and stops every conversation and message on ${who} being readable. They are erased permanently after ${retentionDays} days, and until then support can restore them. Backups may hold copies until they age out.`}
+        confirmLabel={t`Delete account`}
         confirmPhrase={DELETE_PHRASE}
         typedValue={typed}
         onTypedValueChange={setTyped}

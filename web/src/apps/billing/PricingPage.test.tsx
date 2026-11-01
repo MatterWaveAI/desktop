@@ -222,7 +222,7 @@ describe("/pricing", () => {
     stubApi({
       "/api/plans": jsonResponse(PLANS),
       "/api/enterprise/contact": jsonResponse(
-        { detail: "The contact form is not switched on here. Email sales@matterwave.dev." },
+        { detail: "The contact form is not switched on here. Email sales@matterwave.ai." },
         503,
       ),
     });
@@ -230,8 +230,8 @@ describe("/pricing", () => {
     await vi.waitFor(() => expect(view().querySelector("section[aria-labelledby='enterprise-contact']")).not.toBeNull());
     fill({ name: "A", email: "a@b.test", company: "B" });
     await submit();
-    await vi.waitFor(() => expect(view().querySelector("[role='alert']")?.textContent).toContain("sales@matterwave.dev"));
-    expect(view().querySelector("a[href='mailto:sales@matterwave.dev']")).not.toBeNull();
+    await vi.waitFor(() => expect(view().querySelector("[role='alert']")?.textContent).toContain("sales@matterwave.ai"));
+    expect(view().querySelector("a[href='mailto:sales@matterwave.ai']")).not.toBeNull();
   });
 
   it("shows what annual billing saves", async () => {
@@ -255,8 +255,6 @@ describe("/pricing as a stranger: the chrome, the badge, the grid and the questi
   it("wears the front door's header and footer, with every way in", async () => {
     await open();
     const header = view().querySelector("nav[aria-label='MatterWave']")!;
-    // The front-door header carries the brand and the ways into the app;
-    // there is no nav row and no aria-current link on it.
     const hrefs = [...header.querySelectorAll("a")].map((a) => `${a.textContent}|${a.getAttribute("href")}`);
     expect(hrefs).toEqual(["MatterWave ai|/", "Sign in|/login", "Create account|/signup"]);
     const footer = view().querySelector("nav[aria-label='About MatterWave']")!;

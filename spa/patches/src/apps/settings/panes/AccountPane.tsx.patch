@@ -1,0 +1,267 @@
+diff --git a/src/apps/settings/panes/AccountPane.tsx b/src/apps/settings/panes/AccountPane.tsx
+index 38d1f03..f4f6633 100644
+--- a/src/apps/settings/panes/AccountPane.tsx
++++ b/src/apps/settings/panes/AccountPane.tsx
+@@ -32,6 +32,16 @@ import {
+   type PasskeyInfo,
+ } from "../../../lib/passkeys";
+ import { PasskeyCancelled, passkeysSupported } from "../../../lib/webauthn";
++import {
++  desktopApiKeyState,
++  desktopAppInfo,
++  desktopClearApiKey,
++  desktopReload,
++  desktopSetApiKey,
++  isDesktop,
++  type DesktopApiKeyState,
++} from "../../../lib/desktopAuth";
++import { openOutside } from "../../../lib/desktopLinks";
+ import { useShell } from "../../../shell/shellContext";
+ import type { SessionInfo } from "../../../types";
+ import { LearnMore, PaneSection } from "../PaneSection";
+@@ -1294,6 +1304,15 @@ type PasskeysView =
+  * the name (lib/passkeys.ts). The password stays: a passkey is one more
+  * way in, and removing the last one leaves the password sign-in as it
+  * was. Hidden with a line saying why on a browser that cannot take part.
++ *
++ * In the desktop shell a passkey cannot be made in the window
++ * (`passkeysSupported` is false there): a ceremony is bound to the origin
++ * it runs in and the webview's is not the rpId passkeys are made for, so
++ * the browser refuses it and the provider would refuse it anyway. The add
++ * button becomes "Add a passkey in your browser" instead, which opens this
++ * pane on the web app (`AddPasskeyInBrowser`). The list, rename and
++ * remove stay: they are API calls, which the bearer carries as well as the
++ * cookie does.
+  */
+ export function PasskeysCard() {
+   const { t } = useLingui();
+@@ -1571,24 +1590,32 @@ export function PasskeysCard() {
+             )}
+             {view.kind === "list" && list !== null && (
+               <div className="flex flex-wrap items-center gap-2">
+-                <Button
+-                  type="button"
+-                  variant="outline"
+-                  disabled={busy || !supported || full}
+-                  onClick={() => {
+-                    setError(null);
+-                    setNotice(null);
+-                    setView({ kind: "add" });
+-                  }}
+-                >
+-                  <Trans>Add a passkey</Trans>
+-                </Button>
++                {isDesktop() ? (
++                  <AddPasskeyInBrowser disabled={busy || full} />
++                ) : (
++                  <Button
++                    type="button"
++                    variant="outline"
++                    disabled={busy || !supported || full}
++                    onClick={() => {
++                      setError(null);
++                      setNotice(null);
++                      setView({ kind: "add" });
++                    }}
++                  >
++                    <Trans>Add a passkey</Trans>
++                  </Button>
++                )}
+                 {!supported && (
+-                  <span className="text-xs text-mw-text-muted">
+-                    <Trans>
+-                      This browser cannot make passkeys here; a secure (https) connection and a
+-                      recent browser are needed.
+-                    </Trans>
++                  <span className="text-xs text-mw-text-muted" data-mw-passkey-why="">
++                    {isDesktop() ? (
++                      "Passkeys are created in your browser: this window's address is not the one a passkey is bound to. One added there also signs you in to this app, whose sign-in runs in your browser too."
++                    ) : (
++                      <Trans>
++                        This browser cannot make passkeys here; a secure (https) connection and a
++                        recent browser are needed.
++                      </Trans>
++                    )}
+                   </span>
+                 )}
+                 {supported && full && (
+@@ -1729,6 +1756,179 @@ export function AccountPane() {
+       <PasskeysCard />
+ 
+       <SessionsList />
++
++      <DesktopApiKeyCard />
+     </div>
+   );
+ }
++
++/**
++ * The desktop's way to a new passkey: this pane on the web app, in the
++ * system browser, where the ceremony runs on the origin passkeys are bound
++ * to. The address is the API base the app was built with -- the platform
++ * serves the web app from the same origin. A build without one has nowhere
++ * to send the person, so the button stays off.
++ */
++function AddPasskeyInBrowser(props: { disabled: boolean }) {
++  const [base, setBase] = useState<string | null>(null);
++  useEffect(() => {
++    let alive = true;
++    desktopAppInfo()
++      .then((info) => {
++        if (alive) setBase(info?.api_base_url ?? null);
++      })
++      .catch(() => {});
++    return () => {
++      alive = false;
++    };
++  }, []);
++  return (
++    <Button
++      type="button"
++      variant="outline"
++      disabled={props.disabled || base === null}
++      onClick={() => {
++        if (base) openOutside(new URL("/settings/account", base).toString());
++      }}
++    >
++      Add a passkey in your browser
++    </Button>
++  );
++}
++
++/**
++ * A refused native command rejects with its message as a bare string,
++ * written for the person (api_key.rs's shape refusals, for one); an
++ * unexpected bridge failure is the generic line. The same shape the login
++ * page's desktop errors follow.
++ */
++function desktopFailure(err: unknown): string {
++  if (typeof err === "string" && err) return err;
++  if (err instanceof Error && err.message) return err.message;
++  return "That did not work. Try again.";
++}
++
++/**
++ * The desktop's second way in (`clients/desktop`): a pasted API key takes
++ * over as this machine's credential, stored in the OS keychain and sent
++ * instead of an OIDC token (`lib/desktopAuth.ts`). For machines nobody
++ * sits at, where a browser dance has nobody to dance. The key is the
++ * platform's own (the API keys pane makes one); only its id half is shown
++ * once stored, and removing it falls back to the browser session rather
++ * than ending it. Nothing here in a browser: no shell, no keychain.
++ */
++export function DesktopApiKeyCard() {
++  const [state, setState] = useState<DesktopApiKeyState | null>(null);
++  const [busy, setBusy] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const inputId = useId();
++
++  useEffect(() => {
++    // Not even a bridge call in a browser: there is no native side to ask.
++    if (!isDesktop()) return;
++    let alive = true;
++    desktopApiKeyState()
++      .then((keyState) => {
++        if (alive) setState(keyState);
++      })
++      .catch(() => {
++        if (alive) setState({ configured: false, hint: null });
++      });
++    return () => {
++      alive = false;
++    };
++  }, []);
++
++  if (!isDesktop()) return null;
++
++  async function handleSave(event: FormEvent<HTMLFormElement>) {
++    event.preventDefault();
++    const key = String(new FormData(event.currentTarget).get("api_key") ?? "").trim();
++    setBusy(true);
++    setError(null);
++    try {
++      await desktopSetApiKey(key);
++      // A reload, not a live swap: Boot has to come back around the new
++      // credential exactly as it does around a browser sign-in.
++      desktopReload();
++    } catch (err) {
++      setError(desktopFailure(err));
++      setBusy(false);
++    }
++  }
++
++  async function handleRemove() {
++    setBusy(true);
++    setError(null);
++    try {
++      await desktopClearApiKey();
++      desktopReload();
++    } catch (err) {
++      setError(desktopFailure(err));
++      setBusy(false);
++    }
++  }
++
++  return (
++    <PaneSection
++      title="Desktop app"
++      description="How this installed app signs in: through your browser, or with an API key."
++    >
++      <p className="text-sm" aria-live="polite">
++        {state === null ? (
++          "Checking how this app signs in…"
++        ) : state.configured ? (
++          <>
++            <span className="font-medium">Signing in with the API key</span>{" "}
++            <span className="font-mono break-all">{state.hint}</span> — requests from this
++            machine carry it instead of a browser session.
++          </>
++        ) : (
++          <>
++            <span className="font-medium">Signing in through your web browser.</span> An API key
++            can stand in for it on this machine.
++          </>
++        )}
++      </p>
++      <LearnMore>
++        <p>
++          A key acts as this account until it is revoked: no expiry, no second factor, and it
++          lives in this machine's keychain. Make one in the API keys pane; remove it here, or on
++          the web, when the machine is no longer yours.
++        </p>
++      </LearnMore>
++      <form
++        noValidate
++        aria-busy={busy}
++        onSubmit={(event) => void handleSave(event)}
++        className="flex flex-wrap items-end gap-2"
++        data-mw-api-key=""
++      >
++        <label htmlFor={inputId} className="flex min-w-0 flex-1 basis-64 flex-col gap-1">
++          <span className="text-sm text-mw-text-muted">API key</span>
++          <Input
++            id={inputId}
++            name="api_key"
++            type="password"
++            autoComplete="off"
++            placeholder="mw_…"
++            maxLength={512}
++          />
++        </label>
++        <Button type="submit" disabled={busy}>
++          Use API key
++        </Button>
++        {state?.configured && (
++          <Button type="button" variant="outline" disabled={busy} onClick={() => void handleRemove()}>
++            Remove the key
++          </Button>
++        )}
++      </form>
++      {error && (
++        <p role="alert" className="text-sm text-mw-danger">
++          {error}
++        </p>
++      )}
++    </PaneSection>
++  );
++}

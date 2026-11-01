@@ -25,6 +25,10 @@ fn main() {
             "unpair_device",
             "global_shortcut_state",
             "set_global_shortcut",
+            "take_navigation",
+            "autostart_state",
+            "set_autostart",
+            "set_recent_conversations",
             // Agent mode's tool host (src/agent): one command per tool, the
             // run's start and stop, the root, the switch and the
             // checkpoints. Off until the person turns it on.

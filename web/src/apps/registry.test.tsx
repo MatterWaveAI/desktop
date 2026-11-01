@@ -6,7 +6,7 @@ import type { AuthConfig, Principal } from "../types";
 import { router } from "../routes";
 import { Shell } from "../shell/Shell";
 import { ChatPage } from "./chat/ChatPage";
-import { apps } from "./registry";
+import { apps, appTitle } from "./registry";
 
 /**
  * The rule is "chat is registered through the app registry rather than
@@ -45,7 +45,9 @@ const principal: Principal = {
   kind: "dev",
   email: "dev@localhost",
   name: null,
-  roles: [],
+  // A platform admin, so the account menu's app switcher has a choice to
+  // offer: Chat and the role-gated Admin.
+  roles: ["admin"],
   org_id: "dev-org",
   org_name: null,
   org_role: null,
@@ -142,7 +144,7 @@ describe("the shipped app registry", () => {
       // like /pricing (the token is the credential), not installable, so
       // not an app.
       "/share/$token",
-      // The developer portal moved to the public site (matterwave.dev) and
+      // The developer portal moved to the public site (docs.matterwave.ai) and
       // the app links there externally; the app carries no routes for it.
       // `/device` is where a terminal or editor's sign-in code is approved:
       // reachable signed out (it sends to login first), not installable, so
@@ -161,7 +163,7 @@ describe("the shipped app registry", () => {
 });
 
 describe("the shell navigation", () => {
-  it("renders a nav entry for every unflagged, ungated registered app, and the route slot apps mount into", async () => {
+  it("lists every unflagged app the viewer may open in the account menu, and the route slot apps mount into", async () => {
     stubShellApi();
 
     container = document.createElement("div");
@@ -171,20 +173,31 @@ describe("the shell navigation", () => {
       root!.render(<RouterProvider router={harnessRouter} />);
     });
 
-    // The sidebar nav lists exactly the unflagged registry apps.
+    // App switching lives in the account menu, not a nav above the
+    // conversation list; it lists exactly the unflagged registry apps the
+    // viewer's roles allow. The menu is portalled, so it is read off the
+    // document once opened.
     await vi.waitFor(() => {
-      expect(container!.querySelector("nav[aria-label='Apps']")).not.toBeNull();
+      expect(container!.querySelector("[aria-label='Account and organisation']")).not.toBeNull();
     });
-    const nav = container!.querySelector("nav[aria-label='Apps']")!;
+    expect(container!.querySelector("nav[aria-label='Apps']")).toBeNull();
+    act(() => {
+      container!.querySelector<HTMLElement>("[aria-label='Account and organisation']")!.click();
+    });
+    await vi.waitFor(() => {
+      expect(document.querySelector("nav[aria-label='Apps']")).not.toBeNull();
+    });
+    const nav = document.querySelector("nav[aria-label='Apps']")!;
     const links = [...nav.querySelectorAll("a")];
-    // The harness principal holds no roles, so a role-gated app (admin)
-    // is absent exactly as a flagged one is.
-    const visibleApps = apps.filter((app) => !app.flag && !app.role);
+    const visibleApps = apps.filter(
+      (app) => !app.flag && (!app.role || principal.roles.includes(app.role)),
+    );
+    expect(visibleApps.map((app) => app.id)).toEqual(["chat", "admin"]);
     expect(links.map((a) => a.getAttribute("href"))).toEqual(visibleApps.map((a) => a.path));
 
     const chatLink = links.find((a) => a.getAttribute("href") === "/apps/chat");
     expect(chatLink?.textContent?.trim()).toBe(
-      visibleApps.find((a) => a.path === "/apps/chat")?.title,
+      appTitle(visibleApps.find((a) => a.path === "/apps/chat")!),
     );
 
     // The shell chrome hosts apps in its <Outlet/> slot; a mounted app

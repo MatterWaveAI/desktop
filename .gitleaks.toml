@@ -1,0 +1,18 @@
+# gitleaks' own rules, plus the fixtures that look like secrets and are not:
+# made-up keys and tokens the unit tests assert on, the updater test's
+# throwaway key and signatures, and the RFC 6238 example TOTP seed. Used by
+# CI (.github/workflows/ci.yml) and the pre-commit hook.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test files: every credential in them is made up for the test"
+paths = [
+  '''(^|/)[^/]+\.test\.(ts|tsx|mjs)$''',
+  '''(^|/)src-tauri/tests/''',
+  '''(^|/)spa/patches/.+\.test\.(ts|tsx)\.patch$''',
+]
+
+[[allowlists]]
+description = "The API-key shapes the Rust unit tests parse (mw_<id>_<secret>)"
+regexes = ['''mw_ab12cd34_[A-Za-z0-9-]+''']

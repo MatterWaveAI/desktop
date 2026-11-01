@@ -192,6 +192,8 @@ export interface ChatAdapterHooks {
   onNotice?: (message: string) => void;
   /** The answer, by its stored id, ran out of tokens before it finished. */
   onLengthTruncated?: (messageId: string) => void;
+  /** The stream reached `done`: an answer is ready to read. */
+  onDone?: (conversationId: string) => void;
 }
 
 /** The prompt we send: the user's text, which is all a user turn carries. */
@@ -452,10 +454,12 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
               hooks.onLengthTruncated?.(done.id);
             }
             yield emit();
+            hooks.onDone?.(conversationId);
             settle();
             // The answer is complete; whether anyone saw it land is the
-            // native side's call -- it notifies only an unfocused window.
-            notifyGenerationComplete();
+            // native side's call -- it notifies only an unfocused window,
+            // and a click on the notification opens this conversation.
+            notifyGenerationComplete(conversationId);
           }
         }
 

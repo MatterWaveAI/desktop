@@ -39,10 +39,10 @@ export function TemporaryToggle(props: {
           ? "This chat will not be saved. Click to keep it instead."
           : "Start a chat that is not saved to your history"
       }
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors pointer-coarse:min-h-11 pointer-coarse:min-w-11 disabled:cursor-not-allowed disabled:opacity-60 ${
+      className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors outline-none focus-visible:ring-2 focus-visible:ring-mw-focus pointer-coarse:min-h-11 pointer-coarse:min-w-11 disabled:cursor-not-allowed disabled:text-mw-text-muted ${
         props.on
-          ? "border-mw-accent bg-mw-surface-raised text-mw-link"
-          : "border-mw-border text-mw-text-muted hover:bg-mw-surface-hover"
+          ? "border-mw-info-border bg-mw-info-subtle text-mw-info"
+          : "border-transparent text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text"
       }`}
     >
       <EyeOffIcon className="size-3.5" aria-hidden />

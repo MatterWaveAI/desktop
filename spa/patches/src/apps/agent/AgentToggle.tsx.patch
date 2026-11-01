@@ -1,0 +1,46 @@
+diff --git a/src/apps/agent/AgentToggle.tsx b/src/apps/agent/AgentToggle.tsx
+new file mode 100644
+index 0000000..1f5231c
+--- /dev/null
++++ b/src/apps/agent/AgentToggle.tsx
+@@ -0,0 +1,40 @@
++import { TerminalSquareIcon } from "lucide-react";
++
++/**
++ * The "Agent" switch on the new-chat screen, desktop only and only once
++ * agent mode is turned on in Preferences. Greyed out, with the reason as
++ * its title, when the org has turned local agent tools off or the model
++ * cannot call tools.
++ */
++export function AgentToggle(props: {
++  on: boolean;
++  onChange: (on: boolean) => void;
++  /** Why agent mode cannot run now; null when it can. */
++  unavailable: string | null;
++  disabled?: boolean;
++}) {
++  const greyed = props.unavailable !== null && !props.on;
++  return (
++    <button
++      type="button"
++      aria-pressed={props.on}
++      data-mw-agent-toggle=""
++      disabled={props.disabled || greyed}
++      onClick={() => props.onChange(!props.on)}
++      title={
++        props.unavailable ??
++        (props.on
++          ? "Back to chat"
++          : "Let the model work in a folder on this computer, with your approval for each change")
++      }
++      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors pointer-coarse:min-h-11 pointer-coarse:min-w-11 disabled:cursor-not-allowed disabled:opacity-60 ${
++        props.on
++          ? "border-mw-accent bg-mw-surface-raised text-mw-link"
++          : "border-mw-border text-mw-text-muted hover:bg-mw-surface-hover"
++      }`}
++    >
++      <TerminalSquareIcon className="size-3.5" aria-hidden />
++      Agent
++    </button>
++  );
++}

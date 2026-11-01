@@ -1,3 +1,5 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, plural, t } from "@lingui/core/macro";
 import { apiFetch } from "../lib/api";
 
 /**
@@ -43,10 +45,10 @@ export function fetchPolicyStats(): Promise<PolicyStats> {
 }
 
 /** The ladder, as the page and the banner name each rung. */
-export const STATE_LABEL: Record<Exclude<EnforcementState, "none">, string> = {
-  warned: "Warning",
-  rate_limited: "Rate limited",
-  suspended: "Suspended",
+export const STATE_LABEL: Record<Exclude<EnforcementState, "none">, MessageDescriptor> = {
+  warned: msg`Warning`,
+  rate_limited: msg`Rate limited`,
+  suspended: msg`Suspended`,
 };
 
 /**
@@ -55,20 +57,37 @@ export const STATE_LABEL: Record<Exclude<EnforcementState, "none">, string> = {
  * surprise.
  */
 export function enforcementHeadline(me: MyEnforcement): string {
-  const who = me.scope === "org" ? "Your organisation" : "Your account";
-  if (me.state === "warned") return `${who} has received a warning under the Acceptable Use Policy.`;
-  if (me.state === "rate_limited") {
-    const limit = me.limit ? ` to ${me.limit.messages} messages per ${describeWindow(me.limit.window_s)}` : "";
-    return `${who} is rate limited${limit} under the Acceptable Use Policy.`;
+  // Whole sentences per scope, not a subject spliced into one: a translator
+  // needs to agree the verb with "organisation" and "account" separately.
+  const org = me.scope === "org";
+  if (me.state === "warned") {
+    return org
+      ? t`Your organisation has received a warning under the Acceptable Use Policy.`
+      : t`Your account has received a warning under the Acceptable Use Policy.`;
   }
-  return `${who} is suspended under the Acceptable Use Policy.`;
+  if (me.state === "rate_limited") {
+    if (me.limit) {
+      const messages = me.limit.messages;
+      const period = describeWindow(me.limit.window_s);
+      return org
+        ? t`Your organisation is rate limited to ${messages} messages per ${period} under the Acceptable Use Policy.`
+        : t`Your account is rate limited to ${messages} messages per ${period} under the Acceptable Use Policy.`;
+    }
+    return org
+      ? t`Your organisation is rate limited under the Acceptable Use Policy.`
+      : t`Your account is rate limited under the Acceptable Use Policy.`;
+  }
+  return org
+    ? t`Your organisation is suspended under the Acceptable Use Policy.`
+    : t`Your account is suspended under the Acceptable Use Policy.`;
 }
 
+/** "hour", "2 hours", "10 minutes": the span after "per". */
 export function describeWindow(seconds: number): string {
   if (seconds % 3600 === 0) {
     const hours = seconds / 3600;
-    return hours === 1 ? "hour" : `${hours} hours`;
+    return plural(hours, { one: "hour", other: "# hours" });
   }
   const minutes = Math.max(1, Math.round(seconds / 60));
-  return minutes === 1 ? "minute" : `${minutes} minutes`;
+  return plural(minutes, { one: "minute", other: "# minutes" });
 }

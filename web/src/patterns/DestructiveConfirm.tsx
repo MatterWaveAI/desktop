@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import { useId } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -54,7 +55,7 @@ export function DestructiveConfirm(props: {
         {phrase !== undefined && (
           <div className="flex flex-col gap-1.5">
             <label htmlFor={inputId} className="text-sm">
-              Type <span className="font-medium">{phrase}</span> to confirm
+              <Trans>Type <span className="font-medium">{phrase}</span> to confirm</Trans>
             </label>
             <Input
               id={inputId}
@@ -71,7 +72,7 @@ export function DestructiveConfirm(props: {
             disabled={props.inFlight}
             onClick={() => props.onOpenChange(false)}
           >
-            {props.cancelLabel ?? "Cancel"}
+            {props.cancelLabel ?? <Trans>Cancel</Trans>}
           </Button>
           <Button
             variant="default"
@@ -79,7 +80,7 @@ export function DestructiveConfirm(props: {
             disabled={props.inFlight || !phraseMatches}
             onClick={props.onConfirm}
           >
-            {props.confirmLabel ?? "Delete"}
+            {props.confirmLabel ?? <Trans>Delete</Trans>}
           </Button>
         </DialogFooter>
       </DialogContent>

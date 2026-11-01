@@ -1,0 +1,23 @@
+diff --git a/src/apps/chat/chatAdapter.ts b/src/apps/chat/chatAdapter.ts
+index 48cc9cd..7538160 100644
+--- a/src/apps/chat/chatAdapter.ts
++++ b/src/apps/chat/chatAdapter.ts
+@@ -147,6 +147,7 @@ export type ChatModelAdapter = {
+ };
+ import type { Conversation } from "../../types";
+ import { ApiError, apiFetch, apiStream } from "../../lib/api";
++import { notifyGenerationComplete } from "../../lib/desktopAuth";
+ import { parseSSEStream } from "../../lib/sse";
+ import { REFUSAL_CODE, TRUNCATED_CODE } from "./streamErrors";
+ import { noticeText, type CompactionFrame, type ContextFrame } from "./compaction";
+@@ -455,6 +456,10 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
+             yield emit();
+             hooks.onDone?.(conversationId);
+             settle();
++            // The answer is complete; whether anyone saw it land is the
++            // native side's call -- it notifies only an unfocused window,
++            // and a click on the notification opens this conversation.
++            notifyGenerationComplete(conversationId);
+           }
+         }
+ 

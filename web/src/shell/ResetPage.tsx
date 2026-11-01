@@ -1,11 +1,11 @@
 import { useId, useState, type FormEvent } from "react";
 import { useLocation } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { ApiError, apiFetch } from "../lib/api";
 import { startLogin } from "../lib/auth";
 import { Alert, AuthPage, DonePanel, ErrorSummary, Field, SubmitButton } from "./AuthForm";
 import {
   LINK_CLASS,
-  PASSWORD_RULE,
   SECONDARY_BUTTON_CLASS,
   ensureAuthConfig,
   failureMessage,
@@ -14,7 +14,8 @@ import {
   validateCode,
   validateConfirm,
   validateEmail,
-  validatePassword,
+  passwordRule,
+  validateNewPassword,
 } from "./authForms";
 import { FORGOT_PATH } from "./frontDoor";
 
@@ -40,6 +41,7 @@ interface FieldErrors {
 }
 
 export function ResetPage() {
+  const { t } = useLingui();
   const searchStr = useLocation({ select: (location) => location.searchStr });
   const [state, setState] = useState<ResetState>({ phase: "form" });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -58,7 +60,7 @@ export function ResetPage() {
     const errors: FieldErrors = {
       email: validateEmail(email),
       code: validateCode(code),
-      password: validatePassword(password, "a new password"),
+      password: validateNewPassword(password),
       password_confirm: validateConfirm(password, passwordConfirm),
     };
     setFieldErrors(errors);
@@ -94,17 +96,19 @@ export function ResetPage() {
 
   return (
     <AuthPage
-      title="Choose a new password"
-      intro="Enter the code from the email and the password you want to use."
+      title={t`Choose a new password`}
+      intro={t`Enter the code from the email and the password you want to use.`}
     >
       {/* Always mounted, so what lands in it is announced rather than merely appearing. */}
       <div aria-live="polite">
         {state.phase === "done" && (
-          <DonePanel id={id} title="Your password is changed">
-            <p className="text-sm text-mw-text-muted">Sign in with your new password.</p>
+          <DonePanel id={id} title={t`Your password is changed`}>
+            <p className="text-sm text-mw-text-muted">
+              <Trans>Sign in with your new password.</Trans>
+            </p>
             <div>
               <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => void signIn()}>
-                Sign in
+                <Trans>Sign in</Trans>
               </button>
             </div>
           </DonePanel>
@@ -132,7 +136,7 @@ export function ResetPage() {
               <p>{state.message}</p>
               <div>
                 <button type="submit" className={SECONDARY_BUTTON_CLASS}>
-                  Retry
+                  <Trans>Retry</Trans>
                 </button>
               </div>
             </Alert>
@@ -141,7 +145,7 @@ export function ResetPage() {
           <Field
             id={`${id}-email`}
             name="email"
-            label="Email"
+            label={t`Email`}
             type="email"
             autoComplete="email"
             required
@@ -151,7 +155,7 @@ export function ResetPage() {
           <Field
             id={`${id}-code`}
             name="code"
-            label="Reset code"
+            label={t`Reset code`}
             type="text"
             inputMode="text"
             autoComplete="one-time-code"
@@ -162,17 +166,17 @@ export function ResetPage() {
           <Field
             id={`${id}-password`}
             name="password"
-            label="New password"
+            label={t`New password`}
             type="password"
             autoComplete="new-password"
             required
-            hint={PASSWORD_RULE}
+            hint={passwordRule()}
             error={fieldErrors.password}
           />
           <Field
             id={`${id}-password_confirm`}
             name="password_confirm"
-            label="Confirm new password"
+            label={t`Confirm new password`}
             type="password"
             autoComplete="new-password"
             required
@@ -180,11 +184,12 @@ export function ResetPage() {
           />
 
           <div className="flex flex-wrap items-center gap-3">
-            <SubmitButton busy={submitting} busyLabel="Saving…">
-              Set password
+            <SubmitButton busy={submitting} busyLabel={t`Saving…`}>
+              <Trans>Set password</Trans>
             </SubmitButton>
             <a href={FORGOT_PATH} className={LINK_CLASS}>
-              Send a new code
+              <Trans>Send a new code</Trans>
+
             </a>
           </div>
         </form>

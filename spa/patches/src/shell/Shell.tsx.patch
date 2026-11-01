@@ -1,0 +1,107 @@
+diff --git a/src/shell/Shell.tsx b/src/shell/Shell.tsx
+index 1e12039..aaeec08 100644
+--- a/src/shell/Shell.tsx
++++ b/src/shell/Shell.tsx
+@@ -11,7 +11,10 @@ import type { AuthConfig, Principal } from "../types";
+ import { useFlags } from "../lib/flags";
+ import { apps, type AppDescriptor } from "../apps/registry";
+ import { ShellContext, useShell, type ShellContextValue } from "./shellContext";
+-import { useShellState, writeConversationUrl } from "./useShellState";
++import { useShellState, writeChatHref, writeConversationUrl } from "./useShellState";
++import { JUMP_TO_MESSAGE_EVENT, type JumpToMessageDetail } from "./useConversationSearch";
++import { desktopRecentConversations, registerDesktopShell } from "../lib/desktopNavigation";
++import { desktopSetRecentConversations, isDesktop } from "../lib/desktopAuth";
+ import { useVisualViewportFix } from "./useVisualViewport";
+ import { AccountSummary, UserMenu } from "./UserMenu";
+ import { usePlan } from "./account";
+@@ -22,8 +25,9 @@ import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
+ import { ShortcutsHelp } from "./ShortcutsHelp";
+ import { CommandPalette } from "./CommandPalette";
+ import { NotificationsMenu } from "./NotificationsMenu";
++import { UpdateBanner } from "./UpdateBanner";
+ import { ConversationSidebar, type SearchRequest } from "./conversationSidebar";
+-import { CONVERSATION_SEARCH_ID } from "./shortcuts";
++import { CONVERSATION_SEARCH_ID, isMacPlatform } from "./shortcuts";
+ import type { PaletteAction } from "./palette";
+ import { HELP_PATH } from "./help";
+ import { installAnswerReady, setAnswerReadyFocus } from "./answerReady";
+@@ -111,6 +115,70 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
+     [context, navigate],
+   );
+ 
++  // A conversation link opened from outside the desktop app, or the
++  // app's menu and tray: selected the way a sidebar search hit is, so it
++  // opens even while another one is on screen, with `?m=` on the address
++  // for the chat page to scroll to; New chat is the shell's own.
++  useEffect(
++    () =>
++      registerDesktopShell({
++        startNewChat,
++        openConversation: (id, message) => {
++          if (!message) {
++            openConversation(id);
++            return;
++          }
++          const search = { c: id, m: message };
++          if (window.location.pathname !== apps[0].path) {
++            context.selectConversation(id);
++            setSidebarOpen(false);
++            void navigate({ to: apps[0].path, search });
++            return;
++          }
++          writeChatHref(`${apps[0].path}?${new URLSearchParams(search)}`, "push");
++          context.selectConversation(id);
++          setSidebarOpen(false);
++          window.dispatchEvent(
++            new CustomEvent<JumpToMessageDetail>(JUMP_TO_MESSAGE_EVENT, {
++              detail: { conversationId: id, messageId: message },
++            }),
++          );
++        },
++      }),
++    [context, navigate, openConversation, startNewChat],
++  );
++
++  // The desktop menu's chords, for the webviews that keep them from the
++  // menu (WebView2 on Windows, WebKitGTK on Linux): Ctrl+N is New chat and
++  // Ctrl+, is Settings, Cmd on macOS. Both are idempotent, so where the
++  // menu sees the chord as well nothing happens twice that shows.
++  useEffect(() => {
++    if (!isDesktop()) return;
++    const onKey = (event: KeyboardEvent) => {
++      const mod = isMacPlatform() ? event.metaKey : event.ctrlKey;
++      if (!mod || event.shiftKey || event.altKey || event.repeat) return;
++      if (event.key === "n" || event.key === "N") {
++        event.preventDefault();
++        startNewChat();
++      } else if (event.key === ",") {
++        event.preventDefault();
++        void navigate({ to: "/settings" });
++      }
++    };
++    window.addEventListener("keydown", onKey);
++    return () => window.removeEventListener("keydown", onKey);
++  }, [navigate, startNewChat]);
++
++  // The desktop tray's recent chats: the conversations the sidebar lists
++  // first, ids and titles only. Nothing leaves the page in a browser.
++  const recent = desktopRecentConversations(context.conversations);
++  useEffect(() => {
++    if (!isDesktop()) return;
++    desktopSetRecentConversations(JSON.parse(recent)).catch((err: unknown) => {
++      console.warn("[desktop] could not update the tray's recent chats", err);
++    });
++  }, [recent]);
++
+   // An answer that finished while the tab was hidden marks the title and
+   // the icon until the person comes back; its notification opens the
+   // conversation it belongs to.
+@@ -299,6 +367,8 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
+           <BillingBanner />
+           {/* A minor terms revision since the one accepted: a notice, not the gate. */}
+           <TermsNoticeBanner />
++          {/* "Update available — install": nothing in a browser, where there is no updater. */}
++          <UpdateBanner />
+           <main className="min-h-0 flex-1">
+             <Outlet />
+           </main>

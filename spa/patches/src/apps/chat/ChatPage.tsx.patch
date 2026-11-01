@@ -1,0 +1,143 @@
+diff --git a/src/apps/chat/ChatPage.tsx b/src/apps/chat/ChatPage.tsx
+index 0609608..5cd7bcf 100644
+--- a/src/apps/chat/ChatPage.tsx
++++ b/src/apps/chat/ChatPage.tsx
+@@ -1,4 +1,4 @@
+-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
++import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+ import { createPortal } from "react-dom";
+ import { useHeaderSlot } from "../../shell/headerSlot";
+ import { Button } from "../../components/ui/button";
+@@ -71,10 +71,14 @@ import { ConversationActions, type ExportFormat } from "./ConversationActions";
+ import { ReportDialog } from "./ReportDialog";
+ import { ShareDialog } from "./ShareDialog";
+ import { TemporaryNotice, TemporaryToggle } from "./TemporaryChat";
++import { AgentToggle } from "../agent/AgentToggle";
++import { useAgentEnabled } from "../agent/useAgentEnabled";
++import { activeModel, agentAvailability } from "../agent/availability";
+ import { fetchFeedback, type Feedback } from "./feedback";
+ import { COMPACT_HINT, CompactionDivider, ContextMeter, SummaryMarker } from "./CompactionDivider";
+ import { DictationButton, DictationNotices } from "./DictationButton";
+ import { useDictation } from "./useDictation";
++import { useReadAloud } from "./useReadAloud";
+ import {
+   compactConversation,
+   endedOnLength,
+@@ -112,6 +116,10 @@ const REATTACH_FIRST_MS = 750;
+ /** How many looks, doubling the wait each time, before the turn is left as it is. */
+ const REATTACH_TRIES = 4;
+ 
++// Agent mode (desktop only, off unless turned on in Preferences) loads as
++// its own chunk the first time the toggle is switched on.
++const AgentPanel = lazy(() => import("../agent/AgentPanel").then((m) => ({ default: m.AgentPanel })));
++
+ /** Chat, mounted as app #1 through the app registry. */
+ export function ChatPage() {
+   const shell = useShell();
+@@ -695,6 +703,14 @@ function ThreadRuntime(props: {
+   // write, so the composer says so instead of offering a send that fails.
+   const readOnly = useSupportReadOnly(shell.principal);
+ 
++  // Agent mode: offered on a new chat once the person turned it on in
++  // Preferences (the desktop's native setting), greyed out when the org or
++  // the model rules it out. While on, the agent panel replaces the thread.
++  const agentEnabled = useAgentEnabled();
++  const [agentOn, setAgentOn] = useState(false);
++  const agent = agentAvailability(shell.principal, activeModel(models, selectedModel, defaultModel));
++  const showAgent = agentEnabled && agentOn && !readOnly;
++
+   // What is being reported: the whole conversation, or one reply by id.
+   // Null closes the dialog, and the dialog is unmounted with it so the next
+   // report starts from a clean form rather than the last one's note.
+@@ -822,8 +838,16 @@ function ThreadRuntime(props: {
+           instructions={props.instructions}
+           onChanged={props.onInstructionsChanged}
+         />
++        {agentEnabled && conversationId === null && !readOnly && (
++          <AgentToggle
++            on={agentOn}
++            onChange={setAgentOn}
++            unavailable={agent.reason}
++            disabled={sending}
++          />
++        )}
+         {/* Only before the first send: the flag is fixed at creation. */}
+-        {conversationId === null && (
++        {conversationId === null && !showAgent && (
+           <TemporaryToggle
+             on={temporary}
+             disabled={sending}
+@@ -904,8 +928,17 @@ function ThreadRuntime(props: {
+           }}
+         />
+       )}
+-      {temporary && <TemporaryNotice />}
++      {temporary && !showAgent && <TemporaryNotice />}
+       {props.origin !== null && <BranchedFrom origin={props.origin} />}
++      {showAgent ? (
++        <Suspense fallback={<TranscriptSkeleton />}>
++          <AgentPanel
++            model={selectedModel}
++            unavailable={agent.reason}
++            onConversationCreated={() => void shell.reloadConversations()}
++          />
++        </Suspense>
++      ) : (
+       <ThreadView
+         conversationId={conversationId}
+         reattaching={props.reattaching}
+@@ -962,6 +995,7 @@ function ThreadRuntime(props: {
+         feedback={feedback}
+         onFeedbackChange={onFeedbackChange}
+       />
++      )}
+     </div>
+   );
+ }
+@@ -1076,6 +1110,10 @@ function ThreadView(props: {
+   // composer's ArrowUp can open the last one.
+   const [editingId, setEditingId] = useState<string | null>(null);
+   const editLastId = props.busy ? null : lastEditableId(props.branched);
++  // Read-aloud for the stored replies. One hook above the transcript owns
++  // the synth, so starting one reply stops the previous; a new generation
++  // (the busy flag) stops whichever was reading.
++  const readAloud = useReadAloud({ stopWhen: props.busy });
+   const copiedWhat = useCopyShortcuts({
+     branched: props.branched,
+     messages: props.messages,
+@@ -1258,6 +1296,15 @@ function ThreadView(props: {
+                   feedback={props.feedback.get(row.entry.message.id) ?? null}
+                   onFeedbackChange={props.onFeedbackChange}
+                   modelLabel={labelOf}
++                  readAloud={
++                    row.entry.message.role === "assistant" && readAloud.supported
++                      ? {
++                          speaking: readAloud.speakingId === row.entry.message.id,
++                          onToggle: () =>
++                            readAloud.toggle(row.entry.message.id, row.entry.message.content),
++                        }
++                      : undefined
++                  }
+                 />
+               ),
+             )}
+@@ -1820,6 +1867,11 @@ function BranchedRow(props: {
+   onFeedbackChange: (messageId: string, next: Feedback | null) => void;
+   /** A model id to the label a person knows it by. */
+   modelLabel: (id: string) => string;
++  /** Read aloud, on a reply, where the webview can speak; absent otherwise. */
++  readAloud?: {
++    speaking: boolean;
++    onToggle: () => void;
++  };
+ }) {
+   const { editing, onEditingChange: setEditing } = props;
+   const { message, branch } = props.entry;
+@@ -1872,6 +1924,7 @@ function BranchedRow(props: {
+             }
+           : undefined
+       }
++      readAloud={props.readAloud}
+     />
+   );
+ 

@@ -1,4 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useHeaderSlot } from "../../shell/headerSlot";
+import { Button } from "../../components/ui/button";
 import { JUMP_TO_MESSAGE_EVENT, type JumpToMessageDetail } from "../../shell/useConversationSearch";
 import type { ChatMessage, ChatModelAdapter, MessagePart } from "./chatAdapter";
 import { useChatThread, type ThreadPhase } from "./useChatThread";
@@ -11,6 +14,7 @@ import type {
 } from "../../types";
 import { ApiError, apiFetch, currentToken } from "../../lib/api";
 import { useShell } from "../../shell/shellContext";
+import { announceAnswerReady } from "../../shell/answerReady";
 import { useOnline } from "../../shell/useOnline";
 import { createChatAdapter, textOfParts } from "./chatAdapter";
 import { ModelPicker } from "./ModelPicker";
@@ -44,6 +48,8 @@ import { visionCapableIds, visionOf, visionRefusal } from "./vision";
 import { MessageEditor } from "./BranchControls";
 import { useAutosize } from "./useAutosize";
 import { ErrorBoundary } from "../../components/AppError";
+import { ArrowUpIcon, LoaderCircleIcon, SquareIcon } from "lucide-react";
+import { AssistantMark } from "../../components/brand";
 import { useSupportReadOnly } from "./supportMode";
 import { MessageControls } from "./MessageControls";
 import { fetchTree, forkConversation } from "./branchApi";
@@ -340,6 +346,7 @@ function ChatSession(props: {
         <TranscriptError
           kind={loadError.kind}
           reference={<RequestReference requestId={loadError.requestId} />}
+          requestId={loadError.requestId}
           onRetry={() => {
             setLoadError(null);
             setHistory(null);
@@ -420,6 +427,10 @@ function ThreadRuntime(props: {
   // notice quotes its number rather than a copy of it; null until it has
   // answered, when the 409's own detail carries the number instead.
   const [keepPairs, setKeepPairs] = useState<number | null>(null);
+  // Whether a fold has anything to do, as `/context` says: the kept count
+  // depends on how big the recent exchanges are, which only the server
+  // weighs. Null until it has answered.
+  const [serverCompactable, setServerCompactable] = useState<boolean | null>(null);
   // A fold the server is running before the turn: each change restarts the
   // first-token clock (the key below), since the wait is the summary being
   // written, not a stalled model.
@@ -485,6 +496,17 @@ function ThreadRuntime(props: {
   // The summary a send folded before its turn goes to the tree half, which
   // is built after the adapter; the ref is how the adapter reaches it.
   const compactionRef = useRef<(frame: CompactionFrame) => void>(() => undefined);
+  // A finished answer, for the tab title and the notification when the
+  // person is looking elsewhere (shell/answerReady.ts). The title is the
+  // conversation's, read when the answer lands; never the answer itself.
+  const answerReadyRef = useRef<(id: string | null) => void>(() => undefined);
+  useEffect(() => {
+    answerReadyRef.current = (id) =>
+      announceAnswerReady({
+        conversationId: id,
+        title: shell.conversations.find((c) => c.id === id)?.title ?? null,
+      });
+  }, [shell.conversations]);
   /* eslint-disable react-hooks/refs, react-hooks/preserve-manual-memoization --
      see the note above: the empty dep array is deliberate, and the compiler
      cannot preserve a memo whose inputs it cannot see through the refs. */
@@ -511,6 +533,7 @@ function ThreadRuntime(props: {
         onContext: (frame) => setContext(readingOfFrame(frame)),
         onNotice: setNotice,
         onLengthTruncated: (id) => setLengthCut((current) => new Set(current).add(id)),
+        onDone: (id) => answerReadyRef.current(id),
       }),
     [],
   );
@@ -543,6 +566,7 @@ function ThreadRuntime(props: {
   // `thread` above still owns one in-flight send, which is the exchange the
   // adapter is streaming and which has no server ids yet.
   const onBranchContext = useCallback((frame: ContextFrame) => setContext(readingOfFrame(frame)), []);
+  const onBranchDone = useCallback(() => answerReadyRef.current(idRef.current), []);
   const branches = useBranchedThread({
     conversationId,
     initialTree: props.tree,
@@ -552,6 +576,7 @@ function ThreadRuntime(props: {
     onSettled: () => hooksRef.current.onSettled(),
     onContext: onBranchContext,
     onNotice: setNotice,
+    onDone: onBranchDone,
   });
 
   // The count on open, so a long conversation shows how full it is before
@@ -568,6 +593,7 @@ function ThreadRuntime(props: {
       .then((answer) => {
         setContext(readingOfContext(answer));
         setKeepPairs(typeof answer.keep_pairs === "number" ? answer.keep_pairs : null);
+        setServerCompactable(typeof answer.compactable === "boolean" ? answer.compactable : null);
       })
       .catch(() => undefined);
   }, []);
@@ -603,6 +629,8 @@ function ThreadRuntime(props: {
         keepPairs,
         onSummary: (summary) => {
           addSummary(summary);
+          // A full window was the failure on screen; the fold answered it.
+          setError((current) => (current?.kind === "context" ? null : current));
           loadContext();
         },
         onNotice: setNotice,
@@ -799,70 +827,93 @@ function ThreadRuntime(props: {
     }
   };
 
+  const headerSlot = useHeaderSlot();
+  const turnBusy = sending || branches.running || compacting;
+  const headerControls = (
+    <div data-mw-chat-controls="" className="flex min-w-0 flex-1 items-center justify-end gap-2">
+      {/* What shapes the next answer, ahead of the model that writes it. */}
+      <div className="mr-auto flex min-w-0 items-center gap-2 md:mr-0">
+        <InstructionsBadge
+          conversationId={conversationId}
+          instructions={props.instructions}
+          onChanged={props.onInstructionsChanged}
+        />
+        {agentEnabled && conversationId === null && !readOnly && (
+          <AgentToggle
+            on={agentOn}
+            onChange={setAgentOn}
+            unavailable={agent.reason}
+            disabled={sending}
+          />
+        )}
+        {/* Only before the first send: the flag is fixed at creation. */}
+        {conversationId === null && !showAgent && (
+          <TemporaryToggle
+            on={temporary}
+            disabled={sending}
+            onChange={(on) => {
+              temporaryRef.current = on;
+              setTemporary(on);
+            }}
+          />
+        )}
+      </div>
+      <ModelPicker
+        conversationId={conversationId}
+        value={selectedModel}
+        onChange={(model) => {
+          modelRef.current = model;
+          setSelectedModel(model);
+        }}
+        onModelsLoaded={(list, fallback) => {
+          setModels(list);
+          setDefaultModel(fallback);
+        }}
+      />
+      {/* Share and the menu need a stored conversation: there is nothing to
+          share or export before the first turn and no id to report. */}
+      {conversationId !== null && !temporary && (
+        <Button
+          variant="outline"
+          className="hidden h-10 rounded-full bg-mw-surface-raised px-4 font-normal sm:inline-flex"
+          disabled={turnBusy}
+          title={turnBusy ? "Wait for the answer to finish" : undefined}
+          onClick={() => setShareOpen(true)}
+        >
+          Share
+        </Button>
+      )}
+      {conversationId !== null && (
+        <ConversationActions
+          busy={turnBusy}
+          onCompact={() => void compactNow()}
+          onShare={temporary ? undefined : () => setShareOpen(true)}
+          onExport={exportConversation}
+          onReport={() => setReportTarget({ messageId: null })}
+        />
+      )}
+    </div>
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Offline is chrome, not a transcript event: it is about the whole app,
           so it sits above the picker rather than inside the thread. */}
       {!online && <OfflineBanner />}
-      {/* The picker and the instructions affordance are one header row: both
-          say what the NEXT turn will do, so they belong together. */}
-      {/* One row at every width, ruled off from the transcript, and as tall
-          before the model list loads as after: a row that wrapped took a
-          third of a phone screen, and one that grew on load pushed the whole
-          transcript down under the reader. */}
-      <div className="shrink-0 border-b border-mw-border">
-        <div className="mx-auto flex min-h-12 w-full max-w-3xl items-center gap-2 px-3 py-1.5 sm:min-h-16 sm:gap-3 sm:px-4">
-          <ModelPicker
-            conversationId={conversationId}
-            value={selectedModel}
-            onChange={(model) => {
-              modelRef.current = model;
-              setSelectedModel(model);
-            }}
-            onModelsLoaded={(list, fallback) => {
-              setModels(list);
-              setDefaultModel(fallback);
-            }}
-          />
-          <InstructionsBadge
-            conversationId={conversationId}
-            instructions={props.instructions}
-            onChanged={props.onInstructionsChanged}
-          />
-          {agentEnabled && conversationId === null && !readOnly && (
-            <AgentToggle
-              on={agentOn}
-              onChange={setAgentOn}
-              unavailable={agent.reason}
-              disabled={sending}
-            />
-          )}
-          {/* Only before the first send: the flag is fixed at creation. */}
-          {conversationId === null && !showAgent && (
-            <TemporaryToggle
-              on={temporary}
-              disabled={sending}
-              onChange={(on) => {
-                temporaryRef.current = on;
-                setTemporary(on);
-              }}
-            />
-          )}
-          {/* Export and report need a stored conversation: there is nothing to
-              export before the first turn and no id to report. */}
-          {conversationId !== null && (
-            <div className="ml-auto">
-              <ConversationActions
-                busy={sending || branches.running || compacting}
-                onCompact={() => void compactNow()}
-                onShare={temporary ? undefined : () => setShareOpen(true)}
-                onExport={exportConversation}
-                onReport={() => setReportTarget({ messageId: null })}
-              />
-            </div>
-          )}
+      {/* The controls for the next turn and for the conversation: on a
+          desktop they join the shell's header, beside the title they act
+          on; on a phone, where that row has no room, they are a row of
+          their own, ruled off from the transcript and as tall before the
+          model list loads as after, so the transcript never jumps. */}
+      {headerSlot !== null ? (
+        createPortal(headerControls, headerSlot)
+      ) : (
+        <div className="shrink-0 border-b border-mw-border">
+          <div className="mx-auto flex min-h-14 w-full max-w-3xl items-center gap-2 px-3 py-2 sm:px-4">
+            {headerControls}
+          </div>
         </div>
-      </div>
+      )}
       {shareOpen && conversationId !== null && (
         <ShareDialog open conversationId={conversationId} onOpenChange={setShareOpen} />
       )}
@@ -906,6 +957,7 @@ function ThreadRuntime(props: {
         onCompact={conversationId === null || readOnly ? undefined : () => void compactNow()}
         compactDisabled={sending || branches.running || compacting}
         keepPairs={keepPairs}
+        serverCompactable={serverCompactable}
         notice={notice}
         onDismissNotice={() => setNotice(null)}
         lengthCut={lengthCut}
@@ -1008,6 +1060,8 @@ function ThreadView(props: {
   compactDisabled?: boolean;
   /** How many recent exchanges a fold keeps, as the server said; null until it has. */
   keepPairs: number | null;
+  /** Whether a fold has anything to do, as the server said; null until it has. */
+  serverCompactable?: boolean | null;
   /** A fold that failed or found nothing to do. */
   notice: string | null;
   onDismissNotice: () => void;
@@ -1069,7 +1123,9 @@ function ThreadView(props: {
   // Whether /compact is worth offering: the stored turns on the path,
   // without the summaries a fold already left, against the kept tail.
   const storedTurns = props.branched.filter((entry) => entry.message.role !== "system").length;
-  const compactable = props.onCompact !== undefined && canCompact(storedTurns, props.keepPairs);
+  const compactable =
+    props.onCompact !== undefined &&
+    canCompact(storedTurns, props.keepPairs, props.serverCompactable ?? null);
   const showContinue =
     !props.busy &&
     props.error === null &&
@@ -1136,6 +1192,13 @@ function ThreadView(props: {
     [models, selectedModel],
   );
 
+  // A stored reply names its model by id; the list names it by label, and
+  // the label is the only name a person has seen for it.
+  const labelOf = useCallback(
+    (id: string) => models?.find((model) => model.id === id)?.label ?? id,
+    [models],
+  );
+
   const attachments = useAttachments({
     conversationId,
     csrfCookieName: props.csrfCookieName,
@@ -1177,12 +1240,12 @@ function ThreadView(props: {
             )}
           </>
         ) : (
-          <div className="mx-auto w-full max-w-3xl px-4 py-6">
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-7 md:pt-8">
             {props.messages.map((message, i) =>
               message.role === "user" ? (
                 <UserMessage key={i} message={message} />
               ) : (
-                <AssistantMessage key={i} message={message} />
+                <AssistantMessage key={i} message={message} modelLabel={labelOf} />
               ),
             )}
             {rows.map((row) =>
@@ -1208,11 +1271,11 @@ function ThreadView(props: {
                   key={row.entry.message.id}
                   entry={row.entry}
                   /* Every stored reply, not only the last: regenerating an
-                      earlier one writes a sibling and the rows beneath it leave
-                      the active path, exactly as editing an earlier user turn
-                      does, and the switcher is the way back to them. A reply
-                      still streaming has the `pending-*` id and no server row
-                      to regenerate. */
+                     earlier one writes a sibling and the rows beneath it leave
+                     the active path, exactly as editing an earlier user turn
+                     does, and the switcher is the way back to them. A reply
+                     still streaming has the `pending-*` id and no server row
+                     to regenerate. */
                   canRegenerate={
                     row.entry.message.role === "assistant" &&
                     !row.entry.message.id.startsWith("pending-")
@@ -1232,6 +1295,7 @@ function ThreadView(props: {
                   onBranch={props.onBranch}
                   feedback={props.feedback.get(row.entry.message.id) ?? null}
                   onFeedbackChange={props.onFeedbackChange}
+                  modelLabel={labelOf}
                   readAloud={
                     row.entry.message.role === "assistant" && readAloud.supported
                       ? {
@@ -1272,7 +1336,9 @@ function ThreadView(props: {
                 kind={props.error.kind}
                 /* The id the API logged for this exact failure. */
                 reference={<RequestReference requestId={props.error.requestId} />}
+                requestId={props.error.requestId}
                 onRetry={props.canRetry ? props.onRetry : undefined}
+                onCompact={props.error.kind === "context" ? props.onCompact : undefined}
                 onDismiss={props.onDismissError}
               />
             )}
@@ -1550,7 +1616,7 @@ function Composer(props: {
 
   return (
     <div
-      className="relative shrink-0 border-t border-mw-border p-3"
+      className="relative shrink-0 px-3 pt-2 pb-3 md:px-7 md:pb-5"
       /* The drop target is the whole composer, not just the textarea: aiming
          a dragged file at a one-line text box is a precision task, and the
          surrounding border is what a user actually aims at. */
@@ -1580,7 +1646,7 @@ function Composer(props: {
          value is fragile across their parser versions, and this is one
          declaration. */
       style={{
-        paddingBottom: "var(--mw-safe-bottom)",
+        paddingBottom: "max(0.75rem, var(--mw-safe-bottom))",
         paddingLeft: "max(0.75rem, var(--mw-safe-left))",
         paddingRight: "max(0.75rem, var(--mw-safe-right))",
       }}
@@ -1623,10 +1689,16 @@ function Composer(props: {
         onRemove={attachments.remove}
         onRetry={attachments.retry}
       />
-      {/* The box draws the message field's focus: the textarea itself is
-          borderless, and a caret alone is not a focus indicator a keyboard
-          user can find at a glance (WCAG 2.4.7). */}
-      <div className="relative mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-mw-border bg-mw-surface-raised p-2 has-[textarea:focus-visible]:border-mw-accent">
+      {/* The panel: a hairline edge inside a soft blue halo, the message
+          box above its row of controls. The panel draws the message field's
+          focus -- the textarea itself is borderless, and a caret alone is
+          not a focus indicator a keyboard user can find at a glance (WCAG
+          2.4.7) -- by firming the edge and the halo, never by turning the
+          edge itself hard blue. */}
+      <div
+        data-mw-composer-panel=""
+        className="relative mx-auto flex max-w-3xl flex-col gap-1 rounded-2xl border border-mw-border-emphasis bg-mw-surface-raised pt-2.5 pr-2.5 pb-2 pl-3.5 shadow-lg ring-4 ring-mw-focus/6 transition-shadow md:pt-3 md:pr-3 md:pb-2.5 md:pl-4 has-[textarea:focus-visible]:border-mw-border-strong has-[textarea:focus-visible]:ring-mw-focus/12"
+      >
         {menu.open && (
           <CommandMenu
             id={menuId}
@@ -1636,18 +1708,6 @@ function Composer(props: {
             onHover={(index) => menu.move(index - menu.activeIndex)}
           />
         )}
-        {attachments.available && (
-          <AttachmentPicker
-            onFiles={(files) => attachments.add(files)}
-            disabled={blocked || props.running}
-            hint={attachmentHint(attachments, !props.online)}
-          />
-        )}
-        <DictationButton
-          dictation={dictation}
-          disabled={blocked || props.running || contextFull}
-          disabledHint={dictationHint}
-        />
         <textarea
           ref={boxRef}
           rows={1}
@@ -1709,50 +1769,77 @@ function Composer(props: {
              sit high against the box's top edge. `self-center` keeps one line
              centred; `items-end` on the row keeps the buttons at the bottom
              as the box grows. */
-          className="max-h-40 min-w-0 flex-1 resize-none self-center bg-transparent px-1 py-1.5 text-base leading-6 pointer-coarse:py-2.5 outline-none md:text-sm md:leading-6"
+          className="max-h-40 min-h-10 w-full resize-none bg-transparent py-1.5 text-base leading-6 pointer-coarse:py-2.5 outline-none md:min-h-12 md:text-sm md:leading-6"
         />
-        {props.running ? (
-          <button
-            type="button"
-            onClick={props.onCancel}
-            className="h-9 min-w-16 shrink-0 rounded-lg bg-mw-surface-hover px-3 text-sm font-medium hover:bg-mw-surface-active pointer-coarse:h-11"
-          >
-            Stop
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={submit}
-            disabled={
-              props.draft.trim() === "" ||
-              (parseCommand(props.draft) === null && (blocked || uploading))
-            }
-            title={
-              props.readOnly
-                ? "Support sessions are read only"
-                : !props.online
-                  ? "You are offline"
-                  : uploading
-                    ? "Waiting for the attachment to finish uploading"
-                    : undefined
-            }
-            className="h-9 min-w-16 shrink-0 rounded-lg bg-mw-accent px-3 text-sm font-medium text-mw-accent-foreground hover:bg-mw-accent/85 disabled:opacity-40 pointer-coarse:h-11"
-          >
-            {/* The label says what it is waiting for. A disabled Send with no
-                explanation during a 20-second upload is the frozen UI this
-                step exists to prevent, and the chip's progress bar is the
-                answer to "how long" — this is the answer to "why". */}
-            {uploading ? "Uploading…" : "Send"}
-          </button>
-        )}
-      </div>
-      <div className="mx-auto mt-1 flex max-w-3xl justify-end px-1">
-        <ContextMeter
-          context={props.context}
-          draft={props.draft}
-          onCompact={props.onCompact}
-          compactDisabled={props.compactDisabled}
-        />
+        <div className="flex min-w-0 items-center gap-1">
+          {attachments.available && (
+            <AttachmentPicker
+              onFiles={(files) => attachments.add(files)}
+              disabled={blocked || props.running}
+              hint={attachmentHint(attachments, !props.online)}
+            />
+          )}
+          <DictationButton
+            dictation={dictation}
+            disabled={blocked || props.running || contextFull}
+            disabledHint={dictationHint}
+          />
+          {/* How full the window is, in place of a bare count, with the
+              way out (Compact) beside it once it is full. */}
+          <div className="ml-auto flex min-w-0 items-center gap-3">
+            <ContextMeter
+              context={props.context}
+              draft={props.draft}
+              onCompact={props.onCompact}
+              compactDisabled={props.compactDisabled}
+            />
+            {props.running ? (
+              <button
+                type="button"
+                onClick={props.onCancel}
+                aria-label="Stop"
+                title="Stop (Esc)"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg md:size-9 border border-mw-border-strong bg-mw-surface-hover text-mw-text outline-none hover:bg-mw-surface-active focus-visible:ring-2 focus-visible:ring-mw-focus focus-visible:ring-offset-2 focus-visible:ring-offset-mw-surface-raised md:pointer-coarse:size-11"
+              >
+                <SquareIcon aria-hidden className="size-3.5 fill-current" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submit}
+                disabled={
+                  props.draft.trim() === "" ||
+                  (parseCommand(props.draft) === null && (blocked || uploading))
+                }
+                /* The name says what it is waiting for. A disabled Send with
+                   no explanation during a 20-second upload is the frozen UI
+                   this step exists to prevent, and the chip's progress bar
+                   is the answer to "how long" -- this is the answer to "why". */
+                aria-label={uploading ? "Uploading…" : "Send"}
+                title={
+                  props.readOnly
+                    ? "Support sessions are read only"
+                    : !props.online
+                      ? "You are offline"
+                      : uploading
+                        ? "Waiting for the attachment to finish uploading"
+                        : "Send (Enter)"
+                }
+                /* The primary blue at rest. Disabled is not half opacity:
+                   a muted fill with a firm edge, so the control's boundary
+                   still reads at 3:1 against the panel, and its icon in the
+                   muted ink the tokens hold at 4.5:1 on that fill. */
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-lg md:size-9 border border-transparent bg-mw-accent text-mw-accent-foreground outline-none hover:bg-mw-accent-hover focus-visible:ring-2 focus-visible:ring-mw-focus focus-visible:ring-offset-2 focus-visible:ring-offset-mw-surface-raised disabled:cursor-not-allowed disabled:border-mw-border-strong disabled:bg-mw-surface-active disabled:text-mw-text-muted md:pointer-coarse:size-11"
+              >
+                {uploading ? (
+                  <LoaderCircleIcon aria-hidden className="size-4.5 animate-spin motion-reduce:animate-none" />
+                ) : (
+                  <ArrowUpIcon aria-hidden className="size-4.5" strokeWidth={2.2} />
+                )}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1778,6 +1865,8 @@ function BranchedRow(props: {
   onBranch?: (messageId: string) => void;
   feedback: Feedback | null;
   onFeedbackChange: (messageId: string, next: Feedback | null) => void;
+  /** A model id to the label a person knows it by. */
+  modelLabel: (id: string) => string;
   /** Read aloud, on a reply, where the webview can speak; absent otherwise. */
   readAloud?: {
     speaking: boolean;
@@ -1793,7 +1882,7 @@ function BranchedRow(props: {
 
   if (editing) {
     return (
-      <div className="mb-4 flex justify-end">
+      <div className="mb-7 flex justify-end">
         <div className="w-full max-w-[80%]">
           <MessageEditor
             initial={message.content}
@@ -1821,9 +1910,12 @@ function BranchedRow(props: {
       onRegenerate={props.onRegenerate}
       onReport={props.onReport}
       onBranch={props.onBranch}
+      leading={
+        !isUser && message.model ? <ModelName label={props.modelLabel(message.model)} /> : undefined
+      }
       /* Thumbs on a stored reply only: `canReport` is exactly "a reply
-          with a server id", which is also what a rating needs. They lead the
-          reply's one toolbar. */
+         with a server id", which is also what a rating needs. They lead the
+         reply's one toolbar. */
       feedback={
         canReport
           ? {
@@ -1847,15 +1939,13 @@ function BranchedRow(props: {
     // positioned row it was placed against the document instead -- forty
     // rows deep in the transcript, which made the page itself scroll.
     return (
-      <div className="relative mb-4 flex flex-col items-end" data-message-id={message.id}>
+      <div className="relative mb-7 flex flex-col items-end" data-message-id={message.id}>
         {extras.length > 0 && (
-          <div className="mb-1 w-full max-w-[80%]">
+          <div className="mb-2 flex w-full max-w-[80%] flex-col items-end">
             <MessageParts parts={extras} />
           </div>
         )}
-        <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-mw-inverse px-4 py-2 text-sm text-mw-inverse-foreground">
-          {message.content}
-        </div>
+        <UserBubble>{message.content}</UserBubble>
         <MessageTime at={message.created_at} />
         {controls}
       </div>
@@ -1863,17 +1953,51 @@ function BranchedRow(props: {
   }
 
   return (
-    <div className="relative mb-4" data-message-id={message.id}>
+    <AssistantRow messageId={message.id}>
       {/* Parts when the API sent them - a branched message can carry
           tool calls too - falling back to one text part for a response that
           predates typed parts. MessageParts owns the Markdown boundary. */}
       <MessageParts
         parts={message.parts ?? [{ type: "text", text: message.content }]}
       />
-      {message.model && <p className="mt-1 text-xs text-mw-text-muted">{message.model}</p>}
-      <MessageTime at={message.created_at} />
+      {/* The model's name leads the action row under the reply. */}
       {controls}
+      <MessageTime at={message.created_at} />
+    </AssistantRow>
+  );
+}
+
+/**
+ * The person's own turn: the navy bubble with its hairline, squared off at
+ * the corner that points at the thread's right edge, where it sits.
+ */
+function UserBubble(props: { children: React.ReactNode }) {
+  return (
+    <div
+      data-mw-user-bubble=""
+      className="max-w-[80%] rounded-2xl rounded-br-sm border border-mw-inverse-border bg-mw-inverse px-4 py-3 text-sm whitespace-pre-wrap text-mw-inverse-foreground"
+    >
+      {props.children}
     </div>
+  );
+}
+
+/** A reply: the assistant's mark beside it, the answer and its footer in a column. */
+function AssistantRow(props: { messageId?: string; children: React.ReactNode }) {
+  return (
+    <div className="relative mb-7 flex gap-3.5" data-message-id={props.messageId}>
+      <AssistantMark className="mt-0.5 rounded-md" />
+      <div className="flex min-w-0 flex-1 flex-col">{props.children}</div>
+    </div>
+  );
+}
+
+/** Which model wrote a reply, at the head of its action row. */
+function ModelName(props: { label: string }) {
+  return (
+    <span data-mw-reply-model="" className="mr-2 text-xs text-mw-text-muted">
+      {props.label}
+    </span>
   );
 }
 
@@ -1889,29 +2013,31 @@ function UserMessage(props: { message: ChatMessage }) {
   // sending order, which is where the user put them.
   const extras = props.message.content.filter((part) => part.type !== "text");
   return (
-    <div className="mb-4 flex flex-col items-end">
+    <div className="mb-7 flex flex-col items-end">
       {extras.length > 0 && (
-        <div className="mb-1 w-full max-w-[80%]">
+        <div className="mb-2 flex w-full max-w-[80%] flex-col items-end">
           <MessageParts parts={extras} />
         </div>
       )}
-      <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-mw-inverse px-4 py-2 text-sm text-mw-inverse-foreground">
-        {textOf(props.message)}
-      </div>
+      <UserBubble>{textOf(props.message)}</UserBubble>
     </div>
   );
 }
 
-function AssistantMessage(props: { message: ChatMessage }) {
+function AssistantMessage(props: { message: ChatMessage; modelLabel: (id: string) => string }) {
   const model = props.message.metadata?.custom?.model ?? "";
   return (
-    <div className="mb-4">
+    <AssistantRow>
       {/* One component per part kind, with a placeholder for kinds this
           build does not know. Text still goes through the markdown renderer -- no
           rehype-raw, URL allowlist, same-origin images, per-message error
           boundary -- which MessageParts is the only caller of here. */}
       <MessageParts parts={props.message.content} />
-      {model && <p className="mt-1 text-xs text-mw-text-muted">{model}</p>}
-    </div>
+      {model && (
+        <div className="mt-2 flex min-h-8 items-center">
+          <ModelName label={props.modelLabel(model)} />
+        </div>
+      )}
+    </AssistantRow>
   );
 }

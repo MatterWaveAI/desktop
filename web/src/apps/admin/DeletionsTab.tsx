@@ -1,3 +1,5 @@
+import { plural } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Badge } from "../../components/ui/badge";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../patterns";
@@ -15,31 +17,50 @@ import { shortId, useLoad } from "./useLoad";
  * knows. The note beside it is what the provider said.
  */
 export function DeletionsTab() {
+  const { t } = useLingui();
   const [state, reload] = useLoad(fetchDeletionRequests, "deletions");
   if (state.phase === "loading") return <LoadingSkeleton rows={4} />;
   if (state.phase === "error") {
-    return <ErrorState title="Could not load deletion requests" message={state.message} onRetry={reload} />;
+    return <ErrorState title={t`Could not load deletion requests`} message={state.message} onRetry={reload} />;
   }
   if (state.data.length === 0) {
-    return <EmptyState title="No deletion requests" description="Each account deletion is recorded here with its outcome." />;
+    return <EmptyState
+        title={t`No deletion requests`}
+        description={t`Each account deletion is recorded here with its outcome.`}
+      />;
   }
   const outstanding = state.data.filter((r) => !r.identity_removed).length;
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm text-mw-text-muted">
         {outstanding === 0
-          ? "Every deletion's login has been removed at the identity provider."
-          : `${outstanding} deletion${outstanding === 1 ? "" : "s"} still ${outstanding === 1 ? "has" : "have"} a working login at the identity provider. Deactivate those by hand.`}
+          ? t`Every deletion's login has been removed at the identity provider.`
+          : plural(outstanding, {
+              one: "# deletion still has a working login at the identity provider. Deactivate it by hand.",
+              other: "# deletions still have a working login at the identity provider. Deactivate those by hand.",
+            })}
       </p>
-      <Table className="bg-card" aria-label="Deletion requests">
+      <Table className="bg-card" aria-label={t`Deletion requests`}>
         <TableHeader>
           <TableRow>
-            <TableHead>Requested</TableHead>
-            <TableHead>Account</TableHead>
-            <TableHead>Organisation</TableHead>
-            <TableHead>Identity</TableHead>
-            <TableHead>Completed</TableHead>
-            <TableHead>Notes</TableHead>
+            <TableHead>
+              <Trans>Requested</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Account</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Organisation</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Identity</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Completed</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Notes</Trans>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -55,12 +76,16 @@ export function DeletionsTab() {
               </TableCell>
               <TableCell>
                 {row.identity_removed ? (
-                  <Badge variant="positive">removed</Badge>
+                  <Badge variant="positive">
+                    <Trans>removed</Trans>
+                  </Badge>
                 ) : (
-                  <Badge variant="destructive">login remains</Badge>
+                  <Badge variant="destructive">
+                    <Trans>login remains</Trans>
+                  </Badge>
                 )}
               </TableCell>
-              <TableCell>{row.completed_at ? formatDate(row.completed_at) : "Not finished"}</TableCell>
+              <TableCell>{row.completed_at ? formatDate(row.completed_at) : t`Not finished`}</TableCell>
               <TableCell className="whitespace-normal text-mw-text-muted">{row.notes ?? "—"}</TableCell>
             </TableRow>
           ))}

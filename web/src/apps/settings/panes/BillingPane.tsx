@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { msg, plural, t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import type { MessageDescriptor } from "@lingui/core";
 import { Alert } from "../../../components/ui/alert";
 import { StatusDot } from "../../../components/ui/badge";
 import { Button, buttonVariants } from "../../../components/ui/button";
+import { formatDateTime } from "../../../i18n/format";
 import { apiFetch } from "../../../lib/api";
 import { ErrorState, LoadingSkeleton } from "../../../patterns";
 import { useShell } from "../../../shell/shellContext";
 import { failureMessage } from "../../../shell/authForms";
 import { managesOrg } from "../../../lib/auth";
+import { goToStripe, useRefreshOnReturn } from "../../../lib/desktopBilling";
 import {
-  ANNUAL_OVERAGE_NOTE,
-  SEATS_FOLLOW_MEMBERS_NOTE,
+  ANNUAL_OVERAGE_NOTE_MSG,
+  SEATS_FOLLOW_MEMBERS_NOTE_MSG,
   fetchBillingStatus,
   fetchInvoices,
   fetchPlans,
@@ -72,30 +77,33 @@ function subscriptionState(status: BillingStatus): string {
   switch (status.status) {
     // The trial row carries the date and what happens at the end of it.
     case "trialing":
-      return "Free trial";
+      return t`Free trial`;
     case "past_due":
     case "unpaid":
-      return "Past due";
+      return t`Past due`;
     case "canceled":
-      return "Cancelled";
+      return t`Cancelled`;
     case "incomplete":
     case "incomplete_expired":
-      return "Payment incomplete";
+      return t`Payment incomplete`;
     case "paused":
-      return "Paused";
+      return t`Paused`;
   }
-  if (status.cancel_at_period_end) return end ? `Cancels on ${end}` : "Cancels at the end of the period";
-  if (status.status === "active") return end ? `Active, renews ${end}` : "Active";
+  if (status.cancel_at_period_end) return end ? t`Cancels on ${end}` : t`Cancels at the end of the period`;
+  if (status.status === "active") return end ? t`Active, renews ${end}` : t`Active`;
   const words = status.status.replace(/_/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function BillingPane() {
+  const { t, i18n } = useLingui();
   const { principal } = useShell();
   const isAdmin = managesOrg(principal);
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [portal, setPortal] = useState<"idle" | "opening" | string>("idle");
+  // The desktop app opened the portal in the system browser.
+  const [portalOutside, setPortalOutside] = useState(false);
   const [version, setVersion] = useState(0);
   // The error is cleared by the retry, not by the effect: a setState at the
   // top of an effect is the lint's "set-state-in-effect" and an extra render
@@ -104,6 +112,10 @@ export function BillingPane() {
     setError(null);
     setVersion((v) => v + 1);
   }, []);
+
+  // The desktop app's return from the portal in the browser: the window
+  // coming back to the front reads the status again.
+  useRefreshOnReturn(reload);
 
   useEffect(() => {
     let alive = true;
@@ -118,14 +130,17 @@ export function BillingPane() {
   async function manage() {
     setPortal("opening");
     try {
-      window.location.assign(await openPortal());
+      if (goToStripe(await openPortal())) {
+        setPortal("idle");
+        setPortalOutside(true);
+      }
     } catch (err) {
       setPortal(failureMessage(err));
     }
   }
 
   if (error) {
-    return <ErrorState title="Could not load billing" message={error} onRetry={reload} />;
+    return <ErrorState title={t`Could not load billing`} message={error} onRetry={reload} />;
   }
   if (!status) return <LoadingSkeleton />;
 
@@ -145,6 +160,14 @@ export function BillingPane() {
   const annual = !status.implicit && status.billing_interval === "year";
   const seatPrice = annual ? status.price_cents_annual : status.price_cents_monthly;
   const perSeatTokens = Number(status.limits.included_tokens_per_seat ?? 0);
+  const planName = status.plan_name;
+  const includedTokens = formatTokens(included);
+  const billedSeats = formatSeats(status.billed_seats);
+  const perSeatAllowance = formatTokenAllowance(perSeatTokens);
+  const defaultCap = formatMicros(status.default_overage_cap_micros);
+  const unitPrice = formatPrice(seatPrice);
+  const seatsTotal = formatPrice(status.billed_seats * seatPrice);
+  const seatCount = status.seats;
 
   // The portal is the pane's one primary action, so it sits beside the
   // title; only an admin of an org Stripe knows can open it.
@@ -155,7 +178,7 @@ export function BillingPane() {
       {canManage && (
         <PaneActions>
           <Button size="lg" onClick={() => void manage()} disabled={portal === "opening"}>
-            {portal === "opening" ? "Opening…" : "Manage billing"}
+            {portal === "opening" ? t`Opening…` : t`Manage billing`}
           </Button>
         </PaneActions>
       )}
@@ -175,7 +198,7 @@ export function BillingPane() {
                 rel="noreferrer"
                 className={buttonVariants({ size: "lg" })}
               >
-                Pay the invoice
+                <Trans>Pay the invoice</Trans>
               </a>
             ) : undefined
           }
@@ -184,65 +207,88 @@ export function BillingPane() {
         </Alert>
       )}
 
-      <PaneSection title="Plan" description="What this organisation is subscribed to.">
+      <PaneSection title={t`Plan`} description={t`What this organisation is subscribed to.`}>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
           <div>
-            <dt className={DT_CLASS}>Plan</dt>
-            <dd className="font-medium">{status.plan_name}</dd>
+            <dt className={DT_CLASS}>
+              <Trans>Plan</Trans>
+            </dt>
+            <dd className="font-medium">{planName}</dd>
           </div>
           <div>
-            <dt className={DT_CLASS}>Status</dt>
+            <dt className={DT_CLASS}>
+              <Trans>Status</Trans>
+            </dt>
             <dd className="font-medium" data-billing-state>
               {subscriptionState(status)}
             </dd>
           </div>
           <div>
-            <dt className={DT_CLASS}>Included tokens</dt>
-            <dd className="font-medium">{formatTokens(included)} / month</dd>
+            <dt className={DT_CLASS}>
+              <Trans>Included tokens</Trans>
+            </dt>
+            <dd className="font-medium">
+              <Trans>{includedTokens} / month</Trans>
+            </dd>
             {status.per_seat && (
               <dd className={NOTE_CLASS}>
-                {formatSeats(status.billed_seats)} × {formatTokenAllowance(perSeatTokens)}, one pool for everyone
+                <Trans>{billedSeats} × {perSeatAllowance}, one pool for everyone</Trans>
               </dd>
             )}
           </div>
           <div>
-            <dt className={DT_CLASS}>Past the allowance</dt>
+            <dt className={DT_CLASS}>
+              <Trans>Past the allowance</Trans>
+            </dt>
             <dd className="font-medium">
-              {overage
-                ? `List price, up to ${formatMicros(status.default_overage_cap_micros)} by default`
-                : "Requests stop"}
+              {overage ? t`List price, up to ${defaultCap} by default` : t`Requests stop`}
             </dd>
-            {annual && <dd className={NOTE_CLASS}>{ANNUAL_OVERAGE_NOTE}</dd>}
+            {annual && <dd className={NOTE_CLASS}>{i18n._(ANNUAL_OVERAGE_NOTE_MSG)}</dd>}
           </div>
           <div>
-            <dt className={DT_CLASS}>Payment</dt>
+            <dt className={DT_CLASS}>
+              <Trans>Payment</Trans>
+            </dt>
             <dd className="font-medium" data-billing-payment-method>
               {status.implicit ? "—" : paymentMethodLabel(status)}
             </dd>
           </div>
           {trialEnds(status) && (
             <div data-billing-trial className="sm:col-span-2">
-              <dt className={DT_CLASS}>Free trial</dt>
+              <dt className={DT_CLASS}>
+                <Trans>Free trial</Trans>
+              </dt>
               <dd className="font-medium">{trialEnds(status)}</dd>
               <dd className={NOTE_CLASS}>
-                The card on file is charged when the trial ends, unless the plan is cancelled first.
+                <Trans>The card on file is charged when the trial ends, unless the plan is cancelled first.</Trans>
               </dd>
             </div>
           )}
           {status.per_seat ? (
             <div data-billing-seats className="sm:col-span-2">
-              <dt className={DT_CLASS}>Seats</dt>
+              <dt className={DT_CLASS}>
+                <Trans>Seats</Trans>
+              </dt>
               <dd className="font-medium">
-                {formatSeats(status.billed_seats)} × {formatPrice(seatPrice)} ={" "}
-                {formatPrice(status.billed_seats * seatPrice)} / {annual ? "year" : "month"}
+                {annual ? (
+                  <Trans>
+                    {billedSeats} × {unitPrice} = {seatsTotal} / year
+                  </Trans>
+                ) : (
+                  <Trans>
+                    {billedSeats} × {unitPrice} = {seatsTotal} / month
+                  </Trans>
+                )}
               </dd>
-              <dd className={NOTE_CLASS}>{SEATS_FOLLOW_MEMBERS_NOTE}</dd>
+              <dd className={NOTE_CLASS}>{i18n._(SEATS_FOLLOW_MEMBERS_NOTE_MSG)}</dd>
             </div>
           ) : (
             status.seats > 1 && (
               <div>
-                <dt className={DT_CLASS}>Seats</dt>
-                <dd className="font-medium">{status.seats}</dd>
+                <dt className={DT_CLASS}>
+                  <Trans>Seats</Trans>
+                </dt>
+                <dd className="font-medium">{seatCount}</dd>
               </div>
             )
           )}
@@ -250,13 +296,18 @@ export function BillingPane() {
 
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3">
           <Link to="/pricing" className={LINK_CLASS}>
-            Change plan
+            <Trans>Change plan</Trans>
           </Link>
           <UsageLink />
         </div>
         {!isAdmin && (
           <p className="mt-2 text-xs text-mw-text-subtle">
-            Only an organisation admin can change the card or the plan.
+            <Trans>Only an organisation admin can change the card or the plan.</Trans>
+          </p>
+        )}
+        {portalOutside && (
+          <p role="status" className="mt-2 text-sm text-mw-text-muted" data-portal-outside="">
+            Billing is open in your browser. Changes made there show here when you come back.
           </p>
         )}
         {portal !== "idle" && portal !== "opening" && (
@@ -279,7 +330,7 @@ function UsageLink() {
       params={{ paneId: "usage" }}
       className={LINK_CLASS}
     >
-      See usage
+      <Trans>See usage</Trans>
     </Link>
   );
 }
@@ -293,6 +344,7 @@ function UsageLink() {
  * pricing page names them, with a count until it is in.
  */
 function FreePlan(props: { status: BillingStatus; isAdmin: boolean }) {
+  const { t } = useLingui();
   const { status } = props;
   const [catalog, setCatalog] = useState<PlanCatalog | null>(null);
   useEffect(() => {
@@ -309,35 +361,46 @@ function FreePlan(props: { status: BillingStatus; isAdmin: boolean }) {
   const included = Number(status.limits.included_tokens ?? 0);
   const maxSeats = status.limits.max_seats;
   const seats =
-    typeof maxSeats === "number" ? formatSeats(maxSeats) : maxSeats === null ? "Unlimited seats" : null;
+    typeof maxSeats === "number" ? formatSeats(maxSeats) : maxSeats === null ? t`Unlimited seats` : null;
   const plan = catalog?.plans.find((p) => p.code === status.plan);
   const labels = plan && catalog ? planModelLabels(plan, catalog.models) : [];
   // The allow-list is the models beyond the one every plan has.
   const extra = Array.isArray(status.limits.allowed_models) ? status.limits.allowed_models.length : 0;
-  const modelsLine = labels.length > 0 ? listOf(labels) : `${extra + 1} model${extra === 0 ? "" : "s"}`;
+  const modelCount = extra + 1;
+  const modelsLine =
+    labels.length > 0 ? listOf(labels) : plural(modelCount, { one: "# model", other: "# models" });
+  const planName = status.plan_name;
+  const includedTokens = formatTokens(included);
   return (
-    <PaneSection title="Plan" description="What this organisation is on, and what it includes.">
+    <PaneSection title={t`Plan`} description={t`What this organisation is on, and what it includes.`}>
       {/* Choosing a plan is the pane's one primary action on Free. */}
       <PaneActions>
         <Link to="/pricing" className={buttonVariants({ size: "lg" })}>
-          Upgrade
+          <Trans>Upgrade</Trans>
         </Link>
       </PaneActions>
       <p className="text-lg font-semibold" data-billing-state>
-        You're on {status.plan_name}
+        <Trans>You're on {planName}</Trans>
       </p>
-      <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-sm text-mw-text-subtle" aria-label="What Free includes">
-        <li>{formatTokens(included)} a month, counted by each model's weight</li>
+      <ul
+        className="mt-2 flex list-disc flex-col gap-1 pl-5 text-sm text-mw-text-subtle"
+        aria-label={t`What Free includes`}
+      >
+        <li>
+          <Trans>{includedTokens} a month, counted by each model's weight</Trans>
+        </li>
         {seats && <li>{seats}</li>}
         <li data-billing-models>{modelsLine}</li>
-        <li>Requests stop when the included tokens run out; nothing is billed</li>
+        <li>
+          <Trans>Requests stop when the included tokens run out; nothing is billed</Trans>
+        </li>
       </ul>
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3">
         <UsageLink />
       </div>
       {!props.isAdmin && (
         <p className="mt-2 text-xs text-mw-text-subtle">
-          Only an organisation admin can choose a plan. Ask an admin to subscribe.
+          <Trans>Only an organisation admin can choose a plan. Ask an admin to subscribe.</Trans>
         </p>
       )}
     </PaneSection>
@@ -356,12 +419,12 @@ export interface PlanEvent {
   created_at: string;
 }
 
-const EVENT_KIND: Record<string, string> = {
-  upgrade: "Upgrade",
-  downgrade: "Downgrade",
-  cancel: "Cancelled",
-  lateral: "Plan change",
-  status_change: "Status change",
+const EVENT_KIND: Record<string, MessageDescriptor> = {
+  upgrade: msg`Upgrade`,
+  downgrade: msg`Downgrade`,
+  cancel: msg`Cancelled`,
+  lateral: msg`Plan change`,
+  status_change: msg`Status change`,
 };
 
 /** "Free → Pro", or the status that changed when the plan did not. */
@@ -369,7 +432,8 @@ export function planEventLabel(event: PlanEvent): string {
   const name = (code: string) => code.charAt(0).toUpperCase() + code.slice(1);
   if (event.from_plan !== event.to_plan) return `${name(event.from_plan)} → ${name(event.to_plan)}`;
   const status = event.to_status.replace(/_/g, " ");
-  return `${name(event.to_plan)}, now ${status}`;
+  const plan = name(event.to_plan);
+  return t`${plan}, now ${status}`;
 }
 
 /**
@@ -382,21 +446,19 @@ export function planEventReason(reason: string): { text: string; title?: string 
   const stripeId = /\b(?:cs|sub|evt|in|pi|cus|price|prod|seti|si|il|ch|inv|req)_(?:test_|live_)?[A-Za-z0-9]+\b/g;
   if (!stripeId.test(reason)) return { text: reason };
   const text = reason.replace(stripeId, "").replace(/\s+/g, " ").trim();
-  return { text: text || "Stripe reference", title: reason };
+  return { text: text || t`Stripe reference`, title: reason };
 }
 
 /** Who made the change, as a person reads it: Stripe, an operator, or a member. */
 export function planEventActor(actor: string): string {
   if (actor.startsWith("stripe:")) return "Stripe";
-  if (actor.startsWith("operator:")) return "An operator";
-  if (actor.startsWith("system:") || actor === "system") return "Automatic";
+  if (actor.startsWith("operator:")) return t`An operator`;
+  if (actor.startsWith("system:") || actor === "system") return t`Automatic`;
   return actor;
 }
 
 function formatEventTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return formatDateTime(iso, { dateStyle: "medium", timeStyle: "short" }) || iso;
 }
 
 /**
@@ -405,6 +467,7 @@ function formatEventTime(iso: string): string {
  * is said in place, like the invoices: the plan above is still true.
  */
 function PlanHistory() {
+  const { t, i18n } = useLingui();
   const [events, setEvents] = useState<PlanEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -420,8 +483,8 @@ function PlanHistory() {
 
   return (
     <PaneSection
-      title="Plan history"
-      description="Every change of plan or subscription status, newest first."
+      title={t`Plan history`}
+      description={t`Every change of plan or subscription status, newest first.`}
       flush={events !== null && events.length > 0 && !error}
     >
       {error ? (
@@ -431,16 +494,18 @@ function PlanHistory() {
       ) : events === null ? (
         <LoadingSkeleton rows={2} />
       ) : events.length === 0 ? (
-        <p className="text-sm text-mw-text-subtle">No changes yet.</p>
+        <p className="text-sm text-mw-text-subtle">
+          <Trans>No changes yet.</Trans>
+        </p>
       ) : (
-        <RowList aria-label="Plan history">
+        <RowList aria-label={t`Plan history`}>
           {events.map((event, index) => (
             <Row
               key={`${event.created_at}-${index}`}
               title={planEventLabel(event)}
               meta={
                 <>
-                  {EVENT_KIND[event.kind] ?? event.kind} · {planEventActor(event.actor)}
+                  {EVENT_KIND[event.kind] ? i18n._(EVENT_KIND[event.kind]) : event.kind} · {planEventActor(event.actor)}
                   {event.reason && (
                     <span className="block" title={planEventReason(event.reason).title}>
                       {planEventReason(event.reason).text}
@@ -461,22 +526,23 @@ function PlanHistory() {
   );
 }
 
-const INVOICE_STATUS: Record<BillingInvoice["status"], string> = {
-  draft: "Draft",
-  open: "Unpaid",
-  paid: "Paid",
-  uncollectible: "Unpaid",
-  void: "Void",
+const INVOICE_STATUS: Record<BillingInvoice["status"], MessageDescriptor> = {
+  draft: msg`Draft`,
+  open: msg`Unpaid`,
+  paid: msg`Paid`,
+  uncollectible: msg`Unpaid`,
+  void: msg`Void`,
 };
 
 /** Paid in emerald, owed in amber, anything else neutral: the dot carries the tone, the word the meaning. */
 function InvoiceStatus(props: { status: BillingInvoice["status"] }) {
+  const { i18n } = useLingui();
   const tone =
     props.status === "paid" ? "positive" : props.status === "open" || props.status === "uncollectible" ? "warning" : "neutral";
   return (
     <span className="inline-flex items-center gap-1.5">
       <StatusDot tone={tone} />
-      {INVOICE_STATUS[props.status]}
+      {i18n._(INVOICE_STATUS[props.status])}
     </span>
   );
 }
@@ -487,6 +553,7 @@ function InvoiceStatus(props: { status: BillingInvoice["status"] }) {
  * is said in place, not as a page error: the plan above is still true.
  */
 function InvoiceHistory() {
+  const { t } = useLingui();
   const [invoices, setInvoices] = useState<BillingInvoice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -501,7 +568,7 @@ function InvoiceHistory() {
   }, []);
 
   return (
-    <PaneSection title="Invoices" description="Every invoice Stripe has issued this organisation.">
+    <PaneSection title={t`Invoices`} description={t`Every invoice Stripe has issued this organisation.`}>
       {error ? (
         <p role="alert" className="text-sm text-mw-danger">
           {error}
@@ -509,18 +576,30 @@ function InvoiceHistory() {
       ) : invoices === null ? (
         <LoadingSkeleton rows={2} />
       ) : invoices.length === 0 ? (
-        <p className="text-sm text-mw-text-subtle">No invoices yet.</p>
+        <p className="text-sm text-mw-text-subtle">
+          <Trans>No invoices yet.</Trans>
+        </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm" aria-label="Invoices">
+          <table className="w-full border-collapse text-sm" aria-label={t`Invoices`}>
             <thead>
               <tr className="text-left text-mw-text-subtle">
-                <th scope="col" className="py-1.5 pr-3 font-normal">Issued</th>
-                <th scope="col" className="py-1.5 pr-3 font-normal">Amount</th>
-                <th scope="col" className="py-1.5 pr-3 font-normal">Status</th>
-                <th scope="col" className="py-1.5 pr-3 font-normal">Due</th>
                 <th scope="col" className="py-1.5 pr-3 font-normal">
-                  <span className="sr-only">Links</span>
+                  <Trans>Issued</Trans>
+                </th>
+                <th scope="col" className="py-1.5 pr-3 font-normal">
+                  <Trans>Amount</Trans>
+                </th>
+                <th scope="col" className="py-1.5 pr-3 font-normal">
+                  <Trans>Status</Trans>
+                </th>
+                <th scope="col" className="py-1.5 pr-3 font-normal">
+                  <Trans>Due</Trans>
+                </th>
+                <th scope="col" className="py-1.5 pr-3 font-normal">
+                  <span className="sr-only">
+                    <Trans>Links</Trans>
+                  </span>
                 </th>
               </tr>
             </thead>
@@ -545,7 +624,7 @@ function InvoiceHistory() {
                       )}
                       {invoice.hosted_invoice_url && (
                         <a href={invoice.hosted_invoice_url} target="_blank" rel="noreferrer" className={LINK_CLASS}>
-                          {invoice.status === "open" || invoice.status === "uncollectible" ? "Pay" : "View"}
+                          {invoice.status === "open" || invoice.status === "uncollectible" ? t`Pay` : t`View`}
                         </a>
                       )}
                     </span>

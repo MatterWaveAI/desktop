@@ -879,6 +879,9 @@ fn a_drive_or_the_home_folder_is_too_broad_to_be_a_root() {
 /// capability file grants each, to the main window's own (bundled) pages
 /// only, and nothing else agent-shaped is there -- no fs, shell or dialog
 /// plugin permission, and no core permission set that would add others.
+/// The only plugin permissions are the named core ones the rest of the app
+/// needs: the event plugin's listen and unlisten (update and navigation
+/// events) and the webview's zoom (the zoom shortcuts).
 #[test]
 fn the_capability_file_grants_exactly_the_agent_commands_and_no_plugins() {
     let manifest = env!("CARGO_MANIFEST_DIR");
@@ -918,9 +921,15 @@ fn the_capability_file_grants_exactly_the_agent_commands_and_no_plugins() {
         COMMANDS.len(),
         "an agent permission not in COMMANDS"
     );
+    const CORE: [&str; 3] = [
+        "core:event:allow-listen",
+        "core:event:allow-unlisten",
+        "core:webview:allow-set-webview-zoom",
+    ];
     for p in &granted {
         assert!(
-            !(p.contains(':') || p.starts_with("fs") || p.starts_with("shell")),
+            CORE.contains(&p.as_str())
+                || !(p.contains(':') || p.starts_with("fs") || p.starts_with("shell")),
             "{p} would hand the webview a plugin"
         );
     }

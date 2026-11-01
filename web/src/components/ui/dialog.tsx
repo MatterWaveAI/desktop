@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
 import { cn } from "cn"
+import { Trans } from "@lingui/react/macro"
 
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
@@ -72,7 +73,9 @@ function DialogContent({
           >
             <XIcon
             />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">
+              <Trans>Close</Trans>
+            </span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>

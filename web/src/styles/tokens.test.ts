@@ -143,6 +143,18 @@ const PAIRS: [foreground: string, background: string][] = [
   ["warning-foreground", "warning-subtle"],
   ["warning-body", "warning-subtle"],
   ["inverse-foreground", "inverse"],
+  // Code blocks: shiki paints with these (styles/shiki.ts) on the raised
+  // surface a block sits on, or straight on the page.
+  ["code-text", "surface-raised"],
+  ["code-keyword", "surface-raised"],
+  ["code-string", "surface-raised"],
+  ["code-constant", "surface-raised"],
+  ["code-comment", "surface-raised"],
+  ["code-text", "surface"],
+  ["code-keyword", "surface"],
+  ["code-string", "surface"],
+  ["code-constant", "surface"],
+  ["code-comment", "surface"],
 ];
 
 describe("the semantic token layer", () => {
@@ -284,73 +296,5 @@ describe("controls and states", () => {
       }
     }
     expect(offenders).toEqual([]);
-  });
-});
-
-/**
- * Code blocks: shiki paints every token with its theme's colour, so the
- * theme pair is a contrast decision like the tokens above. Each token colour
- * a theme defines must reach 4.5:1 on the background it renders on: in dark,
- * the theme's own background (styles.css forces --shiki-dark-bg); in light,
- * the block is transparent over the page or a raised card, so both.
- *
- * Skipped: rules that paint their own background (diff markers, "invalid")
- * and deliberately de-emphasised markup -- not text a code answer contains.
- */
-type ShikiTheme = {
-  colors?: Record<string, string>;
-  tokenColors?: {
-    scope?: string | string[];
-    settings?: { foreground?: string; background?: string };
-  }[];
-};
-
-const SKIPPED_SCOPES = /carriage|ignored|untracked|invalid|deprecated|header|unimplemented|broken/;
-
-function tokenColours(theme: ShikiTheme): [scope: string, colour: Rgb][] {
-  const out: [string, Rgb][] = [];
-  for (const rule of theme.tokenColors ?? []) {
-    const scope = ([] as string[]).concat(rule.scope ?? "").join(",");
-    const fg = rule.settings?.foreground;
-    if (!fg || rule.settings?.background || SKIPPED_SCOPES.test(scope)) continue;
-    if (!/^#[0-9a-fA-F]{6}$/.test(fg)) continue; // alpha variants are decorations, not text
-    out.push([scope, parseHex(fg)]);
-  }
-  return out;
-}
-
-function shikiFailures(theme: ShikiTheme, backgrounds: [string, Rgb][]): string[] {
-  const bad: string[] = [];
-  for (const [scope, colour] of tokenColours(theme)) {
-    for (const [bgName, bg] of backgrounds) {
-      const ratio = contrast(colour, bg);
-      if (ratio < 4.5) bad.push(`${scope.slice(0, 50)} on ${bgName}: ${ratio.toFixed(2)}`);
-    }
-  }
-  return bad;
-}
-
-const { SHIKI_THEMES } = await import("./shiki");
-const loadTheme = async (name: string): Promise<ShikiTheme> =>
-  ((await import(/* @vite-ignore */ `shiki/themes/${name}.mjs`)) as { default: ShikiTheme })
-    .default;
-
-describe("code block themes", () => {
-  it("dark theme tokens reach 4.5:1 on the theme's background", async () => {
-    const theme = await loadTheme(SHIKI_THEMES.dark);
-    const bg = parseHex(theme.colors!["editor.background"]);
-    expect(tokenColours(theme).length).toBeGreaterThan(20);
-    expect(shikiFailures(theme, [["editor.background", bg]])).toEqual([]);
-  });
-
-  it("light theme tokens reach 4.5:1 on the page and on a raised card", async () => {
-    const theme = await loadTheme(SHIKI_THEMES.light);
-    expect(tokenColours(theme).length).toBeGreaterThan(20);
-    expect(
-      shikiFailures(theme, [
-        ["surface", light.get("mw-color-surface")!],
-        ["surface-raised", light.get("mw-color-surface-raised")!],
-      ]),
-    ).toEqual([]);
   });
 });

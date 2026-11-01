@@ -1,3 +1,6 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, t } from "@lingui/core/macro";
+import { formatDate as formatLocaleDate } from "../../i18n/format";
 import { apiFetch } from "../../lib/api";
 import type { AccountState } from "../../types";
 import type { BillingInvoice, DunningStage, DunningState, ModelPrice } from "../../lib/billing";
@@ -109,10 +112,17 @@ export function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-export function formatDate(iso: string | null): string {
-  if (!iso) return "Never";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString();
+/**
+ * A timestamp as the admin tables show it: the reader's locale and
+ * timezone, short by default ("24/10/2026"); null is "Never", and a value
+ * that does not parse is shown as sent.
+ */
+export function formatDate(
+  iso: string | null,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "short" },
+): string {
+  if (!iso) return t`Never`;
+  return formatLocaleDate(iso, options) || iso;
 }
 
 // --- billing --------------------------------------------------
@@ -740,6 +750,37 @@ export function fetchOverdue(): Promise<{ rows: OverdueRow[]; limits: DunningLim
   }));
 }
 
+/** One row of the Disputes tab: a chargeback or an early fraud warning, as Stripe reported it. */
+export interface DisputeRow {
+  id: string;
+  kind: "dispute" | "fraud_warning";
+  org_id: string | null;
+  org_name: string | null;
+  charge_id: string | null;
+  invoice_id: string | null;
+  invoice_number: string | null;
+  amount_micros: number;
+  currency: string;
+  reason: string | null;
+  /** Stripe's dispute status verbatim; `open` or `refunded` for a fraud warning. */
+  status: string;
+  evidence_due_by: string | null;
+  /** The deadline has passed and Stripe still wants a response. */
+  overdue: boolean;
+  outcome: "won" | "lost" | "warning_closed" | "prevented" | null;
+  funds_withdrawn_at: string | null;
+  funds_reinstated_at: string | null;
+  refund_id: string | null;
+  opened_at: string;
+  closed_at: string | null;
+  dashboard_url: string;
+}
+
+/** Open disputes first, soonest deadline first; then the closed ones. */
+export function fetchDisputes(): Promise<DisputeRow[]> {
+  return apiFetch<{ data: DisputeRow[] }>("/api/admin/billing/disputes").then((b) => b.data);
+}
+
 export function fetchOrgBilling(orgId: string): Promise<OrgBilling> {
   return apiFetch<OrgBilling>(`${orgPath(orgId)}/billing`);
 }
@@ -778,11 +819,11 @@ export function switchToCard(orgId: string): Promise<OrgBilling> {
   return apiFetch<OrgBilling>(`${orgPath(orgId)}/billing/invoicing`, { method: "DELETE" });
 }
 
-/** What each stage is called on the operator's pages. */
-export const STAGE_LABEL: Record<DunningStage, string> = {
-  pending: "Late, not yet warned",
-  warn: "Warned",
-  warn_final: "Final warning",
-  limited: "Limited",
-  suspended: "On Free",
+/** What each stage is called on the operator's pages; rendered with `i18n._`. */
+export const STAGE_LABEL: Record<DunningStage, MessageDescriptor> = {
+  pending: msg`Late, not yet warned`,
+  warn: msg`Warned`,
+  warn_final: msg`Final warning`,
+  limited: msg`Limited`,
+  suspended: msg`On Free`,
 };

@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthConfig, OrgDomain, OrgIdp, OrgSummary, Principal } from "../../../types";
 import { ShellContext, type ShellContextValue } from "../../../shell/shellContext";
 import { jsonResponse } from "../../../shell/frontDoorHarness";
-import { PARTNER_MODELS_HEADING, PARTNER_MODELS_NOTE } from "../../../lib/billing";
+import { PARTNER_MODELS_HEADING, PARTNER_MODELS_NOTE_MSG } from "../../../lib/billing";
+import { i18n } from "../../../i18n/runtime";
 import { OrganisationPane } from "./OrganisationPane";
 import { chooseOption, optionsOf, selectNamed, selectShown } from "./paneHarness";
 
@@ -1249,7 +1250,7 @@ describe("the model allow-list", () => {
     ]);
     const section = partners!.parentElement!;
     expect(section.querySelector("h3")?.textContent).toBe(PARTNER_MODELS_HEADING);
-    expect(section.textContent).toContain(PARTNER_MODELS_NOTE);
+    expect(section.textContent).toContain(i18n._(PARTNER_MODELS_NOTE_MSG));
     // A partner switch is an ordinary one: switching it off narrows the list.
     await act(async () => {
       switchFor("glm-4.6").click();

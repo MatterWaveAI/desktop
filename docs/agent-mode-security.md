@@ -1,7 +1,7 @@
-# Agent mode: security notes for the T-406 gate
+# Agent mode: security notes for the security review
 
-Agent mode is off by default and is not offered in a release until T-406 (the agent and tool-use
-security gate) signs off. T-406 asks two things of any tool-calling feature before it ships:
+Agent mode is off by default and is not offered in a release until the agent and tool-use
+security review signs off. The review asks two things of any tool-calling feature before it ships:
 
 1. a named design pattern, and
 2. a written prompt-injection analysis.
@@ -78,7 +78,7 @@ What makes this hold:
 
 ### The trifecta
 
-T-406 frames the risk as the lethal trifecta. Agent mode completes all three legs, and that is why
+The review frames the risk as the lethal trifecta. Agent mode completes all three legs, and that is why
 it is gated:
 
 1. **Private data.** The workspace folder holds source code and anything else the person keeps
@@ -92,7 +92,7 @@ it is gated:
    - A write can plant something that a later run, a build or a shell executes.
    - Script in the webview could post data to any host.
 
-No filter is relied on to spot injected text; T-406 rules that out. The controls below limit what
+No filter is relied on to spot injected text; the review rules that out. The controls below limit what
 an injected instruction can cause.
 
 ### What each control covers
@@ -115,7 +115,7 @@ These remain, and are why the feature stays off by default:
 
 - **An approved command is not sandboxed.** It runs as the person and can reach anything they can,
   including the OS keychain that holds the app's own sign-in. The dialog is the control, and it
-  depends on the person reading the command. T-1408 and T-1409 track execution isolation.
+  depends on the person reading the command. Execution isolation is tracked separately.
 - **`yolo` removes the human from commands and writes**, except writes to protected paths. In
   `yolo`, injected text can make a command run unasked. The mode is opt-in per folder per session,
   never saved, and its dialog says commands are not sandboxed.
@@ -174,7 +174,7 @@ limits:
 
 Some of the threats above can only be contained, not closed, by the controls described here:
 
-- **Sandboxing approved commands.** Commands run unsandboxed (T-1408, T-1409).
+- **Sandboxing approved commands.** Commands run unsandboxed; isolation is tracked separately.
 - **Checking the meaning of a command or a diff.** Nothing in the code judges whether a command or
   diff is safe; that is the person's job in the dialog.
 - **Reboot-surviving persistence by a command.** A command the person approved can create a

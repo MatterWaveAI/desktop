@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { ShellContext } from "../../shell/shellContext";
 import { useParams } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { ApiError } from "../../lib/api";
 import { PROSE_LINK_CLASS } from "../../shell/authForms";
 import { AI_DISCLOSURE } from "../chat/aiDisclosureText";
@@ -48,6 +49,7 @@ type LoadState =
   | { phase: "error" };
 
 export function SharedTranscript(props: { token: string }) {
+  const { t } = useLingui();
   const shell = useContext(ShellContext);
   const [state, setState] = useState<LoadState>({ phase: "loading" });
 
@@ -83,20 +85,25 @@ export function SharedTranscript(props: { token: string }) {
 
   // Inside a signed-in reader's shell its <main> already holds the page.
   const Body = shell === null ? "main" : "div";
+  const orgName = state.phase === "ready" ? state.share.org_name : null;
+  const sharedOn =
+    state.phase === "ready" && state.share.shared_at !== null ? formatDate(state.share.shared_at) : null;
   return (
     <div className="h-full overflow-y-auto bg-mw-surface text-mw-text" data-mw-share-page={state.phase}>
       <header className="sticky top-0 z-10 border-b border-mw-border bg-mw-surface/95 backdrop-blur">
         <div className="mx-auto flex min-h-16 w-full max-w-3xl flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
-          <a href="/" className="flex items-center gap-2" aria-label="MatterWave home">
+          <a href="/" className="flex items-center gap-2" aria-label={t`MatterWave home`}>
             <Wordmark size="md" />
           </a>
-          <span className="font-mono text-xs tracking-wide text-mw-text-muted uppercase">Shared conversation</span>
+          <span className="font-mono text-xs tracking-wide text-mw-text-muted uppercase">
+            <Trans>Shared conversation</Trans>
+          </span>
           <a
             href={CONTINUE_PATH}
             data-mw-share-cta=""
             className="ml-auto inline-flex min-h-6 items-center rounded-lg bg-mw-accent px-3.5 py-1.5 text-sm font-semibold text-mw-accent-foreground hover:bg-mw-accent-hover pointer-coarse:min-h-11"
           >
-            Continue in MatterWave
+            <Trans>Continue in MatterWave</Trans>
           </a>
         </div>
       </header>
@@ -105,10 +112,17 @@ export function SharedTranscript(props: { token: string }) {
         <div className="flex flex-col gap-1">
           {state.phase === "ready" && (
             <>
-              <h1 className="font-display text-display-md sm:text-display-lg">{state.share.title || "Shared conversation"}</h1>
+              <h1 className="font-display text-display-md sm:text-display-lg">
+                {state.share.title || t`Shared conversation`}
+              </h1>
               <p className="text-sm text-mw-text-muted">
-                {state.share.org_name !== null && <>Shared by {state.share.org_name} · </>}
-                {state.share.shared_at !== null && <>Snapshot from {formatDate(state.share.shared_at)}</>}
+                {orgName !== null && (
+                  <>
+                    <Trans>Shared by {orgName}</Trans>
+                    {" · "}
+                  </>
+                )}
+                {sharedOn !== null && <Trans>Snapshot from {sharedOn}</Trans>}
               </p>
             </>
           )}
@@ -116,22 +130,24 @@ export function SharedTranscript(props: { token: string }) {
 
         {state.phase === "loading" && (
           <p aria-live="polite" className="animate-pulse text-sm text-mw-text-muted">
-            Loading the conversation…
+            <Trans>Loading the conversation…</Trans>
           </p>
         )}
         {state.phase === "missing" && (
-          <Unavailable title="This shared conversation is not available">
-            The link may have expired, or the person who shared it may have turned it off.
-            Shared links can be set to expire, and whoever shared one can revoke it at any
-            time. If you need the conversation, ask them to share it again.
+          <Unavailable title={t`This shared conversation is not available`}>
+            <Trans>
+              The link may have expired, or the person who shared it may have turned it off.
+              Shared links can be set to expire, and whoever shared one can revoke it at any
+              time. If you need the conversation, ask them to share it again.
+            </Trans>
           </Unavailable>
         )}
         {state.phase === "limited" && (
-          <Unavailable title="Too many shared pages opened">{state.message}</Unavailable>
+          <Unavailable title={t`Too many shared pages opened`}>{state.message}</Unavailable>
         )}
         {state.phase === "error" && (
-          <Unavailable title="The conversation could not be loaded">
-            Something went wrong on the way. Try again in a moment.
+          <Unavailable title={t`The conversation could not be loaded`}>
+            <Trans>Something went wrong on the way. Try again in a moment.</Trans>
           </Unavailable>
         )}
 
@@ -142,24 +158,28 @@ export function SharedTranscript(props: { token: string }) {
             <p className="rounded-xl border border-mw-info-border bg-mw-info-subtle px-4 py-3 text-sm text-mw-text">
               {AI_DISCLOSURE}
             </p>
-            <article aria-label="Shared conversation" className="flex flex-col">
+            <article aria-label={t`Shared conversation`} className="flex flex-col">
               {state.share.messages.map((message, index) => (
                 <MessageRow key={index} message={message} token={props.token} />
               ))}
             </article>
             <aside className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-mw-border bg-mw-surface-raised px-5 py-5 sm:px-7">
               <p className="text-sm">
-                <span className="font-medium">Want to carry this on?</span>{" "}
+                <span className="font-medium">
+                  <Trans>Want to carry this on?</Trans>
+                </span>{" "}
                 <span className="text-mw-text-subtle">
-                  MatterWave keeps your conversations yours: export them any time, or bring them in
-                  from elsewhere.
+                  <Trans>
+                    MatterWave keeps your conversations yours: export them any time, or bring them in
+                    from elsewhere.
+                  </Trans>
                 </span>
               </p>
               <a
                 href={CONTINUE_PATH}
                 className="inline-flex min-h-6 items-center rounded-lg bg-mw-accent px-4 py-2 text-sm font-semibold text-mw-accent-foreground hover:bg-mw-accent-hover pointer-coarse:min-h-11"
               >
-                Continue in MatterWave
+                <Trans>Continue in MatterWave</Trans>
               </a>
             </aside>
           </>
@@ -167,7 +187,7 @@ export function SharedTranscript(props: { token: string }) {
 
         <footer className="mt-4 border-t border-mw-border pt-4 text-sm text-mw-text-muted">
           <a href="/" className={PROSE_LINK_CLASS}>
-            Made with MatterWave
+            <Trans>Made with MatterWave</Trans>
           </a>
         </footer>
       </Body>
@@ -193,7 +213,7 @@ function Unavailable(props: { title: string; children: React.ReactNode }) {
           href="/"
           className="inline-flex min-h-6 items-center rounded-lg bg-mw-accent px-4 py-2 text-sm font-semibold text-mw-accent-foreground hover:bg-mw-accent-hover pointer-coarse:min-h-11"
         >
-          Go to MatterWave
+          <Trans>Go to MatterWave</Trans>
         </a>
       </div>
     </section>
@@ -245,19 +265,20 @@ function isAttachment(part: PublicPart): part is PublicAttachmentPart {
  * the owner's signed URLs.
  */
 function Attachments(props: { parts: readonly PublicPart[]; token: string }) {
+  const { t } = useLingui();
   const attachments = props.parts.filter(isAttachment);
   if (attachments.length === 0) return null;
   return (
     <ul className="mb-1 flex flex-wrap gap-2">
       {attachments.map((part, i) => {
-        const name = part.filename || (part.kind === "image" ? "image" : "document");
+        const name = part.filename || (part.kind === "image" ? t`image` : t`document`);
         if (!part.attachment_id) {
           return (
             <li
               key={i}
               className="rounded-lg border border-dashed border-mw-border px-2 py-1 text-xs text-mw-text-muted"
             >
-              {name} — not included in the share
+              <Trans>{name} — not included in the share</Trans>
             </li>
           );
         }

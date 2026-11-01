@@ -22,7 +22,7 @@ import {
 
 /** The icon-button size every message action shares: 28px, 44px under a finger. */
 const MESSAGE_ACTION_CLASS =
-  "inline-flex size-7 items-center justify-center rounded-md text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text disabled:opacity-40 pointer-coarse:size-11";
+  "inline-flex size-8 items-center justify-center rounded-lg text-mw-text-muted outline-none hover:bg-mw-surface-hover hover:text-mw-text focus-visible:ring-2 focus-visible:ring-mw-focus disabled:text-mw-border-strong disabled:hover:bg-transparent pointer-coarse:size-11";
 
 export function BranchSwitcher(props: {
   index: number;
@@ -94,7 +94,7 @@ export function MessageAction(props: {
     >
       {Icon ? (
         <>
-          <Icon className="size-3.5" aria-hidden />
+          <Icon className="size-4" aria-hidden />
           <span className="sr-only">{props.label}</span>
         </>
       ) : (

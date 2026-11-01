@@ -1,0 +1,344 @@
+diff --git a/src/apps/settings/panes/PreferencesPane.tsx b/src/apps/settings/panes/PreferencesPane.tsx
+index a0bb19c..3b64996 100644
+--- a/src/apps/settings/panes/PreferencesPane.tsx
++++ b/src/apps/settings/panes/PreferencesPane.tsx
+@@ -7,6 +7,14 @@ import { Button } from "../../../components/ui/button";
+ import { SimpleSelect } from "../../../components/ui/select";
+ import { DEVICE_LOCALE, LOCALES, useLocalePreference, type LocalePreference } from "../../../i18n/locale";
+ import { ApiError, apiFetch } from "../../../lib/api";
++import {
++  desktopAutostartState,
++  desktopGlobalShortcutState,
++  desktopSetAutostart,
++  desktopSetGlobalShortcut,
++  isDesktop,
++  type DesktopGlobalShortcutState,
++} from "../../../lib/desktopAuth";
+ import { useThemePreference, type ThemePreference } from "../../../shell/theme";
+ import type { Preferences } from "../../../types";
+ import {
+@@ -16,6 +24,16 @@ import {
+   writeAnswerReadyPrefs,
+ } from "../../../shell/answerReady";
+ import { PaneSection } from "../PaneSection";
++import { AgentModeChoice } from "../../agent/AgentModeChoice";
++import {
++  canSpeak,
++  DEFAULT_READ_ALOUD,
++  loadReadAloudSettings,
++  RATE_CHOICES,
++  saveReadAloudSettings,
++  type ReadAloudSettings,
++  type SpeechSynthesisVoiceLike,
++} from "../../chat/tts";
+ 
+ const THEME_CHOICES: ReadonlyArray<{
+   value: ThemePreference;
+@@ -380,9 +398,8 @@ function AnswerReadyChoice() {
+ 
+ /**
+  * Preferences: theme (this device), language (this device and the
+- * account) and email (this account). Custom instructions were a pending
+- * block here until they landed; they have their own pane now, because they
+- * need a URL to send people to and two fields with counters.
++ * account), email (this account) and -- where this browser can speak --
++ * the voice and pace the read-aloud speaker button uses.
+  */
+ export function PreferencesPane() {
+   const { t } = useLingui();
+@@ -415,6 +432,295 @@ export function PreferencesPane() {
+       >
+         <AnswerReadyChoice />
+       </PaneSection>
++
++      {canSpeak() && <ReadAloudChoice />}
++
++      {isDesktop() && <GlobalHotkeyChoice />}
++
++      {isDesktop() && <LaunchAtLoginChoice />}
++
++      {isDesktop() && <AgentModeChoice />}
+     </div>
+   );
+ }
++
++/** A voice as the list shows it: its name, and what it speaks. */
++function voiceLabel(voice: SpeechSynthesisVoiceLike): string {
++  return `${voice.name} (${voice.lang})`;
++}
++
++/**
++ * The chord as a person reads it: "CommandOrControl" is the plugin's
++ * portable spelling, and what it means -- Ctrl on Windows and Linux, Cmd
++ * on a Mac -- is what the label should say.
++ */
++function friendlyAccelerator(accelerator: string, apple = /Mac/.test(navigator.platform)): string {
++  return accelerator
++    .split("+")
++    .map((part) => {
++      const key = part.trim();
++      switch (key.toLowerCase()) {
++        case "commandorcontrol":
++        case "cmdorctrl":
++          return apple ? "Cmd" : "Ctrl";
++        case "command":
++        case "cmd":
++        case "meta":
++        case "super":
++          return "Cmd";
++        case "control":
++        case "ctrl":
++          return "Ctrl";
++        case "option":
++        case "alt":
++          return apple ? "Option" : "Alt";
++        default:
++          return key.charAt(0).toUpperCase() + key.slice(1);
++      }
++    })
++    .join("+");
++}
++
++/** The chords the pane offers beside the default and Off. */
++const HOTKEY_CHOICES: readonly string[] = [
++  "CommandOrControl+Shift+K",
++  "CommandOrControl+Alt+M",
++  "CommandOrControl+Shift+Space",
++];
++
++/**
++ * The global hotkey quick-summon, desktop only: the chord that summons or
++ * hides the window from anywhere. The registration is the native side's
++ * (src-tauri/src/hotkey.rs), which also persists the choice -- the chord
++ * must work before this page is up. A chord another application holds is
++ * refused by the OS; the pane says so and the previous chord keeps working.
++ */
++export function GlobalHotkeyChoice() {
++  const [state, setState] = useState<DesktopGlobalShortcutState | null>(null);
++  const [error, setError] = useState<string | null>(null);
++  const [busy, setBusy] = useState(false);
++
++  useEffect(() => {
++    let cancelled = false;
++    desktopGlobalShortcutState()
++      .then((loaded) => {
++        if (!cancelled) setState(loaded);
++      })
++      .catch(() => {
++        // No native side to answer (or an older app): render nothing rather
++        // than a control that cannot work.
++        if (!cancelled) setState({ accelerator: null, default: "" });
++      });
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
++  const choose = useCallback(async (value: string) => {
++    setBusy(true);
++    setError(null);
++    try {
++      setState(await desktopSetGlobalShortcut(value === "" ? null : value));
++    } catch (err) {
++      setError(
++        typeof err === "string" && err
++          ? `${err} The previous shortcut keeps working.`
++          : "The shortcut could not be registered; the previous one keeps working.",
++      );
++    } finally {
++      setBusy(false);
++    }
++  }, []);
++
++  if (state === null || state.default === "") {
++    // Still loading, or there is no native side to register with.
++    return null;
++  }
++
++  const options = [
++    { value: state.default, label: `${friendlyAccelerator(state.default)} (default)` },
++    ...HOTKEY_CHOICES.filter((choice) => choice !== state.default).map((choice) => ({
++      value: choice,
++      label: friendlyAccelerator(choice),
++    })),
++    { value: "", label: "Off" },
++  ];
++
++  return (
++    <PaneSection
++      title="Global hotkey"
++      description="Summon or hide MatterWave from anywhere, even when the window is hidden. Registered with the operating system, so it works before the app is in front."
++    >
++      <div className="flex flex-col gap-2">
++        <label htmlFor="preferences-global-hotkey" className="text-sm font-medium">
++          Shortcut
++        </label>
++        <SimpleSelect<string>
++          id="preferences-global-hotkey"
++          value={state.accelerator ?? ""}
++          onValueChange={(next) => void choose(next)}
++          disabled={busy}
++          className="w-full max-w-xs"
++          options={options}
++        />
++        <p aria-live="polite" className="text-sm text-mw-text-muted">
++          {state.accelerator === null
++            ? "Off: the app is summoned from its taskbar or tray icon."
++            : `${friendlyAccelerator(state.accelerator)} is registered with the operating system.`}
++          {error && (
++            <span role="alert" className="block text-mw-danger">
++              {error}
++            </span>
++          )}
++        </p>
++      </div>
++    </PaneSection>
++  );
++}
++
++/**
++ * Start at login (desktop only): the operating system's own login items,
++ * through the native side -- a Launch Agent on macOS, the `Run` key on
++ * Windows, an autostart entry on Linux. The switch shows what the OS
++ * reports after each change, not what was asked for.
++ */
++export function LaunchAtLoginChoice() {
++  const [enabled, setEnabled] = useState<boolean | null>(null);
++  const [error, setError] = useState<string | null>(null);
++  const [busy, setBusy] = useState(false);
++
++  useEffect(() => {
++    let cancelled = false;
++    desktopAutostartState()
++      .then((state) => {
++        if (!cancelled) setEnabled(state);
++      })
++      .catch(() => {
++        // No native side to ask: no control that cannot work.
++        if (!cancelled) setEnabled(null);
++      });
++    return () => {
++      cancelled = true;
++    };
++  }, []);
++
++  const change = useCallback(async (next: boolean) => {
++    setBusy(true);
++    setError(null);
++    try {
++      setEnabled(await desktopSetAutostart(next));
++    } catch (err) {
++      setError(typeof err === "string" && err ? err : "The setting could not be changed.");
++    } finally {
++      setBusy(false);
++    }
++  }, []);
++
++  if (enabled === null) return null;
++
++  return (
++    <PaneSection title="Start with your computer" description="Open MatterWave when you log in to this computer.">
++      <Toggle
++        label="Open MatterWave at login"
++        hint={
++          enabled
++            ? "On: the app starts when you log in, ready in the tray and on the hotkey."
++            : "Off: the app starts when you open it."
++        }
++        checked={enabled}
++        disabled={busy}
++        onChange={(next) => void change(next)}
++      />
++      {error && (
++        <p role="alert" className="text-sm text-mw-danger">
++          {error}
++        </p>
++      )}
++    </PaneSection>
++  );
++}
++
++/**
++ * Read aloud: the voice and pace the speaker button under a reply uses
++ * (chat/tts.ts). Client-side only -- the words go to the operating system's
++ * voices and never over the network. Chosen per device, like the theme; a
++ * browser without speechSynthesis never sees the section at all.
++ */
++export function ReadAloudChoice() {
++  const [voices, setVoices] = useState<readonly SpeechSynthesisVoiceLike[]>([]);
++  const [settings, setSettings] = useState<ReadAloudSettings>(loadReadAloudSettings);
++
++  useEffect(() => {
++    const synth = canSpeak() ? (globalThis as { speechSynthesis: { getVoices(): readonly SpeechSynthesisVoiceLike[]; onvoiceschanged: (() => void) | null } }).speechSynthesis : null;
++    if (!synth) return;
++    const refresh = () => setVoices(synth.getVoices());
++    refresh();
++    // Chromium fills the voice list a moment after launch; the event is
++    // how the pane learns.
++    synth.onvoiceschanged = refresh;
++    return () => {
++      synth.onvoiceschanged = null;
++    };
++  }, []);
++
++  const choose = useCallback((next: ReadAloudSettings) => {
++    setSettings(next);
++    saveReadAloudSettings(next);
++  }, []);
++
++  // SimpleSelect takes strings, so the voice choice rides its URI (with ""
++  // as "let the engine decide") and the rate its "1.25" spelling. A stored
++  // voice the list does not have reads as Automatic -- that is what really
++  // happens -- with the note below saying what was kept.
++  const voiceValue =
++    settings.voiceURI !== null && voices.some((voice) => voice.voiceURI === settings.voiceURI)
++      ? settings.voiceURI
++      : "";
++  const rateValue = String(settings.rate);
++  return (
++    <PaneSection
++      title="Read aloud"
++      description="The voice and pace the speaker button under a reply uses. Your browser's speech voices, on this device; nothing is sent anywhere."
++    >
++      <div className="flex flex-col gap-4">
++        <div className="flex flex-col gap-2">
++          <label htmlFor="preferences-read-aloud-voice" className="text-sm font-medium">
++            Voice
++          </label>
++          <SimpleSelect<string>
++            id="preferences-read-aloud-voice"
++            value={voiceValue}
++            onValueChange={(next) => choose({ ...settings, voiceURI: next === "" ? null : next })}
++            className="w-full max-w-xs"
++            options={[
++              { value: "", label: "Automatic" },
++              ...voices.map((voice) => ({ value: voice.voiceURI, label: voiceLabel(voice) })),
++            ]}
++          />
++          <p className="text-sm text-mw-text-muted">
++            {settings.voiceURI === null
++              ? "Automatic picks a voice for the reply's language."
++              : voices.some((voice) => voice.voiceURI === settings.voiceURI)
++                ? "This voice reads every reply, whatever its language."
++                : "This voice is not available right now; Automatic is used until it is."}
++          </p>
++        </div>
++        <div className="flex flex-col gap-2">
++          <label htmlFor="preferences-read-aloud-rate" className="text-sm font-medium">
++            Pace
++          </label>
++          <SimpleSelect<string>
++            id="preferences-read-aloud-rate"
++            value={rateValue}
++            onValueChange={(next) => choose({ ...settings, rate: Number(next) })}
++            className="w-full max-w-xs"
++            options={RATE_CHOICES.map((rate) => ({
++              value: String(rate),
++              label: rate === DEFAULT_READ_ALOUD.rate ? `Normal (${rate}×)` : `${rate}×`,
++            }))}
++          />
++        </div>
++      </div>
++    </PaneSection>
++  );
++}

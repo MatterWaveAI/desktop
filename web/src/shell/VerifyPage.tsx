@@ -1,5 +1,6 @@
 import { useId, useRef, useState, type FormEvent } from "react";
 import { useLocation } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { ApiError, apiFetch } from "../lib/api";
 import { startLogin } from "../lib/auth";
 import { Alert, AuthPage, DonePanel, ErrorSummary, Field, SubmitButton } from "./AuthForm";
@@ -38,6 +39,7 @@ interface FieldErrors {
 }
 
 export function VerifyPage() {
+  const { t } = useLingui();
   const searchStr = useLocation({ select: (location) => location.searchStr });
   /** `mail=0` from signup: the account exists, the mail did not go out. */
   const mailFailed = queryParam(searchStr, "mail") === "0";
@@ -120,23 +122,27 @@ export function VerifyPage() {
 
   return (
     <AuthPage
-      title="Verify your email"
-      intro="Enter the six-character code from the email we sent you."
+      title={t`Verify your email`}
+      intro={t`Enter the six-character code from the email we sent you.`}
     >
       {/* Always mounted, so what lands in it is announced rather than merely appearing. */}
       <div aria-live="polite">
         {state.phase === "verified" && (
-          <DonePanel id={id} title="Your email is verified">
-            <p className="text-sm text-mw-text-muted">Your account is ready. Sign in to start.</p>
+          <DonePanel id={id} title={t`Your email is verified`}>
+            <p className="text-sm text-mw-text-muted">
+              <Trans>Your account is ready. Sign in to start.</Trans>
+            </p>
             <div>
               <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => void signIn()}>
-                Sign in
+                <Trans>Sign in</Trans>
               </button>
             </div>
           </DonePanel>
         )}
         {state.phase !== "verified" && resend.phase === "sent" && (
-          <p className="text-sm text-mw-text-muted">Sent. Check your email for a new code.</p>
+          <p className="text-sm text-mw-text-muted">
+            <Trans>Sent. Check your email for a new code.</Trans>
+          </p>
         )}
         {/*
           Signup succeeded but the API could not queue the mail (`mail=0`,
@@ -148,8 +154,10 @@ export function VerifyPage() {
         {state.phase !== "verified" && resend.phase === "idle" && mailFailed && (
           <Alert>
             <p>
-              Your account was created, but we could not send the code just now. Use
-              <strong> Resend code</strong> below to try again.
+              <Trans>
+                Your account was created, but we could not send the code just now. Use
+                <strong> Resend code</strong> below to try again.
+              </Trans>
             </p>
           </Alert>
         )}
@@ -174,7 +182,7 @@ export function VerifyPage() {
           <Field
             id={`${id}-email`}
             name="email"
-            label="Email"
+            label={t`Email`}
             type="email"
             autoComplete="email"
             required
@@ -184,7 +192,7 @@ export function VerifyPage() {
           <Field
             id={`${id}-code`}
             name="code"
-            label="Verification code"
+            label={t`Verification code`}
             type="text"
             inputMode="text"
             autoComplete="one-time-code"
@@ -195,8 +203,8 @@ export function VerifyPage() {
           />
 
           <div className="flex flex-wrap items-center gap-3">
-            <SubmitButton busy={state.phase === "submitting"} busyLabel="Verifying…">
-              Verify
+            <SubmitButton busy={state.phase === "submitting"} busyLabel={t`Verifying…`}>
+              <Trans>Verify</Trans>
             </SubmitButton>
             <button
               type="button"
@@ -204,7 +212,8 @@ export function VerifyPage() {
               className="text-sm text-mw-text-muted hover:text-mw-text disabled:opacity-40"
               onClick={() => void resendCode()}
             >
-              {resend.phase === "sending" ? "Sending…" : "Resend code"}
+              {resend.phase === "sending" ? t`Sending…` : t`Resend code`}
+
             </button>
           </div>
         </form>

@@ -1,0 +1,367 @@
+diff --git a/src/lib/desktopAuth.ts b/src/lib/desktopAuth.ts
+index e67f627..5dcb757 100644
+--- a/src/lib/desktopAuth.ts
++++ b/src/lib/desktopAuth.ts
+@@ -79,6 +79,15 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T>
+   return (await loadInvoke())<T>(cmd, args);
+ }
+ 
++/**
++ * One native command, for the modules that own their own slice of the
++ * bridge (agent mode's tool host, `apps/agent/host.ts`). The command must
++ * be in the capability file; anything else is refused by Tauri.
++ */
++export function desktopInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
++  return call<T>(cmd, args);
++}
++
+ /** Ask the native side for the token, refreshing there when `force`. */
+ async function pullToken(force = false): Promise<AccessToken | null> {
+   try {
+@@ -118,7 +127,10 @@ function isBundledOrigin(): boolean {
+ }
+ 
+ function isApiPath(path: string): boolean {
+-  return path.startsWith("/api/") || path === "/healthz" || path === "/readyz";
++  // `/v1/` is the OpenAI-compatible surface agent mode's loop calls.
++  return (
++    path.startsWith("/api/") || path.startsWith("/v1/") || path === "/healthz" || path === "/readyz"
++  );
+ }
+ 
+ /** The API URL for a same-origin path, when the bundled app needs one. */
+@@ -212,6 +224,334 @@ export async function desktopSignOut(): Promise<void> {
+   await call<void>("sign_out");
+ }
+ 
++/**
++ * What a stored API key may be shown as: that one is in use (it is what
++ * every request sends instead of an OIDC token) and its id half. The secret
++ * never comes back out of the keychain.
++ */
++export interface DesktopApiKeyState {
++  configured: boolean;
++  hint: string | null;
++}
++
++/** Whether an API key is stored on this machine. */
++export async function desktopApiKeyState(): Promise<DesktopApiKeyState> {
++  return call<DesktopApiKeyState>("api_key_state");
++}
++
++/**
++ * Store a pasted API key and make it this machine's credential; resolves
++ * once the native side holds it, after which the page reloads into Boot and
++ * every request carries the key. Trimmed here, so what reaches the
++ * keychain is exactly the key (api_key.rs validates the trimmed shape).
++ */
++export async function desktopSetApiKey(key: string): Promise<DesktopApiKeyState> {
++  const state = await call<DesktopApiKeyState>("set_api_key", { key: key.trim() });
++  await pullToken();
++  return state;
++}
++
++/** Drop the API key; any browser sign-in takes over again. */
++export async function desktopClearApiKey(): Promise<void> {
++  await call<void>("clear_api_key");
++  await pullToken();
++}
++
++/**
++ * This machine's pairing with the platform (Settings -> Devices): the
++ * desktop half of the edge handshake. Redeeming a code stores a device key
++ * (`conversations:import` and nothing else) in the OS keychain -- the
++ * desktop's pairing.json -- WITHOUT making it the request bearer, so
++ * pairing never changes how the app is signed in. Only what the pane shows
++ * comes back over the bridge; the key itself never does.
++ */
++export interface DesktopDevicePairing {
++  paired: boolean;
++  /** The name the code was minted with. */
++  name: string | null;
++  /** The key's id half, `mw_ab12cd34…`. */
++  hint: string | null;
++  device_id: string | null;
++  /** Unix seconds. */
++  paired_at: number | null;
++}
++
++export const UNPAIRED_DEVICE: DesktopDevicePairing = {
++  paired: false,
++  name: null,
++  hint: null,
++  device_id: null,
++  paired_at: null,
++};
++
++export async function desktopDevicePairing(): Promise<DesktopDevicePairing> {
++  return call<DesktopDevicePairing>("device_pairing_state");
++}
++
++/** Redeem a pairing code; resolves to the state after. Trimmed here, so a
++ * paste with padding sends exactly the code (the Rust side normalizes the
++ * rest: dashes, spaces, case, the ambiguous letters). */
++export async function desktopPairDevice(code: string): Promise<DesktopDevicePairing> {
++  return call<DesktopDevicePairing>("pair_device", { code: code.trim() });
++}
++
++/** Revoke the key (best effort) and forget the pairing; the state after. */
++export async function desktopUnpairDevice(): Promise<DesktopDevicePairing> {
++  return call<DesktopDevicePairing>("unpair_device");
++}
++
++/**
++ * The updater's side of the fence. The native side checks at launch and
++ * again when the SPA asks; both announce a newer version as the
++ * `update-available` event, and the install is its own deliberate command
++ * (`desktopInstallUpdate`), so a banner is a choice the person makes.
++ * Progress during the download arrives as events too, because the command
++ * is busy carrying the download -- and so does the stage the round trip is
++ * in, which is how a dev pane can prove the pipeline reached each step.
++ */
++export interface UpdateDownloadProgress {
++  downloaded: number;
++  total: number | null;
++}
++
++/** The stages the native side announces, in the order the round trip runs. */
++export type UpdateStage = "checking" | "downloading" | "verified" | "installing";
++
++export interface UpdateHandlers {
++  /** A newer version was found; the payload is its version string. */
++  onAvailable?: (version: string) => void;
++  /** Bytes moved since the download started; `total` until the server says. */
++  onProgress?: (progress: UpdateDownloadProgress) => void;
++  /** The artifact is complete and verified; the install, then the relaunch. */
++  onDownloadFinished?: () => void;
++  /** The round trip reached another stage. */
++  onStage?: (stage: UpdateStage) => void;
++}
++
++export type UnlistenFn = () => void;
++
++interface TauriEvent {
++  event: string;
++  id: number;
++  payload: unknown;
++}
++
++interface TauriInternals {
++  invoke: Invoke;
++  transformCallback?: (callback: (event: TauriEvent) => void, once?: boolean) => number;
++}
++
++/** What the event plugin injects beside the internals: its own listener table. */
++interface TauriEventInternals {
++  unregisterListener?: (event: string, eventId: number) => void;
++}
++
++/**
++ * One native event, through the same bridge the commands use: the event
++ * plugin's listen/unlisten over `__TAURI_INTERNALS__`, called the way
++ * `@tauri-apps/api/event` calls them -- the capability file must allow both
++ * (`core:event:allow-listen`, `core:event:allow-unlisten`), or every event
++ * is refused. Without internals there is nothing to hear -- a browser, or
++ * a bridge this build does not know -- and the unlisten is a no-op.
++ */
++export async function listenEvent(
++  event: string,
++  cb: (payload: unknown) => void,
++): Promise<UnlistenFn> {
++  const internals = (window as unknown as TauriWindow).__TAURI_INTERNALS__ as
++    | TauriInternals
++    | undefined;
++  if (!internals?.invoke || !internals.transformCallback) return () => {};
++  const handler = internals.transformCallback((e) => cb(e.payload));
++  const eventId = await internals.invoke<number>("plugin:event|listen", {
++    event,
++    target: { kind: "Any" },
++    handler,
++  });
++  return () => {
++    const plugin = (window as unknown as { __TAURI_EVENT_PLUGIN_INTERNALS__?: TauriEventInternals })
++      .__TAURI_EVENT_PLUGIN_INTERNALS__;
++    plugin?.unregisterListener?.(event, eventId);
++    internals.invoke("plugin:event|unlisten", { event, eventId }).catch((err: unknown) => {
++      console.warn(`[desktop] could not stop listening for ${event}`, err);
++    });
++  };
++}
++
++/**
++ * Listen, and say so when the bridge refuses: a refused listen is a
++ * capability missing from the build, and swallowing it is how update
++ * events once vanished without a trace.
++ */
++export function listenOrWarn(
++  event: string,
++  cb: (payload: unknown) => void,
++  onUnlisten: (unlisten: UnlistenFn) => void,
++): void {
++  listenEvent(event, cb)
++    .then(onUnlisten)
++    .catch((err: unknown) => {
++      console.warn(`[desktop] could not listen for ${event}`, err);
++    });
++}
++
++/**
++ * Subscribe to the updater's events. The unlisten is safe to call before
++ * the subscriptions are in place: a banner that unmounts while the first
++ * registration is still in flight cancels it instead of leaking a listener
++ * into a page that no longer shows it.
++ */
++export function watchUpdates(handlers: UpdateHandlers): UnlistenFn {
++  if (!isDesktop()) return () => {};
++  const unlistens: UnlistenFn[] = [];
++  let cancelled = false;
++  const add = (event: string, cb: (payload: unknown) => void) => {
++    listenOrWarn(event, cb, (unlisten) => {
++      if (cancelled) unlisten();
++      else unlistens.push(unlisten);
++    });
++  };
++  if (handlers.onAvailable) add("update-available", (p) => handlers.onAvailable?.(String(p)));
++  if (handlers.onProgress)
++    add("update-download-progress", (p) => handlers.onProgress?.(p as UpdateDownloadProgress));
++  if (handlers.onDownloadFinished) add("update-download-finished", () => handlers.onDownloadFinished?.());
++  if (handlers.onStage)
++    add("update-stage", (p) => handlers.onStage?.(String(p) as UpdateStage));
++  return () => {
++    cancelled = true;
++    for (const unlisten of unlistens.splice(0)) unlisten();
++  };
++}
++
++/** The version the launch check found, when this banner mounted too late to hear it. */
++export async function desktopPendingUpdate(): Promise<string | null> {
++  return call<string | null>("pending_update");
++}
++
++/** One check now: the newer version, or null when the feed offers nothing
++ * (updates switched off answer null too -- off is not a failure). */
++export async function desktopCheckForUpdates(): Promise<string | null> {
++  return call<string | null>("check_for_updates");
++}
++
++/**
++ * Show one OS notification on demand, focus or no focus -- the dev pane's
++ * proof that notifications work on this machine. Resolves true when the OS
++ * took it; rejects with the OS's own reason when it did not.
++ */
++export async function desktopSendTestNotification(): Promise<boolean> {
++  return call<boolean>("send_test_notification");
++}
++
++/**
++ * Download the offered update, verify it, hand it to the OS installer and
++ * relaunch. Resolves only on failure -- success ends with the old process
++ * gone -- so the banner keeps showing until the window dies or an error
++ * comes back to it.
++ */
++export async function desktopInstallUpdate(): Promise<void> {
++  await call<void>("install_update");
++}
++
++/**
++ * The global hotkey quick-summon (src-tauri/src/hotkey.rs). The chord is
++ * registered with the OS by the native side -- at launch from its persisted
++ * choice, and whenever this pane asks for a change -- so a press reaches
++ * the app before the SPA is up. The state command answers with the chord
++ * now registered (null when the hotkey is off) and the build's default.
++ */
++export interface DesktopGlobalShortcutState {
++  accelerator: string | null;
++  /** The build's default chord, for the "default" choice. */
++  default: string;
++}
++
++export async function desktopGlobalShortcutState(): Promise<DesktopGlobalShortcutState> {
++  return call<DesktopGlobalShortcutState>("global_shortcut_state");
++}
++
++/**
++ * Point the hotkey at `shortcut` (an accelerator like
++ * "CommandOrControl+Shift+M"; the native side normalizes and validates) or
++ * switch it off with null. The answer is the state after. A chord the OS
++ * refuses -- another application holds it -- rejects with the native side's
++ * wording, and the previous chord stays registered.
++ */
++export async function desktopSetGlobalShortcut(
++  shortcut: string | null,
++): Promise<DesktopGlobalShortcutState> {
++  return call<DesktopGlobalShortcutState>("set_global_shortcut", { shortcut });
++}
++
++/**
++ * Open a web or mail link in the system browser (`open_external`): the
++ * native side refuses any other scheme. Resolves once the OS has it.
++ */
++export async function desktopOpenExternal(url: string): Promise<void> {
++  await call<void>("open_external", { url });
++}
++
++/**
++ * Where the native side asks the SPA to go (src-tauri/src/navigation.rs): a
++ * `matterwave://` link opened from outside the app. The native side names
++ * the target; `desktopNavigation.ts` turns it into a route.
++ */
++export type DesktopNavigationTarget =
++  | { kind: "conversation"; id: string; message?: string }
++  | { kind: "share"; token: string }
++  | { kind: "billing" }
++  | { kind: "new-chat" }
++  | { kind: "settings" };
++
++/**
++ * Whether the app starts at login (the OS's own login items), and the
++ * switch for it; the answer is the state after.
++ */
++export async function desktopAutostartState(): Promise<boolean> {
++  return call<boolean>("autostart_state");
++}
++
++export async function desktopSetAutostart(enabled: boolean): Promise<boolean> {
++  return call<boolean>("set_autostart", { enabled });
++}
++
++/** A conversation the tray lists: its id and title, nothing else. */
++export interface DesktopRecentConversation {
++  id: string;
++  title: string;
++}
++
++/** Hand the tray the conversations the sidebar lists first. */
++export async function desktopSetRecentConversations(
++  conversations: DesktopRecentConversation[],
++): Promise<void> {
++  await call<void>("set_recent_conversations", { conversations });
++}
++
++/** The waiting request, taken (each opens once), or null. */
++export async function desktopTakeNavigation(): Promise<DesktopNavigationTarget | null> {
++  return call<DesktopNavigationTarget | null>("take_navigation");
++}
++
++/**
++ * Tell the native side that a generation finished, so it can raise the OS
++ * notification -- which it does only when its window is unfocused, the one
++ * state in which a reply can land unseen (`lib.rs`). Fire-and-forget: a
++ * notification is never worth an error path, and in a browser there is no
++ * native side, so this is nothing at all. The copy is fixed here; reply
++ * content never goes into a notification; its conversation's id goes along,
++ * so a click on the notification opens it.
++ */
++export function notifyGenerationComplete(conversationId?: string | null): void {
++  if (!isDesktop()) return;
++  call<void>("notify_generation_complete", {
++    title: "MatterWave",
++    body: "Your reply is ready.",
++    // Which conversation a click on the notification opens; the id only.
++    conversationId: conversationId ?? null,
++  }).catch(() => {});
++}
++
+ /**
+  * Back to Boot after the keychain changed hands (a sign-in or a sign-out):
+  * a whole-page load, so nothing cached from the previous identity -- the

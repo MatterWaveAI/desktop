@@ -1,3 +1,5 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
 import { apiFetch } from "../../lib/api";
 
 /**
@@ -14,10 +16,11 @@ export type TargetKind = "user" | "org";
 
 export const LADDER: readonly LadderState[] = ["warned", "rate_limited", "suspended"];
 
-export const LADDER_LABEL: Record<LadderState, string> = {
-  warned: "Warned",
-  rate_limited: "Rate limited",
-  suspended: "Suspended",
+/** Descriptors: rendered with `i18n._` where they are shown. */
+export const LADDER_LABEL: Record<LadderState, MessageDescriptor> = {
+  warned: msg`Warned`,
+  rate_limited: msg`Rate limited`,
+  suspended: msg`Suspended`,
 };
 
 /** One enforcement_actions row. `evidence` is report and flag ids, never content. */
@@ -88,12 +91,24 @@ export function liftEnforcement(kind: TargetKind, target: string, reason: string
 export type ReportStatus = "open" | "reviewed" | "actioned" | "dismissed";
 export type ReviewAction = "dismiss" | "note" | "warn" | "limit" | "suspend";
 
-export const REVIEW_ACTIONS: readonly { action: ReviewAction; label: string; description: string }[] = [
-  { action: "dismiss", label: "Dismiss", description: "Not a violation. Closes the report; touches no account." },
-  { action: "note", label: "Note only", description: "Reviewed, nothing to do yet. Closes the report with the note." },
-  { action: "warn", label: "Warn", description: "A notice to the account, in the words of the note." },
-  { action: "limit", label: "Rate limit", description: "Hold the account to the tightened window for a time." },
-  { action: "suspend", label: "Suspend", description: "Refuse sign-in and every request until a person lifts it." },
+export const REVIEW_ACTIONS: readonly {
+  action: ReviewAction;
+  label: MessageDescriptor;
+  description: MessageDescriptor;
+}[] = [
+  { action: "dismiss", label: msg`Dismiss`, description: msg`Not a violation. Closes the report; touches no account.` },
+  {
+    action: "note",
+    label: msg`Note only`,
+    description: msg`Reviewed, nothing to do yet. Closes the report with the note.`,
+  },
+  { action: "warn", label: msg`Warn`, description: msg`A notice to the account, in the words of the note.` },
+  { action: "limit", label: msg`Rate limit`, description: msg`Hold the account to the tightened window for a time.` },
+  {
+    action: "suspend",
+    label: msg`Suspend`,
+    description: msg`Refuse sign-in and every request until a person lifts it.`,
+  },
 ];
 
 /** The one reported message, or the fact that it has since been purged. */

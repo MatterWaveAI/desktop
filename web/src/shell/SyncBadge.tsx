@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLingui } from "@lingui/react/macro";
 import {
   fetchSyncStatus,
   SYNC_CHANGED_EVENT,
@@ -22,6 +23,7 @@ const TONE_CLASS: Record<SyncTone, string> = {
  * every minute for a status it will never have.
  */
 export function SyncBadge(props: { now?: () => number }) {
+  const { t } = useLingui();
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [, setTick] = useState(0);
   const now = props.now ?? Date.now;
@@ -34,7 +36,7 @@ export function SyncBadge(props: { now?: () => number }) {
         .then((next) => {
           if (!alive) return;
           setStatus(next);
-          setTick((t) => t + 1);
+          setTick((n) => n + 1);
           if (!next.box && timer !== null) {
             clearInterval(timer);
             timer = null;
@@ -55,12 +57,13 @@ export function SyncBadge(props: { now?: () => number }) {
 
   const line = syncLine(status, now());
   if (!line) return null;
+  const lineText = line.text;
   return (
     <span
       className={`ml-2 rounded-full px-2 py-0.5 text-xs ${TONE_CLASS[line.tone]}`}
       title={line.detail || undefined}
       role="status"
-      aria-label={`Sync: ${line.text}`}
+      aria-label={t`Sync: ${lineText}`}
       data-tone={line.tone}
     >
       {line.text}

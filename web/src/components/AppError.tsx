@@ -8,6 +8,7 @@ import { i18n } from "../i18n/runtime";
 import { Button, buttonVariants } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { Wordmark } from "./brand";
+import { GetHelp } from "./GetHelp";
 
 /**
  * The failure surfaces a route or a section falls back to.
@@ -58,6 +59,8 @@ export function ErrorFallback(props: {
   homeHref?: string;
   /** `page` fills its slot and carries the brand; `section` is compact. */
   variant?: "page" | "section";
+  /** The failure's correlation id, when the caller has one, for "Get help". */
+  requestId?: string | null;
 }) {
   const page = props.variant !== "section";
   return (
@@ -81,24 +84,25 @@ export function ErrorFallback(props: {
         {props.title ?? <Trans>Something went wrong</Trans>}
       </p>
       {props.message && <p className="max-w-md text-sm text-mw-text-muted">{props.message}</p>}
-      {(props.onRetry || props.homeHref) && (
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-          {props.onRetry && (
-            <Button onClick={props.onRetry}>
-              <RotateCwIcon aria-hidden />
-              {props.retryLabel ?? <Trans>Retry</Trans>}
-            </Button>
-          )}
-          {props.homeHref && (
-            // A plain link, not the router's: after a crash a full load of
-            // the front page is the recovery least likely to hit it again.
-            <a href={props.homeHref} className={buttonVariants({ variant: "outline" })}>
-              <HomeIcon aria-hidden />
-              <Trans>Go home</Trans>
-            </a>
-          )}
-        </div>
-      )}
+      {/* Retry and Go home when offered; Get help always, because the
+          failures a person cannot fix are the ones they most need it for. */}
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+        {props.onRetry && (
+          <Button onClick={props.onRetry}>
+            <RotateCwIcon aria-hidden />
+            {props.retryLabel ?? <Trans>Retry</Trans>}
+          </Button>
+        )}
+        {props.homeHref && (
+          // A plain link, not the router's: after a crash a full load of
+          // the front page is the recovery least likely to hit it again.
+          <a href={props.homeHref} className={buttonVariants({ variant: "outline" })}>
+            <HomeIcon aria-hidden />
+            <Trans>Go home</Trans>
+          </a>
+        )}
+        <GetHelp requestId={props.requestId} variant={page ? "outline" : "ghost"} />
+      </div>
     </div>
   );
 }

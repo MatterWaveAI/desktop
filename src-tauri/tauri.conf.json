@@ -17,7 +17,9 @@
         "width": 1200,
         "height": 800,
         "minWidth": 400,
-        "minHeight": 500
+        "minHeight": 500,
+        "dragDropEnabled": false,
+        "zoomHotkeysEnabled": true
       }
     ],
     "security": {
@@ -26,15 +28,21 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["msi", "nsis", "app", "dmg", "appimage", "deb"],
     "createUpdaterArtifacts": false,
+    "license": "Apache-2.0",
+    "licenseFile": "../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "entitlements": "Entitlements.plist",
+      "hardenedRuntime": true
+    }
   },
   "plugins": {
     "deep-link": {

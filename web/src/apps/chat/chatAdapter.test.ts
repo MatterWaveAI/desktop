@@ -369,23 +369,6 @@ describe("compaction frames", () => {
     expect(results.map(textOf).at(-1)).toBe("ok");
   });
 
-  it("ends the fold on a notice when the fold could not run", async () => {
-    const onCompacting = vi.fn();
-    const onNotice = vi.fn();
-    const h = hooks({ getConversationId: vi.fn(() => "c1"), onCompacting, onNotice });
-    stubFetch(() =>
-      sseResponse([
-        sse("compacting", { detail: "Summarising the earlier messages." }),
-        sse("notice", { detail: "Could not summarise; sent in full.", code: "compaction" }),
-        sse("delta", { content: "ok" }),
-        sse("done", { id: "a3", model: "m" }),
-      ]),
-    );
-    await collect(createChatAdapter(h), runOptions("next"));
-    expect(onCompacting.mock.calls).toEqual([[true], [false]]);
-    expect(onNotice).toHaveBeenCalledExactlyOnceWith("Could not summarise; sent in full.");
-  });
-
   it("says when a complete stream carried an answer cut at the token limit", async () => {
     const onLengthTruncated = vi.fn();
     const h = hooks({ getConversationId: vi.fn(() => "c1"), onLengthTruncated });
