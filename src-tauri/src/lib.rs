@@ -477,11 +477,11 @@ fn notify_generation_complete(
     body: String,
     conversation_id: Option<String>,
 ) -> Result<bool, String> {
-    let focused = app
+    let in_front = app
         .get_webview_window("main")
-        .and_then(|w| w.is_focused().ok())
+        .map(|w| summon::is_in_front(&w))
         .unwrap_or(true);
-    if focused {
+    if in_front {
         return Ok(false);
     }
     use tauri_plugin_notification::NotificationExt;

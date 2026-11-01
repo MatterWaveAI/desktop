@@ -32,6 +32,41 @@ pub(crate) fn toggle_action(state: WindowState) -> Toggle {
     }
 }
 
+/// Whether the person is looking at the window: it is the active, focused
+/// window. On Windows the webview's own child window holds the keyboard
+/// focus, which the window layer reads as the top-level window having lost
+/// it -- `is_focused` answers false for the window in front -- so there the
+/// foreground window is asked instead.
+pub(crate) fn is_in_front(w: &tauri::WebviewWindow) -> bool {
+    #[cfg(windows)]
+    {
+        foreground::is(w)
+    }
+    #[cfg(not(windows))]
+    {
+        w.is_focused().unwrap_or(false)
+    }
+}
+
+#[cfg(windows)]
+mod foreground {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetForegroundWindow() -> *mut core::ffi::c_void;
+    }
+
+    /// The foreground window is always a top-level one, so it is this
+    /// window exactly when the person is working in it.
+    pub(super) fn is(w: &tauri::WebviewWindow) -> bool {
+        // SAFETY: GetForegroundWindow takes no arguments and only reads the
+        // window manager's state; a null answer compares unequal.
+        let foreground = unsafe { GetForegroundWindow() };
+        w.hwnd()
+            .map(|own| own.0 as isize == foreground as isize)
+            .unwrap_or(false)
+    }
+}
+
 /// Show, unminimize and focus: from hidden (the hotkey put it away),
 /// minimized, or behind another window, all in one call.
 pub(crate) fn summon_main(app: &AppHandle) {
@@ -52,7 +87,7 @@ pub(crate) fn toggle_main(app: &AppHandle) {
     let state = WindowState {
         visible: w.is_visible().unwrap_or(false),
         minimized: w.is_minimized().unwrap_or(false),
-        focused: w.is_focused().unwrap_or(false),
+        focused: is_in_front(&w),
     };
     match toggle_action(state) {
         Toggle::Hide => {

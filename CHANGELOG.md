@@ -94,7 +94,11 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   The tray's Show/Hide becomes Show, which always brings the window
   forward: opening the tray menu takes focus from the window, so a toggle
   there could not tell in front from behind. A deep link, a finished
-  sign-in or a second launch now also shows a window the hotkey hid.
+  sign-in or a second launch now also shows a window the hotkey hid. On
+  Windows "in front" is read from the foreground window: the webview
+  holds the keyboard focus, which read as the window having lost it, so
+  the hotkey never hid the window and a reply-ready notification fired
+  while the person was looking at it.
 - **Dropping a file on the window reaches the page**: Tauri took the OS
   drop for itself (`dragDropEnabled` defaults to on), so the composer's
   drop-to-attach and Settings → Data's drop-to-import never fired. The
