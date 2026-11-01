@@ -6,6 +6,7 @@
 //! revoking happen here. An API key (api_key.rs), when the person stores
 //! one, stands in for that whole story and is handed out instead.
 
+mod agent;
 mod api_key;
 mod device_pairing;
 mod hotkey;
@@ -687,6 +688,13 @@ pub fn run() {
             // The hotkey registers here, with the persisted choice or the
             // default, so a press reaches the app before the SPA is up.
             hotkey::register_on_launch(app);
+            // Agent mode's tool host: its switch is read from the config
+            // directory, and it stays off until the person turns it on.
+            let paths = app.path();
+            app.manage(agent::AgentState::new(
+                paths.app_config_dir()?,
+                paths.app_data_dir()?,
+            ));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -707,7 +715,22 @@ pub fn run() {
             device_pairing_state,
             unpair_device,
             global_shortcut_state,
-            set_global_shortcut
+            set_global_shortcut,
+            agent::agent_state,
+            agent::agent_set_enabled,
+            agent::agent_pick_root,
+            agent::agent_trust_root,
+            agent::agent_start_run,
+            agent::agent_stop_run,
+            agent::agent_read_file,
+            agent::agent_list_dir,
+            agent::agent_glob,
+            agent::agent_grep,
+            agent::agent_edit,
+            agent::agent_write_file,
+            agent::agent_run_shell,
+            agent::agent_checkpoints,
+            agent::agent_restore
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MatterWave desktop app");

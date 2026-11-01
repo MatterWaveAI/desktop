@@ -25,6 +25,24 @@ fn main() {
             "unpair_device",
             "global_shortcut_state",
             "set_global_shortcut",
+            // Agent mode's tool host (src/agent): one command per tool, the
+            // run's start and stop, the root, the switch and the
+            // checkpoints. Off until the person turns it on.
+            "agent_state",
+            "agent_set_enabled",
+            "agent_pick_root",
+            "agent_trust_root",
+            "agent_start_run",
+            "agent_stop_run",
+            "agent_read_file",
+            "agent_list_dir",
+            "agent_glob",
+            "agent_grep",
+            "agent_edit",
+            "agent_write_file",
+            "agent_run_shell",
+            "agent_checkpoints",
+            "agent_restore",
         ]),
     ))
     .expect("tauri build script failed");
