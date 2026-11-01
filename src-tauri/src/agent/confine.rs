@@ -361,7 +361,10 @@ pub(crate) fn confine(
         let mut candidate = PathBuf::from(path);
         // `/etc/passwd` on Windows has no drive; it is on the root's drive.
         if !candidate.is_absolute() {
-            let prefix: PathBuf = real_root.components().take(1).collect();
+            let prefix: PathBuf = real_root
+                .components()
+                .take_while(|c| matches!(c, Component::Prefix(_) | Component::RootDir))
+                .collect();
             candidate = prefix.join(path.trim_start_matches(['/', '\\']));
         }
         let lexical = lexical_normalize(&candidate);
@@ -519,6 +522,13 @@ pub(crate) mod tests {
         let inside = root.join("src").join("a.txt");
         let ok = confine(&root, &inside.to_string_lossy(), &deny, false).unwrap();
         assert_eq!(ok.relative, "src/a.txt");
+        // Rooted without a drive, on Windows: the root's own drive.
+        if cfg!(windows) {
+            let real = resolve_links(&inside).unwrap();
+            let rooted = real.to_string_lossy()[2..].to_string();
+            let ok = confine(&root, &rooted, &deny, false).unwrap();
+            assert_eq!(ok.relative, "src/a.txt", "{rooted}");
+        }
     }
 
     #[test]
