@@ -1,9 +1,9 @@
 diff --git a/src/shell/Shell.desktop.test.tsx b/src/shell/Shell.desktop.test.tsx
 new file mode 100644
-index 0000000..ce777c8
+index 0000000..b38f99f
 --- /dev/null
 +++ b/src/shell/Shell.desktop.test.tsx
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,212 @@
 +import { act, useEffect } from "react";
 +import { createRoot, type Root } from "react-dom/client";
 +import {
@@ -118,8 +118,13 @@ index 0000000..ce777c8
 +  const rootRoute = createRootRoute({ component: () => <Shell authConfig={authConfig} principal={principal} /> });
 +  const index = createRoute({ getParentRoute: () => rootRoute, path: "/", component: () => <p>home</p> });
 +  const chat = createRoute({ getParentRoute: () => rootRoute, path: apps[0].path, component: ChatStandIn });
++  const settings = createRoute({
++    getParentRoute: () => rootRoute,
++    path: "/settings",
++    component: () => <p data-settings="">settings</p>,
++  });
 +  const router = createRouter({
-+    routeTree: rootRoute.addChildren([index, chat]),
++    routeTree: rootRoute.addChildren([index, chat, settings]),
 +    history: createMemoryHistory({ initialEntries: [path] }),
 +  });
 +  history.replaceState(null, "", path);
@@ -146,6 +151,40 @@ index 0000000..ce777c8
 +});
 +
 +const title = (el: HTMLElement) => el.querySelector("[data-mw-header-title]")?.textContent;
++
++describe("the desktop menu's chords", () => {
++  function press(key: string, extra: KeyboardEventInit = {}) {
++    act(() => {
++      window.dispatchEvent(new KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true, ...extra }));
++    });
++  }
++
++  it("Ctrl+N empties the open conversation into a new chat", async () => {
++    fakeBridge();
++    const { el } = await mount(`${apps[0].path}?c=c1`);
++    await vi.waitFor(() => expect(title(el)).toBe("Quarterly velocity planning"));
++    press("n");
++    await vi.waitFor(() => expect(title(el)).toBe("New chat"));
++  });
++
++  it("Ctrl+, opens the settings", async () => {
++    fakeBridge();
++    const { el } = await mount(`${apps[0].path}?c=c1`);
++    await vi.waitFor(() => expect(title(el)).toBe("Quarterly velocity planning"));
++    press(",");
++    await vi.waitFor(() => expect(el.querySelector("[data-settings]")).not.toBeNull());
++  });
++
++  it("leaves the chords alone in a browser, and with Shift held", async () => {
++    const { el } = await mount(`${apps[0].path}?c=c1`);
++    await vi.waitFor(() => expect(title(el)).toBe("Quarterly velocity planning"));
++    press("n");
++    fakeBridge();
++    press("n", { shiftKey: true });
++    await new Promise((resolve) => setTimeout(resolve, 20));
++    expect(title(el)).toBe("Quarterly velocity planning");
++  });
++});
 +
 +describe("a conversation link in the desktop app", () => {
 +  it("opens the linked conversation while another one is on screen", async () => {

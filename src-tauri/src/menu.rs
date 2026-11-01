@@ -204,6 +204,7 @@ pub(crate) fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                 "the bundle has no window icon for the tray",
             ))
         })?)
+        .tooltip("MatterWave")
         .menu(&tray_menu(app.handle(), &[])?)
         .show_menu_on_left_click(true)
         .build(app)?;

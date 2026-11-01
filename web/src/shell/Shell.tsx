@@ -27,7 +27,7 @@ import { CommandPalette } from "./CommandPalette";
 import { NotificationsMenu } from "./NotificationsMenu";
 import { UpdateBanner } from "./UpdateBanner";
 import { ConversationSidebar, type SearchRequest } from "./conversationSidebar";
-import { CONVERSATION_SEARCH_ID } from "./shortcuts";
+import { CONVERSATION_SEARCH_ID, isMacPlatform } from "./shortcuts";
 import type { PaletteAction } from "./palette";
 import { HELP_PATH } from "./help";
 import { installAnswerReady, setAnswerReadyFocus } from "./answerReady";
@@ -147,6 +147,27 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
       }),
     [context, navigate, openConversation, startNewChat],
   );
+
+  // The desktop menu's chords, for the webviews that keep them from the
+  // menu (WebView2 on Windows, WebKitGTK on Linux): Ctrl+N is New chat and
+  // Ctrl+, is Settings, Cmd on macOS. Both are idempotent, so where the
+  // menu sees the chord as well nothing happens twice that shows.
+  useEffect(() => {
+    if (!isDesktop()) return;
+    const onKey = (event: KeyboardEvent) => {
+      const mod = isMacPlatform() ? event.metaKey : event.ctrlKey;
+      if (!mod || event.shiftKey || event.altKey || event.repeat) return;
+      if (event.key === "n" || event.key === "N") {
+        event.preventDefault();
+        startNewChat();
+      } else if (event.key === ",") {
+        event.preventDefault();
+        void navigate({ to: "/settings" });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate, startNewChat]);
 
   // The desktop tray's recent chats: the conversations the sidebar lists
   // first, ids and titles only. Nothing leaves the page in a browser.

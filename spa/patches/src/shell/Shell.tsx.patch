@@ -1,5 +1,5 @@
 diff --git a/src/shell/Shell.tsx b/src/shell/Shell.tsx
-index 1e12039..b95fbad 100644
+index 1e12039..aaeec08 100644
 --- a/src/shell/Shell.tsx
 +++ b/src/shell/Shell.tsx
 @@ -11,7 +11,10 @@ import type { AuthConfig, Principal } from "../types";
@@ -14,15 +14,18 @@ index 1e12039..b95fbad 100644
  import { useVisualViewportFix } from "./useVisualViewport";
  import { AccountSummary, UserMenu } from "./UserMenu";
  import { usePlan } from "./account";
-@@ -22,6 +25,7 @@ import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
+@@ -22,8 +25,9 @@ import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
  import { ShortcutsHelp } from "./ShortcutsHelp";
  import { CommandPalette } from "./CommandPalette";
  import { NotificationsMenu } from "./NotificationsMenu";
 +import { UpdateBanner } from "./UpdateBanner";
  import { ConversationSidebar, type SearchRequest } from "./conversationSidebar";
- import { CONVERSATION_SEARCH_ID } from "./shortcuts";
+-import { CONVERSATION_SEARCH_ID } from "./shortcuts";
++import { CONVERSATION_SEARCH_ID, isMacPlatform } from "./shortcuts";
  import type { PaletteAction } from "./palette";
-@@ -111,6 +115,49 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
+ import { HELP_PATH } from "./help";
+ import { installAnswerReady, setAnswerReadyFocus } from "./answerReady";
+@@ -111,6 +115,70 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
      [context, navigate],
    );
  
@@ -59,6 +62,27 @@ index 1e12039..b95fbad 100644
 +    [context, navigate, openConversation, startNewChat],
 +  );
 +
++  // The desktop menu's chords, for the webviews that keep them from the
++  // menu (WebView2 on Windows, WebKitGTK on Linux): Ctrl+N is New chat and
++  // Ctrl+, is Settings, Cmd on macOS. Both are idempotent, so where the
++  // menu sees the chord as well nothing happens twice that shows.
++  useEffect(() => {
++    if (!isDesktop()) return;
++    const onKey = (event: KeyboardEvent) => {
++      const mod = isMacPlatform() ? event.metaKey : event.ctrlKey;
++      if (!mod || event.shiftKey || event.altKey || event.repeat) return;
++      if (event.key === "n" || event.key === "N") {
++        event.preventDefault();
++        startNewChat();
++      } else if (event.key === ",") {
++        event.preventDefault();
++        void navigate({ to: "/settings" });
++      }
++    };
++    window.addEventListener("keydown", onKey);
++    return () => window.removeEventListener("keydown", onKey);
++  }, [navigate, startNewChat]);
++
 +  // The desktop tray's recent chats: the conversations the sidebar lists
 +  // first, ids and titles only. Nothing leaves the page in a browser.
 +  const recent = desktopRecentConversations(context.conversations);
@@ -72,7 +96,7 @@ index 1e12039..b95fbad 100644
    // An answer that finished while the tab was hidden marks the title and
    // the icon until the person comes back; its notification opens the
    // conversation it belongs to.
-@@ -299,6 +346,8 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
+@@ -299,6 +367,8 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
            <BillingBanner />
            {/* A minor terms revision since the one accepted: a notice, not the gate. */}
            <TermsNoticeBanner />
