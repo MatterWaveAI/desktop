@@ -131,7 +131,10 @@ native client refuses the webview rather than half-working.
 whether or not the revoke reached it. The shell's Sign out (`web/src/shell/signOut.ts`) calls it
 and reloads the page into Boot; it never sends the webview to the identity provider's end_session, which is the
 browser's path and would leave the window on the IdP. `open_external` opens http(s) and mailto
-links in the system browser and refuses any other scheme.
+links in the system browser and refuses any other scheme, and every link out of the app goes
+through it: one document-level click listener (`web/src/lib/desktopLinks.ts`) hands any `<a>`
+whose URL leaves the app's own origin -- a reply's links, the help page's, the footer's -- to the
+system browser instead of the webview.
 
 ### An API key instead of the browser
 

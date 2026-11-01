@@ -56,6 +56,13 @@ the API's `MW_RELEASE` all report it).
   allow-list (`src-tauri/src/navigation.rs`), kept until the SPA takes
   them and routed there (`web/src/lib/desktopNavigation.ts`), warm or
   cold; anything else opens nothing.
+- **Links out of the app open in the system browser**: `open_external`
+  had no caller, so a reply's links and every other `target="_blank"`
+  link opened inside the webview, without an address bar or the person's
+  browser sessions. One document-level listener
+  (`web/src/lib/desktopLinks.ts`) now sends any http(s) or mailto link
+  that leaves the app's origin to the browser, after the page's own
+  handlers have had their say.
 
 ## [0.3.0] - 2026-10-31
 

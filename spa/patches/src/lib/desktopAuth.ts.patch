@@ -1,8 +1,8 @@
 diff --git a/src/lib/desktopAuth.ts b/src/lib/desktopAuth.ts
-index e67f627..c3ae6be 100644
+index e67f627..3b9699f 100644
 --- a/src/lib/desktopAuth.ts
 +++ b/src/lib/desktopAuth.ts
-@@ -212,6 +212,295 @@ export async function desktopSignOut(): Promise<void> {
+@@ -212,6 +212,303 @@ export async function desktopSignOut(): Promise<void> {
    await call<void>("sign_out");
  }
  
@@ -263,6 +263,14 @@ index e67f627..c3ae6be 100644
 +  shortcut: string | null,
 +): Promise<DesktopGlobalShortcutState> {
 +  return call<DesktopGlobalShortcutState>("set_global_shortcut", { shortcut });
++}
++
++/**
++ * Open a web or mail link in the system browser (`open_external`): the
++ * native side refuses any other scheme. Resolves once the OS has it.
++ */
++export async function desktopOpenExternal(url: string): Promise<void> {
++  await call<void>("open_external", { url });
 +}
 +
 +/**

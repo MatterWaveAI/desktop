@@ -5,6 +5,7 @@ import { I18nProvider } from "@lingui/react";
 import { router } from "./routes";
 import { installDesktopAuth } from "./lib/desktopAuth";
 import { installDesktopNavigation } from "./lib/desktopNavigation";
+import { installExternalLinks } from "./lib/desktopLinks";
 import { i18n } from "./i18n/runtime";
 import { initLocale } from "./i18n/locale";
 import "./styles.css";
@@ -15,6 +16,8 @@ installDesktopAuth();
 // Links opened from outside the app (`matterwave://conversation/...`), the
 // launch link included. A no-op in a browser.
 installDesktopNavigation((href) => void router.navigate({ href }));
+// Links out of the app open in the system browser, not in the webview.
+installExternalLinks();
 
 // The catalogue before the first paint, so nothing renders in one language
 // and re-renders in another. Immediate for the source locale, which is in

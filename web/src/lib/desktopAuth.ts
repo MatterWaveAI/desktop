@@ -472,6 +472,14 @@ export async function desktopSetGlobalShortcut(
 }
 
 /**
+ * Open a web or mail link in the system browser (`open_external`): the
+ * native side refuses any other scheme. Resolves once the OS has it.
+ */
+export async function desktopOpenExternal(url: string): Promise<void> {
+  await call<void>("open_external", { url });
+}
+
+/**
  * Where the native side asks the SPA to go (src-tauri/src/navigation.rs): a
  * `matterwave://` link opened from outside the app. The native side names
  * the target; `desktopNavigation.ts` turns it into a route.
