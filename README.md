@@ -111,17 +111,49 @@ in `src-tauri/tests/bundle_config.rs` holds them to each other). `pnpm spa:check
 `web/` minus the patches is exactly that commit, and the patches give `web/` back -- and CI runs
 it, so an edit to `web/` that skipped the patches fails the build.
 
+`spa/adapted.json` is the list of files the desktop is allowed to differ in, each with the reason
+(a pattern such as `src/lib/desktopLinks.*` covers a module and its test). `pnpm spa:drift`
+(`scripts/web-drift.mjs`) lists every file in `web/` that differs from the pinned commit -- `M`
+changed, `A` only the desktop has it, `D` only the platform does -- with the listed ones apart,
+and fails on any other. CI runs it after `spa:check`: a patch is not permission, so a platform
+change ported by hand, or an edit to a file the desktop should copy unchanged, fails even after
+`spa:refresh` wrote a patch for it. Neither check needs the platform's repository; the pin and
+the patches are the record of what the commit holds.
+
 ```
+pnpm spa:drift                                                  # web/ against the pin (CI)
+pnpm spa:drift --source ../matterwave-app --ref origin/develop  # against a newer platform commit
+pnpm spa:drift --upstream ../matterwave-app/web                 # against a working tree, uncommitted edits too
 pnpm spa:pull --source ../matterwave-app --ref origin/develop   # re-sync to the platform
-pnpm spa:refresh                                                 # after editing web/ here
+pnpm spa:refresh                                                # after editing web/ here
 ```
 
-`spa:pull` copies the platform's `web/` at the ref, replays the desktop's changes onto it with a
-three-way merge, and rewrites the pin and the patches. A change that collides with the
-platform's stays in `web/` with conflict markers and the command fails, naming the files:
-resolve them, then `pnpm spa:refresh --source ../matterwave-app`. Strings the desktop adds stay
-plain English rather than `msg`/`Trans` macros, so the platform's catalogues need no desktop
-entries and `lingui extract` stays clean.
+#### Porting the platform's changes
+
+A platform change reaches the desktop by copying, never by re-implementing it here:
+
+1. **Measure.** `pnpm spa:drift --source ../matterwave-app --ref <commit>` names what the
+   platform changed since the pin (`M`/`D` lines outside the adapted list) and which adapted
+   files it touched.
+2. **Pull.** `pnpm spa:pull --source ../matterwave-app --ref <commit>` copies the platform's
+   `web/` at that commit, replays the desktop's changes onto it with a three-way merge, and
+   rewrites `spa/upstream.json` and `spa/patches/`. A change that collides with the platform's
+   stays in `web/` with conflict markers and the command fails, naming the files: resolve them
+   (usually keeping both sides: the platform's change and the desktop's adaptation), then
+   `pnpm spa:refresh --source ../matterwave-app`.
+3. **Check.** `pnpm spa:drift` reports no drift; then in `web/`: `pnpm install --frozen-lockfile`,
+   `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm vitest run`, `pnpm i18n:check` and `pnpm build`.
+   If the platform changed `web/package.json`, its lockfile came with it; the desktop's own
+   dependencies (the Tauri CLI) live in the root `package.json`, not in `web/`.
+4. **Commit** `web/` and `spa/` together, naming the platform commit in the message.
+
+When the desktop has to behave differently, prefer a desktop-only file -- a module under
+`src/lib/desktop*.ts`, a `*.desktop.test.ts(x)` beside the platform's test -- reached through the
+hooks the platform already has: `src/lib/desktopAuth.ts` (`isDesktop()` and the bridge) and the
+chat adapter's hooks (`onDone` in `ChatPage.tsx`). An edit to a platform file is the last
+resort; list it in `spa/adapted.json` with the reason, then `pnpm spa:refresh`. Strings the
+desktop adds stay plain English rather than `msg`/`Trans` macros, so the platform's catalogues
+need no desktop entries and `lingui extract` stays clean.
 
 In the bundled app the page's origin is the webview's (`tauri://localhost`, or
 `http://tauri.localhost` on Windows), so API calls are sent to `MW_DESKTOP_BASE_URL` with a
@@ -228,8 +260,8 @@ is ready for a platform that sends desktop buyers back to the app.
 ## Notifications
 
 One OS notification, and one case for it: a generation finished while the window was not
-focused. The SPA tells the native side when a stream ends in `done`
-(`web/src/apps/chat/chatAdapter.ts`); the native side checks focus and shows the notification
+focused. The SPA tells the native side when a stream ends in `done` (the chat adapter's `onDone`
+hook in `web/src/apps/chat/ChatPage.tsx`); the native side checks focus and shows the notification
 only when the window is unfocused (`notify_generation_complete` in `src-tauri/src/lib.rs`) --
 a focused window already shows the reply land. The copy is fixed ("Your reply is ready.");
 reply text never goes into a notification, only the conversation's id, so clicking it brings the
