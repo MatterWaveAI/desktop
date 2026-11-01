@@ -1,16 +1,32 @@
 diff --git a/src/apps/chat/ChatPage.tsx b/src/apps/chat/ChatPage.tsx
-index 99b4b46..ce36689 100644
+index 99b4b46..06b9b9b 100644
 --- a/src/apps/chat/ChatPage.tsx
 +++ b/src/apps/chat/ChatPage.tsx
-@@ -80,6 +80,7 @@ import { fetchFeedback, type Feedback } from "./feedback";
+@@ -80,6 +80,8 @@ import { fetchFeedback, type Feedback } from "./feedback";
  import { COMPACT_HINT, CompactionDivider, ContextMeter, SummaryMarker } from "./CompactionDivider";
  import { DictationButton, DictationNotices } from "./DictationButton";
  import { useDictation } from "./useDictation";
 +import { useReadAloud } from "./useReadAloud";
++import { notifyGenerationComplete } from "../../lib/desktopAuth";
  import {
    compactConversation,
    endedOnLength,
-@@ -1147,6 +1148,10 @@ function ThreadView(props: {
+@@ -558,7 +560,13 @@ function ThreadRuntime(props: {
+         onContext: (frame) => setContext(readingOfFrame(frame)),
+         onNotice: setNotice,
+         onLengthTruncated: (id) => setLengthCut((current) => new Set(current).add(id)),
+-        onDone: (id) => answerReadyRef.current(id),
++        onDone: (id) => {
++          answerReadyRef.current(id);
++          // The desktop shell notifies natively too; whether anyone saw the
++          // answer land is its call -- it notifies only an unfocused window,
++          // and a click on the notification opens this conversation.
++          notifyGenerationComplete(id);
++        },
+         onConnectorConversation: (found) => {
+           setSource(found);
+           setError(null);
+@@ -1147,6 +1155,10 @@ function ThreadView(props: {
    // in its own channel, and a rewritten question would be refused the way a
    // new one is.
    const editLastId = props.busy || props.source !== null ? null : lastEditableId(props.branched);
@@ -21,7 +37,7 @@ index 99b4b46..ce36689 100644
    const copiedWhat = useCopyShortcuts({
      branched: props.branched,
      messages: props.messages,
-@@ -1340,6 +1345,15 @@ function ThreadView(props: {
+@@ -1340,6 +1352,15 @@ function ThreadView(props: {
                    feedback={props.feedback.get(row.entry.message.id) ?? null}
                    onFeedbackChange={props.onFeedbackChange}
                    modelLabel={labelOf}
@@ -37,7 +53,7 @@ index 99b4b46..ce36689 100644
                  />
                ),
              )}
-@@ -1911,6 +1925,11 @@ function BranchedRow(props: {
+@@ -1911,6 +1932,11 @@ function BranchedRow(props: {
    modelLabel: (id: string) => string;
    /** False where the reader's own turns may not be rewritten: a connector's conversation. */
    canEdit: boolean;
@@ -49,7 +65,7 @@ index 99b4b46..ce36689 100644
  }) {
    const { editing, onEditingChange: setEditing } = props;
    const { message, branch } = props.entry;
-@@ -1964,6 +1983,7 @@ function BranchedRow(props: {
+@@ -1964,6 +1990,7 @@ function BranchedRow(props: {
              }
            : undefined
        }

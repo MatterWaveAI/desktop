@@ -147,7 +147,6 @@ export type ChatModelAdapter = {
 };
 import type { Conversation, ConversationSource } from "../../types";
 import { ApiError, apiFetch, apiStream } from "../../lib/api";
-import { notifyGenerationComplete } from "../../lib/desktopAuth";
 import { parseSSEStream } from "../../lib/sse";
 import { REFUSAL_CODE, TRUNCATED_CODE } from "./streamErrors";
 import { noticeText, type CompactionFrame, type ContextFrame } from "./compaction";
@@ -475,10 +474,6 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
             yield emit();
             hooks.onDone?.(conversationId);
             settle();
-            // The answer is complete; whether anyone saw it land is the
-            // native side's call -- it notifies only an unfocused window,
-            // and a click on the notification opens this conversation.
-            notifyGenerationComplete(conversationId);
           }
         }
 

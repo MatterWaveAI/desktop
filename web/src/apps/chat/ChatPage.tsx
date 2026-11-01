@@ -81,6 +81,7 @@ import { COMPACT_HINT, CompactionDivider, ContextMeter, SummaryMarker } from "./
 import { DictationButton, DictationNotices } from "./DictationButton";
 import { useDictation } from "./useDictation";
 import { useReadAloud } from "./useReadAloud";
+import { notifyGenerationComplete } from "../../lib/desktopAuth";
 import {
   compactConversation,
   endedOnLength,
@@ -559,7 +560,13 @@ function ThreadRuntime(props: {
         onContext: (frame) => setContext(readingOfFrame(frame)),
         onNotice: setNotice,
         onLengthTruncated: (id) => setLengthCut((current) => new Set(current).add(id)),
-        onDone: (id) => answerReadyRef.current(id),
+        onDone: (id) => {
+          answerReadyRef.current(id);
+          // The desktop shell notifies natively too; whether anyone saw the
+          // answer land is its call -- it notifies only an unfocused window,
+          // and a click on the notification opens this conversation.
+          notifyGenerationComplete(id);
+        },
         onConnectorConversation: (found) => {
           setSource(found);
           setError(null);

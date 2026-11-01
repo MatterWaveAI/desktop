@@ -15,6 +15,7 @@
  */
 
 import type { AuthConfig } from "../../types";
+import { isDesktop } from "../../lib/desktopAuth";
 
 /**
  * The constructor lib.dom leaves out: TypeScript ships the result types but
@@ -257,12 +258,13 @@ export function failureOfMediaError(name: string): DictationFailure {
  * The message for a failure. `desktop` (the Tauri webview) is worded apart
  * where the remedy differs: there is no address bar to allow the microphone
  * in, so a refused permission is the OS's privacy setting for the app, not a
- * browser toggle.
+ * browser toggle. It defaults to whether this page runs in the desktop
+ * shell, so the dictation hook's calls get the right wording unchanged.
  */
 export function failureMessage(
   failure: DictationFailure,
   engine: DictationEngine,
-  desktop = false,
+  desktop = isDesktop(),
 ): string {
   switch (failure) {
     case "not-allowed":
