@@ -418,3 +418,7 @@ Include:
 
 Never paste tokens: the keychain entries (`dev.matterwave.desktop`, `access` / `refresh` /
 `api-key` / `device-key` / `device-pairing`) are credentials.
+
+## Licence
+
+Apache License 2.0: see [LICENSE](LICENSE) and [NOTICE](NOTICE).

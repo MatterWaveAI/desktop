@@ -30,6 +30,8 @@
     "active": true,
     "targets": ["msi", "nsis", "app", "dmg", "appimage", "deb"],
     "createUpdaterArtifacts": false,
+    "license": "Apache-2.0",
+    "licenseFile": "../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

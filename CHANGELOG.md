@@ -60,6 +60,10 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   Settings → API keys links the MCP guide at `docs.matterwave.ai`. They
   are desktop patches to the bundled SPA until the platform makes the
   same change.
+- **Licensed under Apache-2.0 instead of MIT**: `LICENSE` is the Apache
+  License 2.0 and `NOTICE` names the copyright holder; `package.json`,
+  `Cargo.toml` and the Tauri bundle declare `Apache-2.0`, and the Windows
+  installers show the licence.
 
 ### Security
 
