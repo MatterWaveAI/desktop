@@ -1,8 +1,10 @@
 name: Release
 
-# A tag push (`v0.2.2`) builds the installers for every target, signs what
-# the secrets allow, and attaches them and the updater manifests to a draft
-# GitHub release. Each packaged app is then started once; only when every
+# A tag push (`v0.2.2`) first checks that every manifest says the tag's
+# version and that CHANGELOG.md has its section (scripts/release-check.mjs;
+# the section becomes the release notes). It then builds the installers for
+# every target, signs what the secrets allow, and attaches them, the updater
+# manifests and a CycloneDX SBOM to a draft GitHub release. Each packaged app is then started once; only when every
 # target built and started is the release published and the updater feed
 # laid out for the installed apps to check
 # (`<MW_DESKTOP_UPDATES_URL>/desktop/<channel>/<os>/<arch>/<version>`, the
@@ -79,8 +81,29 @@ defaults:
     shell: bash
 
 jobs:
+  prepare:
+    name: Version and release notes
+    runs-on: ubuntu-latest
+    outputs:
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - id: notes
+        name: The tag matches every manifest; its CHANGELOG section is the notes
+        run: |
+          node scripts/release-check.mjs --tag "$GITHUB_REF_NAME" --notes-out "$RUNNER_TEMP/notes.md"
+          {
+            echo "notes<<MW_RELEASE_NOTES"
+            cat "$RUNNER_TEMP/notes.md"
+            echo "MW_RELEASE_NOTES"
+          } >> "$GITHUB_OUTPUT"
+
   build:
     name: Installers (${{ matrix.name }})
+    needs: prepare
     permissions:
       contents: write
     outputs:
@@ -246,10 +269,10 @@ jobs:
           args: --config src-tauri/tauri.release.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
           tagName: ${{ github.ref_name }}
           releaseName: MatterWave ${{ github.ref_name }}${{ steps.signing.outputs.signed == '1' && '' || ' (no updater)' }}
-          releaseBody: >
-            Installers for Windows x64 (MSI and NSIS) and arm64 (NSIS), macOS
-            (universal DMG) and Linux x64 and arm64 (AppImage and .deb).
-            ${{ steps.signing.outputs.signed == '1' && '`latest.json` is the updater manifest for the feed; `.sig` files are its artifact signatures.' || 'Built without the updater: no manifest, no auto-update; installed apps keep asking the previous feed.' }}
+          releaseBody: |
+            ${{ needs.prepare.outputs.notes }}
+
+            Installers for Windows x64 (MSI and NSIS) and arm64 (NSIS), macOS (universal DMG) and Linux x64 and arm64 (AppImage and .deb); `matterwave-desktop-${{ github.ref_name }}.cdx.json` is the CycloneDX SBOM. ${{ steps.signing.outputs.signed == '1' && '`latest.json` is the updater manifest for the feed; `.sig` files are its artifact signatures.' || 'Built without the updater: no manifest, no auto-update; installed apps keep asking the previous feed.' }}
           # Published by the publish job once every target has started.
           releaseDraft: true
           prerelease: false
@@ -262,11 +285,35 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run -a node scripts/smoke-packaged-app.mjs --bundle-dir "src-tauri/target/${{ matrix.target }}/release/bundle"
 
+  sbom:
+    name: Software bill of materials
+    # What the app is built from -- the crates in src-tauri/Cargo.lock and the
+    # packages in both pnpm lockfiles -- as CycloneDX, beside the installers.
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Generate the SBOM from the lockfiles
+        run: >
+          npx --yes @cyclonedx/cdxgen@12.9.0 --no-install-deps --recurse
+          --type js --type rust --spec-version 1.6
+          --output "matterwave-desktop-$GITHUB_REF_NAME.cdx.json" .
+      - name: Attach it to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "matterwave-desktop-$GITHUB_REF_NAME.cdx.json" --repo "$GITHUB_REPOSITORY"
+
   publish:
     name: Publish the release
-    # Every target built, signed what it could, and started: the draft goes
-    # public. One failed target keeps it a draft, with nothing on the feed.
-    needs: build
+    # Every target built, signed what it could, and started, and the SBOM is
+    # attached: the draft goes public. One failure keeps it a draft, with
+    # nothing on the feed.
+    needs: [build, sbom]
     runs-on: ubuntu-latest
     permissions:
       contents: write

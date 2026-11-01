@@ -28,6 +28,12 @@ the API's `MW_RELEASE` all report it).
   Developer ID the macOS app is signed under the hardened runtime and,
   with the notarization credentials, notarized. Each signing group is all
   or nothing, and a missing group builds unsigned with a warning.
+- **A release ships only the version it says it is, with its notes and
+  an SBOM**: the release job refuses a tag that `package.json`,
+  `Cargo.toml` and `tauri.conf.json` do not all carry or that this file
+  has no section for (`scripts/release-check.mjs`), uses that section as
+  the GitHub release's notes, and attaches a CycloneDX SBOM of the crates
+  and packages in the lockfiles.
 - **A release is published only after every packaged app has started**:
   the installers go to a draft release, each is installed or opened once
   and must still be running after 20 s

@@ -82,7 +82,11 @@ ask) and signs with `src-tauri/Entitlements.plist` (audio input under the harden
 temporary directory) or opens the packaged app and fails unless it is still running after 20 s;
 CI runs it on every OS.
 
-The release job (`.github/workflows/release.yml`, on a `v*` tag) builds Windows x64 (MSI, NSIS)
+The release job (`.github/workflows/release.yml`, on a `v*` tag) first refuses a tag that
+`package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` do not all carry, or that
+`CHANGELOG.md` has no section for (`node scripts/release-check.mjs --tag vX.Y.Z` runs the same check
+locally); that section is the release's notes, and a CycloneDX SBOM of the crates and packages
+the app is built from is attached beside the installers. It builds Windows x64 (MSI, NSIS)
 and arm64 (NSIS), macOS universal (app bundle, DMG) and Linux x64 and arm64 (AppImage, `.deb`),
 each into a draft release; every packaged app is started once, and only then is the release
 published and the updater feed laid out. Signing follows the secrets, each group all or nothing:
