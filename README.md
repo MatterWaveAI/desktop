@@ -455,7 +455,8 @@ by CI on Linux and macOS.
 of the Python SDK's `contract.json` and `tests/agent_conformance.json`, the one source both SDKs
 are generated from. `contract.rs` restates the tools, modes, deny list, limits and messages, and
 its tests fail when the copy and the code disagree; with `MATTERWAVE_AGENT_CONTRACT` naming the
-Python SDK's file they also check the copy against it. The SPA's copy of the TypeScript SDK's
+Python SDK's file they also check the copy against it (CI has no copy of that file, so there the
+check is skipped and says so). The SPA's copy of the TypeScript SDK's
 browser-safe agent helpers (`web/src/apps/agent/sdk/`) is tested against the same two files
 (`sdk.test.ts`). To take a new contract version: copy both JSON files, copy the four TypeScript
 files from the SDK's `src/agent/`, and fix what the tests name.
@@ -476,7 +477,9 @@ restore with the project's `.git` HEAD and index unchanged, the capability list,
 (plan sends only the read tools; a rejected diff leaves the file byte-identical; where the
 desktop's dialog asks in each mode; tool results, their stored shape and
 `metadata.conversation_id` on the wire; the step and token caps; the 402 and 429 copy; Stop;
-`@path`; the panel, its locked mode, the toggle and the Preferences switch).
+`@path`; the panel, its locked mode, the toggle and the Preferences switch). CI runs the Rust
+suite on Linux only, so the Windows cases (the job object and suspended start, junctions, streams,
+device names, 8.3 names) and the macOS ones run where a developer runs them.
 
 ## Offline: no send queue
 

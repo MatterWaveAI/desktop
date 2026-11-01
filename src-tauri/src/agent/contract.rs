@@ -8,8 +8,8 @@
 //! is in code that review can read, and the tests at the bottom fail the
 //! moment the copy and the code disagree -- a new deny pattern, a renamed
 //! argument, a changed limit. With `MATTERWAVE_AGENT_CONTRACT` naming the
-//! Python SDK's file (CI sets it), the copy itself is also checked against
-//! the source.
+//! Python SDK's file, the copy itself is also checked against the source;
+//! CI does not have that file, so the check runs where it is set locally.
 
 /// The contract version this host implements.
 pub(crate) const CONTRACT_VERSION: &str = "1.0.0";
@@ -452,8 +452,8 @@ mod tests {
     }
 
     /// The copy against its source, value for value, when the source is at
-    /// hand: CI names it with MATTERWAVE_AGENT_CONTRACT; a checkout beside
-    /// the Python SDK finds it on its own.
+    /// hand: named by MATTERWAVE_AGENT_CONTRACT, or found by a checkout
+    /// beside the Python SDK. Skipped (and says so) otherwise, as in CI.
     #[test]
     fn the_copy_matches_the_python_sdks_contract_when_present() {
         let configured = std::env::var("MATTERWAVE_AGENT_CONTRACT").ok();
