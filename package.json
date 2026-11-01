@@ -12,6 +12,7 @@
     "spa:check": "node scripts/spa-sync.mjs check",
     "spa:pull": "node scripts/spa-sync.mjs pull",
     "spa:refresh": "node scripts/spa-sync.mjs refresh",
+    "spa:drift": "node scripts/web-drift.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\""
   },
   "devDependencies": {

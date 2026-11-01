@@ -38,12 +38,12 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const SPA = "web";
-const PIN = "spa/upstream.json";
-const PATCHES = "spa/patches";
+export const SPA = "web";
+export const PIN = "spa/upstream.json";
+export const PATCHES = "spa/patches";
 const DEFAULT_EXCLUDE = ["e2e", "test-results", "tsconfig.tsbuildinfo"];
 
-class SyncError extends Error {}
+export class SyncError extends Error {}
 
 function arg(name) {
   const i = process.argv.indexOf(`--${name}`);
@@ -107,7 +107,7 @@ function readBlobs(repo, oids) {
 }
 
 /** `<rev>:<dir>` as a path -> content map, relative to `dir`. */
-function readTree(repo, rev, dir, exclude = []) {
+export function readTree(repo, rev, dir, exclude = []) {
   const listing = gitText(repo, ["ls-tree", "-r", "-z", "--full-tree", rev, "--", dir]);
   const entries = listing
     .split("\0")
@@ -123,7 +123,7 @@ function readTree(repo, rev, dir, exclude = []) {
 }
 
 /** The working tree's files under `dir`: tracked, plus new ones git does not ignore. */
-function readWorking(root, dir) {
+export function readWorking(root, dir) {
   const listing = gitText(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", dir]);
   const files = new Map();
   for (const file of new Set(listing.split("\0").filter(Boolean))) {
@@ -136,7 +136,7 @@ function readWorking(root, dir) {
 }
 
 /** spa/patches as `web/`-relative path -> patch text. */
-function patchesFrom(files) {
+export function patchesFrom(files) {
   const patches = new Map();
   for (const [rel, content] of files) {
     if (rel.endsWith(".patch")) patches.set(rel.slice(0, -".patch".length), content);
@@ -144,7 +144,7 @@ function patchesFrom(files) {
   return patches;
 }
 
-function readPin(root) {
+export function readPin(root) {
   const file = path.join(root, PIN);
   if (!fs.existsSync(file)) return null;
   const pin = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -290,7 +290,7 @@ function differences(a, b) {
  * patches, prove the result is what the pin's digest names, and prove the
  * patches give `current` back.
  */
-function pristineOf(pin, current, patches) {
+export function pristineOf(pin, current, patches) {
   const back = applyPatches(current, patches, true);
   if (back.failed.length) {
     throw new SyncError(
