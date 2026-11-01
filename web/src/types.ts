@@ -104,6 +104,13 @@ export interface Principal {
    * absent reads as none so an older API never shows a card that cannot work.
    */
   has_password?: boolean;
+  /**
+   * The org's "local agent tools allowed" setting: whether a client may run
+   * its own agent loop with tools on the person's machine (the desktop's
+   * agent mode). Optional because an API that predates it sends none, and
+   * absent reads as allowed; only an explicit false greys the Agent toggle.
+   */
+  local_agent_tools?: boolean;
 }
 
 /** One browser session, as `GET /api/me/sessions` lists it. */
@@ -345,6 +352,12 @@ export interface ModelInfo {
    * reads the same as `null`.
    */
   supports_vision?: boolean | null;
+  /**
+   * Whether the model can call tools, as the API reports it. Tri-state like
+   * `supports_vision`: only `false` greys agent mode out for this model;
+   * unknown (null, or absent from an API that predates the flag) is allowed.
+   */
+  supports_tools?: boolean | null;
   /** The display name, from the deployment's price list (the id when it names none). */
   label: string;
   /** How many allowance tokens one of this model's tokens counts as. */

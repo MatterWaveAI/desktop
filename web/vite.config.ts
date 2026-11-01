@@ -49,6 +49,8 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": proxy,
+      // The OpenAI-compatible surface, which the desktop's agent mode calls.
+      "/v1": proxy,
       "/healthz": proxy,
       "/readyz": proxy,
     },

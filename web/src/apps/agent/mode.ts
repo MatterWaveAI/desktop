@@ -1,0 +1,38 @@
+/** The approval mode the agent panel starts in, and the order Shift+Tab walks. */
+import { DEFAULT_MODE, MODES_BY_NAME, type ModeName } from "./sdk/types";
+
+/** Where the last persistable mode is remembered on this device. yolo never is. */
+const MODE_KEY = "mw.agent.mode";
+
+/** The modes Shift+Tab cycles through: never into yolo, which asks natively. */
+export const CYCLE: readonly ModeName[] = ["plan", "ask", "auto-edit"];
+
+export const MODE_LABELS: Record<ModeName, string> = {
+  plan: "Plan (read only)",
+  ask: "Ask before changes",
+  "auto-edit": "Auto-edit (commands ask)",
+  yolo: "Yolo (this session only)",
+};
+
+export function loadMode(): ModeName {
+  try {
+    const saved = localStorage.getItem(MODE_KEY);
+    if (saved && saved in MODES_BY_NAME && MODES_BY_NAME[saved as ModeName].persistable) {
+      return saved as ModeName;
+    }
+  } catch {
+    // Storage unavailable: the contract's default.
+  }
+  return DEFAULT_MODE;
+}
+
+/** Remembers `mode` for next time, unless the contract says it must not be (yolo). */
+export function saveMode(mode: ModeName): void {
+  if (!MODES_BY_NAME[mode].persistable) return;
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    // Not remembered; the session still uses it.
+  }
+}
+

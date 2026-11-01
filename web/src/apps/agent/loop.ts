@@ -1,0 +1,496 @@
+/**
+ * Agent mode's loop: the model proposes tool calls through `/v1`, the
+ * native host runs them, and their results go back as `role: "tool"`
+ * messages until the model answers without a call -- or the person stops
+ * the run, or a cap or the budget ends it.
+ *
+ * `/v1/chat/completions` relays `tools` to the model and hands `tool_calls`
+ * back unexecuted, so the loop is the client's: the server keeps metering,
+ * the budget, the model allow-list and moderation, and with
+ * `metadata.conversation_id` it records the run's text into a conversation
+ * the web can open. It never sees the filesystem.
+ *
+ * What each mode lets through is the contract's (`allowed`): `plan` is
+ * only ever offered the read tools; in `ask` every write shows its diff
+ * and every command its full text before anything happens, and a
+ * rejection reaches the model as an answer, not an error. The host
+ * enforces the same mode on its side, and confines every path.
+ */
+import { ApiError, apiFetch } from "../../lib/api";
+import { STREAM_ERROR_COPY, classifyStreamError } from "../chat/streamErrors";
+import type { AgentHost, ReadTool, RunStarted, ToolOutput } from "./host";
+import { allowed, systemPrompt, toolsForMode, type Tool } from "./sdk/modes";
+import { unifiedDiff } from "./sdk/diff";
+import type { ModeName } from "./sdk/types";
+import { mentionsIn, withAttachments } from "./commands";
+
+export interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export interface AgentMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+}
+
+export interface CompletionRequest {
+  model?: string;
+  messages: AgentMessage[];
+  tools: Tool[];
+  tool_choice: "auto";
+  metadata?: { conversation_id: string };
+}
+
+export interface CompletionResponse {
+  choices: {
+    message: { role: "assistant"; content: string | null; tool_calls?: ToolCall[] | null };
+    finish_reason: string | null;
+  }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
+}
+
+/** Where the loop sends each step; `/v1` in the app, a script in tests. */
+export interface ModelTransport {
+  complete(request: CompletionRequest, signal: AbortSignal): Promise<CompletionResponse>;
+}
+
+/** `/v1/chat/completions`, with the app's bearer (desktopAuth routes `/v1/` to the API). */
+export const v1Transport: ModelTransport = {
+  complete: (request, signal) =>
+    apiFetch<CompletionResponse>("/v1/chat/completions", { method: "POST", json: request, signal }),
+};
+
+export interface Caps {
+  /** Model calls per run. */
+  maxSteps: number;
+  /** Tokens per run, as `/v1` counts them (`usage.total_tokens`). */
+  maxTokens: number;
+}
+
+export const DEFAULT_CAPS: Caps = { maxSteps: 25, maxTokens: 200_000 };
+
+/** What the person is asked before a write or a command in `ask` (and a command in `auto-edit`). */
+export type ApprovalRequest =
+  | { kind: "write"; tool: "edit" | "write_file"; path: string; diff: string; created: boolean }
+  | { kind: "shell"; command: string; timeoutS: number | null };
+
+export type AgentEvent =
+  | { kind: "assistant"; text: string }
+  | { kind: "tool"; id: string; name: string; args: unknown; summary: string }
+  | {
+      kind: "tool_result";
+      id: string;
+      name: string;
+      output: string;
+      isError: boolean;
+      /** The change, for a write that went through or was rejected. */
+      diff?: string;
+      /** A write that was applied, with its checkpoint for /restore. */
+      checkpoint?: number;
+      rejected?: boolean;
+    }
+  | { kind: "usage"; steps: number; tokens: number }
+  | { kind: "notice"; text: string };
+
+export type StopReason =
+  | "done"
+  | "stopped"
+  | "step_cap"
+  | "token_cap"
+  | "budget"
+  | "rate_limit"
+  | "error";
+
+export interface AgentRunResult {
+  reason: StopReason;
+  /** The conversation so far, without the system prompt: the next run's history. */
+  history: AgentMessage[];
+  steps: number;
+  tokens: number;
+  /** What to tell the person when the run did not simply finish. */
+  notice: { title: string; guidance: string } | null;
+  requestId: string | null;
+}
+
+export interface AgentRunOptions {
+  prompt: string;
+  /** Earlier turns of this agent session, without a system prompt. */
+  history: readonly AgentMessage[];
+  mode: ModeName;
+  /** Null: the deployment's default model. */
+  model: string | null;
+  /** Where `/v1` records the run; null keeps it unrecorded. */
+  conversationId: string | null;
+  caps: Caps;
+  host: AgentHost;
+  transport: ModelTransport;
+  /** Resolves true to go ahead, false to reject. */
+  approve: (request: ApprovalRequest) => Promise<boolean>;
+  onEvent: (event: AgentEvent) => void;
+  /** The started run, so the caller can show the root it works in. */
+  onStarted?: (run: RunStarted) => void;
+  signal: AbortSignal;
+}
+
+/** The copy a run that hit its rate limit ends with. */
+export const RATE_LIMIT_COPY = {
+  title: "Too many requests for now",
+  guidance:
+    "MatterWave limits how many model calls one account makes a minute, and this run reached the limit. Nothing is lost: wait a minute, then send again to carry on from here.",
+} as const;
+
+export function stepCapCopy(maxSteps: number) {
+  return {
+    title: "The run reached its step limit",
+    guidance: `It made ${maxSteps} model calls, the most one run may. Nothing more will run: send another message to carry on from here, or raise the limit.`,
+  };
+}
+
+export function tokenCapCopy(used: number, maxTokens: number) {
+  return {
+    title: "The run reached its token limit",
+    guidance: `It used ${used.toLocaleString("en")} tokens against a limit of ${maxTokens.toLocaleString("en")} for one run. Nothing more will run: send another message to carry on, or raise the limit.`,
+  };
+}
+
+/** One line for a call, as the transcript lists it. */
+export function summarize(name: string, args: Record<string, unknown>): string {
+  const str = (key: string) => (typeof args[key] === "string" ? (args[key] as string) : "");
+  switch (name) {
+    case "read_file":
+      return `Read ${str("path")}`;
+    case "list_dir":
+      return `List ${str("path") || "."}`;
+    case "glob":
+      return `Find ${str("pattern")}${str("path") ? ` in ${str("path")}` : ""}`;
+    case "grep":
+      return `Search for ${str("pattern")}${str("path") ? ` in ${str("path")}` : ""}`;
+    case "edit":
+      return `Edit ${str("path")}`;
+    case "write_file":
+      return `Write ${str("path")}`;
+    case "run_shell":
+      return `Run ${str("command")}`;
+    default:
+      return name;
+  }
+}
+
+/** The system prompt for one run: the contract's, then the trusted folder's context files. */
+export function runSystemPrompt(mode: ModeName, run: RunStarted): string {
+  let prompt = systemPrompt(mode, run.root, { platform: run.platform });
+  if (run.context.length > 0) {
+    prompt +=
+      "\n\nProject context\nThe user trusts this folder, and these files from it describe the project and how to work in it.";
+    for (const file of run.context) {
+      prompt += `\n\n--- ${file.path}${file.truncated ? " (cut off)" : ""} ---\n${file.text}`;
+    }
+  }
+  return prompt;
+}
+
+function estimateTokens(messages: readonly AgentMessage[], reply: string): number {
+  return Math.ceil((JSON.stringify(messages).length + reply.length) / 4);
+}
+
+function isAbort(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === "AbortError") ||
+    (err instanceof Error && err.name === "AbortError")
+  );
+}
+
+/** The envelope's message (`{"error": {"message"}}`), or the ApiError's own. */
+function v1Message(err: ApiError): string {
+  const body = err.body as { error?: { message?: unknown } } | undefined;
+  return typeof body?.error?.message === "string" ? body.error.message : err.message;
+}
+
+class Stopped extends Error {
+  constructor() {
+    super("stopped");
+    this.name = "AbortError";
+  }
+}
+
+/** `promise`, or a rejection the moment `signal` aborts. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new Stopped());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Stopped());
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (err: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      },
+    );
+  });
+}
+
+const READS: readonly string[] = ["read_file", "list_dir", "glob", "grep"];
+
+/**
+ * One run of the loop. Resolves with why it ended; never rejects for a
+ * model or tool failure, which end the run with a notice instead.
+ */
+export async function runAgent(opts: AgentRunOptions): Promise<AgentRunResult> {
+  const { host, signal, caps, mode } = opts;
+  const history: AgentMessage[] = [...opts.history, { role: "user", content: opts.prompt }];
+  let steps = 0;
+  let tokens = 0;
+  let requestId: string | null = null;
+  const end = (reason: StopReason, notice: AgentRunResult["notice"] = null): AgentRunResult => ({
+    reason,
+    history,
+    steps,
+    tokens,
+    notice,
+    requestId,
+  });
+
+  let run: RunStarted;
+  try {
+    run = await host.startRun(mode, opts.conversationId);
+  } catch (err) {
+    history.pop();
+    const text = typeof err === "string" ? err : err instanceof Error ? err.message : "";
+    return end("error", { title: "The run could not start", guidance: text || "The desktop app refused it." });
+  }
+  opts.onStarted?.(run);
+  // Stop reaches the host at once: a running command is killed there,
+  // not left to finish while the loop waits for it.
+  const onAbort = () => void host.stopRun(run.run_id).catch(() => undefined);
+  signal.addEventListener("abort", onAbort, { once: true });
+  if (run.untrusted_context.length > 0) {
+    opts.onEvent({
+      kind: "notice",
+      text: `${run.untrusted_context.join(" and ")} ${run.untrusted_context.length === 1 ? "is" : "are"} in this folder but ${run.untrusted_context.length === 1 ? "was" : "were"} not loaded: the folder is not trusted. Trust it to send ${run.untrusted_context.length === 1 ? "it" : "them"} with each run.`,
+    });
+  }
+  // `@path` mentions go with the message, read through the host like any
+  // read_file (confined, deny list and all).
+  const mentioned = mentionsIn(opts.prompt);
+  if (mentioned.length > 0) {
+    const files: { path: string; text: string; isError: boolean }[] = [];
+    for (const path of mentioned) {
+      try {
+        const read = await host.read(run.run_id, "read_file", { path });
+        files.push({ path, text: read.output, isError: read.is_error });
+      } catch (err) {
+        files.push({ path, text: typeof err === "string" ? err : "it could not be read", isError: true });
+      }
+    }
+    history[history.length - 1] = { role: "user", content: withAttachments(opts.prompt, files) };
+    const attached = files.filter((f) => !f.isError).map((f) => `@${f.path}`);
+    const refused = files.filter((f) => f.isError).map((f) => `@${f.path}`);
+    opts.onEvent({
+      kind: "notice",
+      text: [
+        attached.length > 0 ? `Attached ${attached.join(", ")}.` : "",
+        refused.length > 0 ? `Not attached: ${refused.join(", ")} (refused or unreadable; the model is told why).` : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+  }
+  const system: AgentMessage = { role: "system", content: runSystemPrompt(mode, run) };
+  const tools = toolsForMode(mode);
+
+  try {
+    for (;;) {
+      if (signal.aborted) return end("stopped");
+      if (steps >= caps.maxSteps) return end("step_cap", stepCapCopy(caps.maxSteps));
+      if (tokens >= caps.maxTokens) return end("token_cap", tokenCapCopy(tokens, caps.maxTokens));
+      steps += 1;
+      const messages = [system, ...history];
+      let response: CompletionResponse;
+      try {
+        response = await opts.transport.complete(
+          {
+            ...(opts.model === null ? {} : { model: opts.model }),
+            messages,
+            tools,
+            tool_choice: "auto",
+            ...(opts.conversationId === null ? {} : { metadata: { conversation_id: opts.conversationId } }),
+          },
+          signal,
+        );
+      } catch (err) {
+        if (isAbort(err) || signal.aborted) return end("stopped");
+        if (err instanceof ApiError) {
+          requestId = err.requestId;
+          if (err.status === 402) return end("budget", STREAM_ERROR_COPY.budget);
+          if (err.status === 429) return end("rate_limit", RATE_LIMIT_COPY);
+          const kind = classifyStreamError(v1Message(err), err.status);
+          return end("error", STREAM_ERROR_COPY[kind]);
+        }
+        const kind = classifyStreamError(err instanceof Error ? err.message : "");
+        return end("error", STREAM_ERROR_COPY[kind]);
+      }
+      const message = response.choices[0]?.message;
+      const text = message?.content ?? "";
+      const calls = message?.tool_calls ?? [];
+      tokens += response.usage?.total_tokens ?? estimateTokens(messages, text);
+      opts.onEvent({ kind: "usage", steps, tokens });
+      history.push({
+        role: "assistant",
+        content: message?.content ?? null,
+        ...(calls.length > 0 ? { tool_calls: calls } : {}),
+      });
+      if (text) opts.onEvent({ kind: "assistant", text });
+      if (calls.length === 0) return end("done");
+
+      for (let i = 0; i < calls.length; i++) {
+        const call = calls[i]!;
+        // Every call the model made gets an answer, even after Stop, so the
+        // history stays a valid prompt for the next run.
+        const stopAt = (from: number, first: string) => {
+          calls.slice(from).forEach((rest, n) =>
+            history.push({
+              role: "tool",
+              tool_call_id: rest.id,
+              content: n === 0 ? first : "Not run: the user stopped the run.",
+            }),
+          );
+          return end("stopped");
+        };
+        if (signal.aborted) return stopAt(i, "Not run: the user stopped the run.");
+        let result: ToolOutput;
+        try {
+          result = await runCall(call, run, opts);
+        } catch (err) {
+          if (isAbort(err) || signal.aborted) return stopAt(i, "Stopped by the user before it finished.");
+          result = {
+            output: `The desktop app could not run ${call.function.name}: ${typeof err === "string" ? err : err instanceof Error ? err.message : "unknown error"}`,
+            is_error: true,
+          };
+          opts.onEvent({ kind: "tool_result", id: call.id, name: call.function.name, output: result.output, isError: true });
+        }
+        history.push({ role: "tool", tool_call_id: call.id, content: result.output });
+      }
+    }
+  } catch (err) {
+    if (isAbort(err) || signal.aborted) return end("stopped");
+    throw err;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    await host.stopRun(run.run_id).catch(() => undefined);
+  }
+}
+
+async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): Promise<ToolOutput> {
+  const { host, signal, mode } = opts;
+  const name = call.function.name;
+  let args: Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(call.function.arguments || "{}");
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("not an object");
+    }
+    args = parsed as Record<string, unknown>;
+  } catch (err) {
+    const result = {
+      output: `The arguments for ${name} were not a JSON object (${err instanceof Error ? err.message : "unreadable"}). Send them again as JSON.`,
+      is_error: true,
+    };
+    opts.onEvent({ kind: "tool", id: call.id, name, args: call.function.arguments, summary: name });
+    opts.onEvent({ kind: "tool_result", id: call.id, name, output: result.output, isError: true });
+    return result;
+  }
+  opts.onEvent({ kind: "tool", id: call.id, name, args, summary: summarize(name, args) });
+  const report = (result: ToolOutput, extra: Partial<Extract<AgentEvent, { kind: "tool_result" }>> = {}) => {
+    opts.onEvent({
+      kind: "tool_result",
+      id: call.id,
+      name,
+      output: result.output,
+      isError: result.is_error,
+      ...extra,
+    });
+    return result;
+  };
+
+  // A tool the mode denies -- or one the contract never named -- is
+  // refused here, before the host hears of it (which would refuse too).
+  let decision: ReturnType<typeof allowed>;
+  try {
+    decision = allowed(name, mode);
+  } catch {
+    decision = "deny";
+  }
+  if (decision === "deny") {
+    return report({ output: `Refused: ${name} is not available in ${mode} mode.`, is_error: true });
+  }
+
+  if (READS.includes(name)) {
+    return report(await untilAborted(host.read(run.run_id, name as ReadTool, args), signal));
+  }
+
+  if (name === "edit" || name === "write_file") {
+    const preview = await untilAborted(host.write(run.run_id, name, args, { apply: false }), signal);
+    if (preview.status !== "preview") {
+      return report({ output: preview.output, is_error: true });
+    }
+    const diff = unifiedDiff(preview.before ?? "", preview.after, preview.relative);
+    if (decision === "ask") {
+      const ok = await untilAborted(
+        opts.approve({ kind: "write", tool: name, path: preview.relative, diff, created: preview.before === null }),
+        signal,
+      );
+      if (!ok) {
+        return report(
+          {
+            output: `Rejected by the user: ${preview.relative} was not changed. Do not send the same change again; ask what they want instead, or try another approach.`,
+            is_error: false,
+          },
+          { diff, rejected: true },
+        );
+      }
+    }
+    const applied = await untilAborted(
+      host.write(run.run_id, name, args, { apply: true, expectedSha256: preview.before_sha256 }),
+      signal,
+    );
+    if (applied.status !== "applied") {
+      const output = applied.status === "error" ? applied.output : `${preview.relative} was not written.`;
+      return report({ output, is_error: true }, { diff });
+    }
+    return report({ output: applied.output, is_error: false }, { diff, checkpoint: applied.checkpoint });
+  }
+
+  if (name === "run_shell") {
+    const command = typeof args.command === "string" ? args.command : "";
+    if (decision === "ask") {
+      const ok = await untilAborted(
+        opts.approve({
+          kind: "shell",
+          command,
+          timeoutS: typeof args.timeout_s === "number" ? args.timeout_s : null,
+        }),
+        signal,
+      );
+      if (!ok) {
+        return report(
+          {
+            output:
+              "Rejected by the user: the command was not run. Do not send the same command again; ask what they want instead, or try another approach.",
+            is_error: false,
+          },
+          { rejected: true },
+        );
+      }
+    }
+    return report(await untilAborted(host.shell(run.run_id, args), signal));
+  }
+
+  return report({ output: `Refused: ${name} is not a tool this client has.`, is_error: true });
+}

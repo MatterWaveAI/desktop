@@ -16,6 +16,7 @@ import {
 import { useThemePreference, type ThemePreference } from "../../../shell/theme";
 import type { Preferences } from "../../../types";
 import { PaneSection } from "../PaneSection";
+import { AgentModeChoice } from "../../agent/AgentModeChoice";
 import {
   canSpeak,
   DEFAULT_READ_ALOUD,
@@ -354,6 +355,8 @@ export function PreferencesPane() {
       {canSpeak() && <ReadAloudChoice />}
 
       {isDesktop() && <GlobalHotkeyChoice />}
+
+      {isDesktop() && <AgentModeChoice />}
     </div>
   );
 }

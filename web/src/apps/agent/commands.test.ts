@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import { MAX_MENTIONS, mentionsIn, parseAgentCommand, withAttachments } from "./commands";
+import { agentAvailability, activeModel } from "./availability";
+import type { ModelInfo } from "../../types";
+
+describe("agent slash commands", () => {
+  it("reads /approval-mode with and without a mode", () => {
+    expect(parseAgentCommand("/approval-mode plan")).toEqual({ kind: "approval-mode", mode: "plan", given: "plan" });
+    expect(parseAgentCommand("/approval-mode AUTO-EDIT")).toMatchObject({ mode: "auto-edit" });
+    expect(parseAgentCommand("/approval-mode")).toEqual({ kind: "approval-mode", mode: null, given: "" });
+    expect(parseAgentCommand("/approval-mode careful")).toEqual({ kind: "approval-mode", mode: null, given: "careful" });
+  });
+
+  it("reads /restore, /init, /help and anything else", () => {
+    expect(parseAgentCommand("/restore")).toEqual({ kind: "restore", id: null });
+    expect(parseAgentCommand(" /restore 12 ")).toEqual({ kind: "restore", id: 12 });
+    expect(parseAgentCommand("/init")).toEqual({ kind: "init" });
+    expect(parseAgentCommand("/help")).toEqual({ kind: "help" });
+    expect(parseAgentCommand("/compact")).toEqual({ kind: "unknown", name: "compact" });
+    expect(parseAgentCommand("fix the bug")).toBeNull();
+  });
+});
+
+describe("@path mentions", () => {
+  it("finds paths after whitespace, not email addresses, without repeats", () => {
+    expect(mentionsIn("look at @src/app.ts, then @README.md. Mail me@example.com about @src/app.ts")).toEqual([
+      "src/app.ts",
+      "README.md",
+    ]);
+    expect(mentionsIn("@a @b @c @d @e @f @g")).toHaveLength(MAX_MENTIONS);
+  });
+
+  it("attaches files below the prompt and says which were refused", () => {
+    const text = withAttachments("explain", [
+      { path: "a.ts", text: "1\tx\n", isError: false },
+      { path: ".env", text: "Refused.", isError: true },
+    ]);
+    expect(text).toContain('<file path="a.ts">\n1\tx\n</file>');
+    expect(text).toContain("[@.env was not attached: Refused.]");
+    expect(withAttachments("plain", [])).toBe("plain");
+  });
+});
+
+describe("when agent mode is greyed out", () => {
+  const model = (supports_tools?: boolean | null) =>
+    ({ id: "m", label: "Model M", supports_tools }) as Pick<ModelInfo, "label" | "supports_tools">;
+
+  it("is available when the API says nothing either way", () => {
+    expect(agentAvailability({}, model(undefined))).toEqual({ available: true, reason: null });
+    expect(agentAvailability({ local_agent_tools: true }, model(null))).toEqual({ available: true, reason: null });
+    expect(agentAvailability({}, null).available).toBe(true);
+  });
+
+  it("is off when the org turned local tools off, or the model cannot call tools", () => {
+    expect(agentAvailability({ local_agent_tools: false }, model(true))).toMatchObject({
+      available: false,
+      reason: expect.stringMatching(/organisation has turned off local agent tools/),
+    });
+    expect(agentAvailability({}, model(false))).toEqual({
+      available: false,
+      reason: "Model M cannot call tools. Pick another model to use agent mode.",
+    });
+  });
+
+  it("judges the model a turn would use: the pick, else the default", () => {
+    const list = [{ id: "a" }, { id: "b" }] as ModelInfo[];
+    expect(activeModel(list, null, "b")?.id).toBe("b");
+    expect(activeModel(list, "a", "b")?.id).toBe("a");
+    expect(activeModel(null, "a", "b")).toBeNull();
+  });
+});
