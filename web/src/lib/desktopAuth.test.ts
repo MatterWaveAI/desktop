@@ -45,7 +45,11 @@ function fakeTauriWithEvents(handler: Handler) {
       return id;
     }
     if (cmd === "plugin:event|unlisten") {
-      registrations.delete(args?.id as number);
+      // The plugin's own signature: the event name and the id listen
+      // answered (`unlisten(event, event_id)`); anything else is refused.
+      const id = args?.eventId as number;
+      if (registrations.get(id)?.event !== args?.event) throw new Error("invalid args `eventId` for command `unlisten`");
+      registrations.delete(id);
       return null;
     }
     return handler(cmd, args);
@@ -309,6 +313,44 @@ describe("watchUpdates", () => {
     async function flushBridge() {
       for (let i = 0; i < 5; i += 1) await Promise.resolve();
     }
+  });
+
+  it("unlistens with the event and its id, and drops the page's own listener too", async () => {
+    const bridge = fakeTauriWithEvents(() => null);
+    const unregisterListener = vi.fn();
+    (window as unknown as Record<string, unknown>).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener };
+    const { desktop } = await load();
+
+    const unlisten = desktop.watchUpdates({ onStage: () => {} });
+    await vi.waitFor(() => {
+      expect(bridge.listenerCount("update-stage")).toBe(1);
+    });
+    unlisten();
+    await vi.waitFor(() => {
+      expect(bridge.listenerCount("update-stage")).toBe(0);
+    });
+    expect(bridge.invoke).toHaveBeenCalledWith("plugin:event|unlisten", { event: "update-stage", eventId: 100 });
+    expect(unregisterListener).toHaveBeenCalledWith("update-stage", 100);
+    delete (window as unknown as Record<string, unknown>).__TAURI_EVENT_PLUGIN_INTERNALS__;
+  });
+
+  it("says so when the bridge refuses to listen, rather than going quiet", async () => {
+    const bridge = fakeTauriWithEvents(() => null);
+    bridge.invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "plugin:event|listen") throw "event.listen not allowed. Permissions associated with this command: core:event:allow-listen";
+      return null;
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { desktop } = await load();
+
+    desktop.watchUpdates({ onAvailable: () => {} });
+    await vi.waitFor(() => {
+      expect(warn).toHaveBeenCalledWith(
+        "[desktop] could not listen for update-available",
+        expect.stringContaining("core:event:allow-listen"),
+      );
+    });
+    warn.mockRestore();
   });
 
   it("is a no-op in a browser, where no events can arrive", async () => {

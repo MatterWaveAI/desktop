@@ -1,9 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window may call the app's own commands and nothing else: no filesystem, shell or HTTP plugin is exposed to the webview.",
+  "description": "The main window may call the app's own commands and listen for the events the native side emits, and nothing else: no filesystem, shell or HTTP plugin is exposed to the webview.",
   "windows": ["main"],
   "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "allow-get-access-token",
     "allow-sign-in",
     "allow-sign-out",

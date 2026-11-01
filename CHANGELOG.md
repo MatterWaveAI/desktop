@@ -29,6 +29,12 @@ the API's `MW_RELEASE` all report it).
   locally, and a test (`scripts/workflows.test.mjs`) checks every
   workflow's expressions against the contexts GitHub provides where they
   appear.
+- **Update and stage events reach the SPA**: the window's capability now
+  allows the event plugin's listen and unlisten, which it never did, so
+  every `update-available`, download-progress and `update-stage` event was
+  refused and the refusal swallowed. Unlisten now sends what the plugin
+  expects (the event and its id), a refused listen is logged, and a test
+  checks every bridge call in `web/src` against the capability file.
 
 ## [0.3.0] - 2026-10-31
 

@@ -329,27 +329,58 @@ interface TauriInternals {
   transformCallback?: (callback: (event: TauriEvent) => void, once?: boolean) => number;
 }
 
+/** What the event plugin injects beside the internals: its own listener table. */
+interface TauriEventInternals {
+  unregisterListener?: (event: string, eventId: number) => void;
+}
+
 /**
  * One native event, through the same bridge the commands use: the event
- * plugin's listen/unlisten over `__TAURI_INTERNALS__`, with the callback
- * registered the way `@tauri-apps/api/event` does it. Without internals
- * there is nothing to hear -- a browser, or a bridge this build does not
- * know -- and the unlisten is a no-op.
+ * plugin's listen/unlisten over `__TAURI_INTERNALS__`, called the way
+ * `@tauri-apps/api/event` calls them -- the capability file must allow both
+ * (`core:event:allow-listen`, `core:event:allow-unlisten`), or every event
+ * is refused. Without internals there is nothing to hear -- a browser, or
+ * a bridge this build does not know -- and the unlisten is a no-op.
  */
-async function listenEvent(event: string, cb: (payload: unknown) => void): Promise<UnlistenFn> {
+export async function listenEvent(
+  event: string,
+  cb: (payload: unknown) => void,
+): Promise<UnlistenFn> {
   const internals = (window as unknown as TauriWindow).__TAURI_INTERNALS__ as
     | TauriInternals
     | undefined;
   if (!internals?.invoke || !internals.transformCallback) return () => {};
   const handler = internals.transformCallback((e) => cb(e.payload));
-  const id = await internals.invoke<number>("plugin:event|listen", {
+  const eventId = await internals.invoke<number>("plugin:event|listen", {
     event,
     target: { kind: "Any" },
     handler,
   });
   return () => {
-    internals.invoke("plugin:event|unlisten", { id }).catch(() => {});
+    const plugin = (window as unknown as { __TAURI_EVENT_PLUGIN_INTERNALS__?: TauriEventInternals })
+      .__TAURI_EVENT_PLUGIN_INTERNALS__;
+    plugin?.unregisterListener?.(event, eventId);
+    internals.invoke("plugin:event|unlisten", { event, eventId }).catch((err: unknown) => {
+      console.warn(`[desktop] could not stop listening for ${event}`, err);
+    });
   };
+}
+
+/**
+ * Listen, and say so when the bridge refuses: a refused listen is a
+ * capability missing from the build, and swallowing it is how update
+ * events once vanished without a trace.
+ */
+export function listenOrWarn(
+  event: string,
+  cb: (payload: unknown) => void,
+  onUnlisten: (unlisten: UnlistenFn) => void,
+): void {
+  listenEvent(event, cb)
+    .then(onUnlisten)
+    .catch((err: unknown) => {
+      console.warn(`[desktop] could not listen for ${event}`, err);
+    });
 }
 
 /**
@@ -363,12 +394,10 @@ export function watchUpdates(handlers: UpdateHandlers): UnlistenFn {
   const unlistens: UnlistenFn[] = [];
   let cancelled = false;
   const add = (event: string, cb: (payload: unknown) => void) => {
-    listenEvent(event, cb)
-      .then((unlisten) => {
-        if (cancelled) unlisten();
-        else unlistens.push(unlisten);
-      })
-      .catch(() => {});
+    listenOrWarn(event, cb, (unlisten) => {
+      if (cancelled) unlisten();
+      else unlistens.push(unlisten);
+    });
   };
   if (handlers.onAvailable) add("update-available", (p) => handlers.onAvailable?.(String(p)));
   if (handlers.onProgress)
