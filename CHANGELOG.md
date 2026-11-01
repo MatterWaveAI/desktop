@@ -20,6 +20,16 @@ the API's `MW_RELEASE` all report it).
   at a time, and CI fails when `web/` is anything other than that commit
   plus those patches (`pnpm spa:check`).
 
+### Fixed
+
+- **GitHub runs the CI workflow again**: the Rust job read `runner.temp`
+  in its job-level `env`, where the runner context does not exist, so
+  GitHub rejected the whole file before any job started. The target
+  directory is now set from a step, clippy fails on warnings as it does
+  locally, and a test (`scripts/workflows.test.mjs`) checks every
+  workflow's expressions against the contexts GitHub provides where they
+  appear.
+
 ## [0.3.0] - 2026-10-31
 
 ### Added
@@ -80,7 +90,8 @@ the API's `MW_RELEASE` all report it).
   `.github/workflows/ci.yml`): the web job (lint, typecheck, vitest,
   build) and the Rust job (fmt, clippy, tests) already gated pushes and
   PRs; the push trigger now covers the long-lived branches, develop
-  included. Verified green on this tree; the tauri build matrix stays
+  included. The same checks passed locally; on GitHub the workflow file
+  itself was refused (see Unreleased, Fixed). The tauri build matrix stays
   `continue-on-error` while the runners' toolchains mature.
 - **The release degrades to unsigned when the signing secrets are absent**
   (`.github/workflows/release.yml`, `scripts/release-config.mjs`): with none
