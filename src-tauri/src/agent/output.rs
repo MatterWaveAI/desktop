@@ -100,18 +100,6 @@ pub(crate) fn utf8_head(text: &str, max_bytes: usize) -> &str {
     &text[..cut]
 }
 
-/// The longest end of `text` whose UTF-8 fits in `max_bytes`.
-pub(crate) fn utf8_tail(text: &str, max_bytes: usize) -> &str {
-    if text.len() <= max_bytes {
-        return text;
-    }
-    let mut start = text.len() - max_bytes;
-    while start < text.len() && !text.is_char_boundary(start) {
-        start += 1;
-    }
-    &text[start..]
-}
-
 /// The argument errors read_file checks before it looks at the file: a
 /// line number below 1, and an end before the start.
 pub(crate) fn check_lines(start_line: Option<i64>, end_line: Option<i64>) -> Result<(), ToolError> {
@@ -334,16 +322,64 @@ pub(crate) fn shell_status(end: ShellEnd) -> String {
     }
 }
 
+/// The length of the UTF-8 sequence `lead` starts (0 for a byte that
+/// cannot start one: a continuation byte or one never valid in UTF-8).
+fn sequence_len(lead: u8) -> usize {
+    match lead {
+        0x00..=0x7F => 1,
+        0xC2..=0xDF => 2,
+        0xE0..=0xEF => 3,
+        0xF0..=0xF4 => 4,
+        _ => 0,
+    }
+}
+
+/// Where the character that a cut at `at` would split starts, when one
+/// does: a lead byte at most three bytes back whose sequence runs past
+/// `at`. Bytes that are not UTF-8 are characters of their own (each
+/// decodes to U+FFFD), so a cut next to one splits nothing.
+fn split_at(bytes: &[u8], at: usize) -> Option<usize> {
+    let mut start = at;
+    while start > 0 && at - start < 3 && bytes.get(start).is_some_and(|b| b & 0xC0 == 0x80) {
+        start -= 1;
+    }
+    (start < at && start + sequence_len(bytes[start]) > at).then_some(start)
+}
+
+/// The longest start of `bytes` within `max_bytes` that ends on a
+/// character boundary: `utf8_head` on the bytes as the command wrote them.
+fn byte_head(bytes: &[u8], max_bytes: usize) -> &[u8] {
+    if bytes.len() <= max_bytes {
+        return bytes;
+    }
+    &bytes[..split_at(bytes, max_bytes).unwrap_or(max_bytes)]
+}
+
+/// The longest end of `bytes` within `max_bytes` that starts on a
+/// character boundary (the SDKs' `utf8_tail`), on the bytes as the
+/// command wrote them.
+fn byte_tail(bytes: &[u8], max_bytes: usize) -> &[u8] {
+    if bytes.len() <= max_bytes {
+        return bytes;
+    }
+    let at = bytes.len() - max_bytes;
+    let start = split_at(bytes, at).map_or(at, |s| (s + sequence_len(bytes[s])).min(bytes.len()));
+    &bytes[start..]
+}
+
 /// run_shell's result for output the host kept in two parts: `head`, the
 /// first bytes the command wrote, and `tail`, the last, of `total` bytes in
 /// all (when nothing was dropped, `head` is the whole output and `tail` is
 /// empty). Output over `shell_output_max_bytes` keeps its first half and
 /// its last half, each cut back to a character boundary, with the middle
-/// marker between them counting the bytes left out.
+/// marker between them counting the bytes left out. The cut and the count
+/// are made on the bytes as written, so an invalid byte, which decodes to
+/// the three bytes of U+FFFD, counts as the one byte it was; the kept
+/// parts are decoded after.
 pub(crate) fn format_shell_parts(
     end: ShellEnd,
-    head: &str,
-    tail: &str,
+    head: &[u8],
+    tail: &[u8],
     total: usize,
     limits: &Limits,
 ) -> String {
@@ -354,24 +390,24 @@ pub(crate) fn format_shell_parts(
     let cap = limits.shell_output_max_bytes;
     let whole = tail.is_empty() && head.len() == total;
     if whole && total <= cap {
-        return format!("{status}\n{head}");
+        return format!("{status}\n{}", String::from_utf8_lossy(head));
     }
     let half = cap / 2;
-    let kept_head = utf8_head(head, half);
-    let kept_tail = if whole {
-        utf8_tail(head, cap - half)
-    } else {
-        utf8_tail(tail, cap - half)
-    };
+    let kept_head = byte_head(head, half);
+    let kept_tail = byte_tail(if whole { head } else { tail }, cap - half);
     let omitted = total.saturating_sub(kept_head.len() + kept_tail.len());
     let marker = fill(outputs::SHELL_CUT, &[("omitted", &omitted.to_string())]);
-    format!("{status}\n{kept_head}\n{marker}\n{kept_tail}")
+    format!(
+        "{status}\n{}\n{marker}\n{}",
+        String::from_utf8_lossy(kept_head),
+        String::from_utf8_lossy(kept_tail)
+    )
 }
 
 /// run_shell's result for the whole of a command's output.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_shell(output: &str, end: ShellEnd, limits: &Limits) -> String {
-    format_shell_parts(end, output, "", output.len(), limits)
+    format_shell_parts(end, output.as_bytes(), b"", output.len(), limits)
 }
 
 /// glob's pattern as the search tools apply it (`globMatches`).
@@ -432,9 +468,9 @@ mod tests {
     #[test]
     fn heads_and_tails_end_on_character_boundaries() {
         assert_eq!(utf8_head("ééé", 3), "é");
-        assert_eq!(utf8_tail("ééé", 3), "é");
+        assert_eq!(byte_tail("ééé".as_bytes(), 3), "é".as_bytes());
         assert_eq!(utf8_head("abc", 9), "abc");
-        assert_eq!(utf8_tail("abc", 0), "");
+        assert_eq!(byte_tail(b"abc", 0), b"");
     }
 
     #[test]
@@ -467,13 +503,54 @@ mod tests {
         assert_eq!(
             format_shell_parts(
                 ShellEnd::Exited(Some(0)),
-                "0123456789",
-                "6789ABCDEF",
+                b"0123456789",
+                b"6789ABCDEF",
                 16,
                 &small
             ),
             "Exit code 0\n01234\n[... 6 bytes of output cut from the middle ...]\nBCDEF"
         );
+    }
+
+    /// Bytes that are not UTF-8 count as the bytes they are, not as the
+    /// U+FFFD each becomes; a character the cut lands in is left out whole.
+    #[test]
+    fn the_shell_cut_counts_invalid_utf8_as_written() {
+        let small = Limits {
+            shell_output_max_bytes: 10,
+            ..Limits::default()
+        };
+        // Head: a, two invalid bytes, b, then a euro sign the cut at 5 splits.
+        let head = b"a\xFF\xFEb\xE2\x82\xACcde";
+        // Tail: a euro sign the cut at 5 splits, an invalid byte, z!.
+        let tail = b"vwxy\xE2\x82\xAC\xFFz!";
+        assert_eq!(
+            format_shell_parts(ShellEnd::Exited(Some(0)), head, tail, 40, &small),
+            "Exit code 0\na\u{FFFD}\u{FFFD}b\n[... 33 bytes of output cut from the middle ...]\n\u{FFFD}z!"
+        );
+        // All invalid: five bytes kept each side, 30 - 10 left out.
+        assert_eq!(
+            format_shell_parts(
+                ShellEnd::Exited(Some(0)),
+                &[0xFF; 10],
+                &[0xFE; 10],
+                30,
+                &small
+            ),
+            format!(
+                "Exit code 0\n{0}\n[... 20 bytes of output cut from the middle ...]\n{0}",
+                "\u{FFFD}".repeat(5)
+            )
+        );
+        // Under the cap as written, whole, though it decodes to more.
+        assert_eq!(
+            format_shell_parts(ShellEnd::Exited(Some(0)), &[0xFF; 8], b"", 8, &small),
+            format!("Exit code 0\n{}", "\u{FFFD}".repeat(8))
+        );
+        // On valid text the byte cut is the character cut.
+        assert_eq!(byte_head("ééé".as_bytes(), 3), "é".as_bytes());
+        assert_eq!(byte_tail("ééé".as_bytes(), 3), "é".as_bytes());
+        assert_eq!(byte_tail("a€".as_bytes(), 2), b"");
     }
 
     #[test]

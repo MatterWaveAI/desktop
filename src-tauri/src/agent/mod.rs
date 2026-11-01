@@ -380,6 +380,29 @@ impl AgentState {
         Ok(answer)
     }
 
+    /// Where `path` leads, relative to the root, when the run is gated and
+    /// that is a read-gated path (by its name or where its links lead);
+    /// `None` otherwise.
+    async fn gated_target(
+        &self,
+        run: &Run,
+        root: &Path,
+        path: &str,
+    ) -> Result<Option<String>, String> {
+        if !self.gated(run.mode) {
+            return Ok(None);
+        }
+        let (at, path) = (root.to_path_buf(), path.to_string());
+        blocking(move || {
+            let deny = DenyList::load(&at);
+            confine::confine(&at, &path, &deny, Access::Read)
+                .ok()
+                .filter(approval::is_read_gated)
+                .map(|c| c.relative)
+        })
+        .await
+    }
+
     /// The read gate for one call that reads `path` (or, for a write's
     /// preview, hands its current text to the webview): in a gated run, a
     /// read-gated path is read only after the person's native yes.
@@ -390,19 +413,10 @@ impl AgentState {
         tool: &str,
         path: Option<String>,
     ) -> Result<Gate, String> {
-        let Some(path) = path.filter(|_| self.gated(run.mode)) else {
+        let Some(path) = path else {
             return Ok(Gate::Clear);
         };
-        let at = root.to_path_buf();
-        let gated = blocking(move || {
-            let deny = DenyList::load(&at);
-            confine::confine(&at, &path, &deny, Access::Read)
-                .ok()
-                .filter(approval::is_read_gated)
-                .map(|c| c.relative)
-        })
-        .await?;
-        let Some(relative) = gated else {
+        let Some(relative) = self.gated_target(run, root, &path).await? else {
             return Ok(Gate::Clear);
         };
         let asked = Asked {
@@ -655,7 +669,16 @@ impl AgentState {
         };
         let (protected, shown) = match prepared {
             Ok(prepared) => prepared,
-            Err(outcome) => return Ok(outcome),
+            // In a gated run an apply's failure on a read-gated file would
+            // say what the file holds without the person's yes (an edit's
+            // text not found, or found n times), so it says only that the
+            // change no longer matches the file.
+            Err(outcome) => {
+                return Ok(match self.gated_target(&run, &root, change.path()).await? {
+                    Some(relative) => changed_since(&relative),
+                    None => outcome,
+                })
+            }
         };
         let mut approved = false;
         if approval::decision_for(run.mode, tool, protected) == Decision::Ask {

@@ -1125,6 +1125,66 @@ async fn an_unconfirmed_run_reads_credentials_only_after_a_native_yes() {
     assert_eq!(lines[0]["mode"], "plan");
 }
 
+/// Attack: webview script in an unconfirmed run skips the preview and
+/// calls an edit's apply on a read-gated file with guessed text, reading
+/// the answer (not found, found n times, changed since) as an oracle on
+/// the file's content. Every failed apply there says the same thing, and
+/// nothing is asked or written.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_failed_apply_on_a_gated_file_says_nothing_of_its_content() {
+    let (_ws, root, data) = workspace();
+    std::fs::create_dir_all(root.join(".aws")).unwrap();
+    let secret = "aws_secret_access_key = SECRET\naws_secret_access_key = SECRET\n";
+    std::fs::write(root.join(".aws/credentials"), secret).unwrap();
+    let (state, person) = state_at(data.path(), &root, &[]);
+    let ask = start(&state, "ask");
+    let mut answers = Vec::new();
+    for guess in ["SECRET\n", "NOPE", "key = SECRET\naws"] {
+        let out = state
+            .write(
+                &ask,
+                "edit",
+                edit(".aws/credentials", guess, "x"),
+                true,
+                Some("0".repeat(64)),
+            )
+            .await
+            .unwrap();
+        match out {
+            WriteOutcome::Error { output } => answers.push(output),
+            other => panic!("{other:?}"),
+        }
+    }
+    assert!(
+        answers.iter().all(|a| a == &answers[0]),
+        "the answers differ: {answers:?}"
+    );
+    assert!(!answers[0].contains("SECRET"), "{}", answers[0]);
+    assert!(person.asked().is_empty());
+    assert_eq!(
+        std::fs::read_to_string(root.join(".aws/credentials")).unwrap(),
+        secret
+    );
+    // Outside the gate the model still learns why its edit failed.
+    std::fs::write(root.join("a.py"), "x = 1\n").unwrap();
+    let out = state
+        .write(
+            &ask,
+            "edit",
+            edit("a.py", "NOPE", "y"),
+            true,
+            Some("0".repeat(64)),
+        )
+        .await
+        .unwrap();
+    match out {
+        WriteOutcome::Error { output } => {
+            assert_ne!(output, answers[0].replace(".aws/credentials", "a.py"))
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
 /// A protected write needs the person's yes in auto-edit, and the yes
 /// reaches the file; .matterwaveignore was refused in every mode in 1.0
 /// and now asks like the rest.

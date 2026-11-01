@@ -453,9 +453,11 @@ pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
             }
             let mut file = ws.root.join(relative);
             // A link is confined again just before it is read, so one
-            // swapped in since the walk listed it cannot lead out.
+            // swapped in since the walk listed it cannot lead out; and held
+            // to the read gate by where it leads, which the walk (by name)
+            // cannot see.
             if std::fs::symlink_metadata(&file).is_ok_and(|m| m.file_type().is_symlink()) {
-                match confine(ws.root, relative, &ws.deny, Access::Read) {
+                match ws.confine_read(relative) {
                     Ok(c) => file = c.absolute,
                     Err(_) => return Walk::Next,
                 }
@@ -959,6 +961,31 @@ pub(crate) mod tests {
             read_file(&open, read(".bashrc", None, None)).output,
             "1\texport TOKEN=SECRET"
         );
+    }
+
+    /// A link with an innocent name to a gated file is gated by where it
+    /// leads: the walk lists it by name, so grep must not read through it.
+    #[cfg(unix)]
+    #[test]
+    fn a_gated_grep_does_not_read_through_a_link_to_a_gated_file() {
+        let dir = ws_files(&[
+            (".bashrc", "export TOKEN=SECRET\n"),
+            ("src/a.py", "SECRET = None\n"),
+        ]);
+        let root = canonical(&dir);
+        std::os::unix::fs::symlink(root.join(".bashrc"), root.join("notes.txt")).unwrap();
+        let args = || GrepArgs {
+            pattern: "SECRET".into(),
+            path: None,
+            glob: None,
+            ignore_case: None,
+        };
+        let gated = Workspace::new(&root, &RUNNING).gated(true);
+        assert_eq!(grep(&gated, args()).output, "src/a.py:1: SECRET = None");
+        let refused = read_file(&gated, read("notes.txt", None, None));
+        assert!(refused.is_error, "{}", refused.output);
+        let open = Workspace::new(&root, &RUNNING);
+        assert!(grep(&open, args()).output.contains("notes.txt:1:"));
     }
 
     #[test]

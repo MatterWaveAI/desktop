@@ -164,7 +164,9 @@ fn create_private_dir(dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// The log opened for appending, created owner-only when it is new.
+/// The log opened for appending, made owner-only before each write: not
+/// only when it is new, so a log whose first restriction failed (or one
+/// that was there before) is never written to as it was.
 fn open_private(path: &Path) -> std::io::Result<std::fs::File> {
     let mut options = std::fs::OpenOptions::new();
     options.append(true).create(true);
@@ -173,8 +175,6 @@ fn open_private(path: &Path) -> std::io::Result<std::fs::File> {
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
-    #[cfg(windows)]
-    let fresh = !path.exists();
     let file = options.open(path)?;
     #[cfg(unix)]
     {
@@ -182,11 +182,7 @@ fn open_private(path: &Path) -> std::io::Result<std::fs::File> {
         file.set_permissions(std::fs::Permissions::from_mode(0o600))?;
     }
     #[cfg(windows)]
-    {
-        if fresh {
-            owner_only::restrict(path)?;
-        }
-    }
+    owner_only::restrict(path)?;
     Ok(file)
 }
 
@@ -395,13 +391,9 @@ mod tests {
     /// Windows: the file's DACL is protected and names the current user
     /// alone (icacls lists one entry and no inherited ones).
     #[cfg(windows)]
-    #[test]
-    fn the_log_is_the_owners_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let log = AuditLog::new(dir.path().join("data"));
-        log.append(&shell_call("a"), Answer::Approved, 0).unwrap();
+    fn assert_owner_only(path: &Path) {
         let out = std::process::Command::new("icacls")
-            .arg(log.path())
+            .arg(path)
             .output()
             .unwrap();
         let text = String::from_utf8_lossy(&out.stdout);
@@ -409,7 +401,29 @@ mod tests {
         assert_eq!(entries.len(), 1, "{text}");
         assert!(entries[0].contains("(F)"), "{text}");
         assert!(!text.contains("(I)"), "nothing inherited: {text}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_log_is_the_owners_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = AuditLog::new(dir.path().join("data"));
+        log.append(&shell_call("a"), Answer::Approved, 0).unwrap();
+        assert_owner_only(&log.path());
         let sid = owner_only::current_user_sid().unwrap();
         assert!(sid.starts_with("S-1-"), "{sid}");
+    }
+
+    /// Windows: a log already there with the folder's inherited access (a
+    /// first restriction that failed, or a file made by something else) is
+    /// made the owner's alone before the next line goes in.
+    #[cfg(windows)]
+    #[test]
+    fn a_log_already_there_is_made_the_owners_alone_before_it_is_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let log = AuditLog::new(dir.path().to_path_buf());
+        std::fs::write(log.path(), "").unwrap();
+        log.append(&shell_call("a"), Answer::Approved, 0).unwrap();
+        assert_owner_only(&log.path());
     }
 }

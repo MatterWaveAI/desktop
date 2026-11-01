@@ -40,7 +40,7 @@
 //! a key the person exported for the SDK. That is hygiene, not a wall: a
 //! command runs as the person and can read their keychain too.
 
-use super::output::{format_shell, format_shell_parts, Limits, ShellEnd};
+use super::output::{format_shell_parts, Limits, ShellEnd};
 use std::collections::VecDeque;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
@@ -86,16 +86,9 @@ impl ShellResult {
             shell_output_max_bytes: cap,
             ..Limits::default()
         };
-        if !self.truncated(cap) {
-            return format_shell(&String::from_utf8_lossy(&self.head), end, &limits);
-        }
-        format_shell_parts(
-            end,
-            &String::from_utf8_lossy(&self.head),
-            &String::from_utf8_lossy(&self.tail),
-            self.total_bytes,
-            &limits,
-        )
+        // The raw bytes, so the cut and its count are in bytes as written.
+        let tail: &[u8] = if self.truncated(cap) { &self.tail } else { b"" };
+        format_shell_parts(end, &self.head, tail, self.total_bytes, &limits)
     }
 }
 

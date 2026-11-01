@@ -56,7 +56,10 @@ fn main() {
     // RT_MANIFEST id 1 replaces rustc's default manifest, exactly as the
     // linked resource replaces it for the app binary.
     if std::env::var("CARGO_CFG_WINDOWS").is_ok() {
-        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        // Read when the script runs, not baked in when it was compiled: a
+        // build script binary is reused when the checkout moves.
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let manifest = std::path::Path::new(&dir)
             .join("tests/windows.manifest")
             .display()
             .to_string()
