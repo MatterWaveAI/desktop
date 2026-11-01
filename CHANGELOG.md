@@ -67,9 +67,9 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   rather than a movable tag, the workflows' token is read-only unless a
   job needs more (only the release's build and publish jobs write), a
   `gitleaks` job and pre-commit hook refuse committed secrets
-  (`.gitleaks.toml` allows the tests' made-up ones), and Dependabot opens
-  weekly grouped updates for the tooling, the crates and the actions --
-  not for `web/`, whose dependencies come with the platform's SPA.
+  (`.gitleaks.toml` allows the tests' made-up ones), and Renovate's
+  weekly grouped updates (`renovate.json`) leave `web/` alone: its
+  dependencies come with the platform's SPA.
 
 ### Fixed
 
