@@ -193,6 +193,60 @@ export interface Conversation {
    * Optional because an API that predates temporary chat does not send it.
    */
   temporary?: boolean;
+  /**
+   * The org preset this conversation answers with: its model, instructions
+   * and tools replace the conversation's own while it is set. Optional
+   * because an API that predates presets does not send it.
+   */
+  preset_id?: string | null;
+  preset?: PresetRef | null;
+}
+
+/** What a conversation carries of its preset: enough to label it. */
+export interface PresetRef {
+  id: string;
+  name: string | null;
+}
+
+/** One org preset, as `GET /api/org/presets` lists it. */
+export interface Preset {
+  id: string;
+  name: string;
+  description: string;
+  model: string;
+  instructions: string;
+  /** The tool names it allows; null is the platform's default set, [] none. */
+  tools: string[] | null;
+  welcome_message: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  /** Set on a deleted preset, which only a conversation already on it reads. */
+  deleted_at: string | null;
+}
+
+/** A tool a preset may name, with what it does. */
+export interface PresetTool {
+  name: string;
+  description: string;
+}
+
+/** The limits `GET /api/org/presets` states beside the list. */
+export interface PresetLimits {
+  max_presets: number;
+  name_max_len: number;
+  description_max_len: number;
+  instructions_max_len: number;
+  welcome_max_len: number;
+}
+
+/** `GET /api/org/presets`. */
+export interface PresetListing {
+  data: Preset[];
+  tools: PresetTool[];
+  limits: PresetLimits;
+  /** Whether this caller may create, change and delete them. */
+  can_manage: boolean;
 }
 
 /**
@@ -280,6 +334,8 @@ export interface UserInstructions {
  */
 export interface EffectiveInstructions {
   org: string;
+  /** The conversation's preset's instructions, after the org's; absent from an older API. */
+  preset?: string;
   user: UserInstructions;
   conversation: string;
   /** True when a conversation prompt is displacing the user's own. */

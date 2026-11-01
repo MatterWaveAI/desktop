@@ -31,7 +31,14 @@ export function NewConversationState(props: {
   onSendPrompt?: (prompt: string) => void;
   /** Sending is disabled while offline, so the cards must be too. */
   disabled?: boolean;
+  /**
+   * The preset's welcome message, when the new chat is on one that has
+   * one: it takes the product line's place, since the preset is what
+   * will answer.
+   */
+  welcome?: string | null;
 }) {
+  const welcome = props.welcome ?? null;
   return (
     /* min-h-full and safe centring rather than h-full and justify-center:
        a centred column taller than a phone screen overflows both ways and
@@ -42,12 +49,18 @@ export function NewConversationState(props: {
         <h2 className="font-heading text-2xl font-semibold tracking-tight">
           What can I help you with?
         </h2>
-        {/* One sentence on what this is, for a stranger arriving from a shared
-            link — they may never have seen the landing page. */}
-        <p className="max-w-md text-sm text-mw-text-muted">
-          MatterWave is a chat workspace: ask anything and an AI model answers. Type below,
-          pick a model above, or start from one of these.
-        </p>
+        {welcome !== null ? (
+          <p className="max-w-md text-sm whitespace-pre-line text-mw-text" data-mw-preset-welcome="">
+            {welcome}
+          </p>
+        ) : (
+          /* One sentence on what this is, for a stranger arriving from a shared
+             link — they may never have seen the landing page. */
+          <p className="max-w-md text-sm text-mw-text-muted">
+            MatterWave is a chat workspace: ask anything and an AI model answers. Type below,
+            pick a model above, or start from one of these.
+          </p>
+        )}
         <AiDisclosure />
       </div>
       <ul className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">

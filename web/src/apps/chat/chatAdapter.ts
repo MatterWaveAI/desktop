@@ -162,6 +162,11 @@ export interface ChatAdapterHooks {
    * creation; absent means a kept conversation.
    */
   getTemporary?: () => boolean;
+  /**
+   * The org preset the conversation this send creates starts on, by id;
+   * null or absent is none. Read once, at creation, like `getTemporary`.
+   */
+  getPresetId?: () => string | null;
   onRenamed: (conversationId: string, title: string) => void;
   onSettled: () => void;
   /**
@@ -276,10 +281,16 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
       };
       try {
         if (!conversationId) {
+          // `temporary` only when on and `preset_id` only when one is
+          // picked, so a plain chat's request is unchanged.
+          const presetId = hooks.getPresetId?.() ?? null;
           const conversation = await apiFetch<Conversation>("/api/conversations", {
             method: "POST",
-            // `temporary` only when on, so a kept chat's request is unchanged.
-            json: { title: "New chat", ...(hooks.getTemporary?.() ? { temporary: true } : {}) },
+            json: {
+              title: "New chat",
+              ...(hooks.getTemporary?.() ? { temporary: true } : {}),
+              ...(presetId === null ? {} : { preset_id: presetId }),
+            },
           });
           conversationId = conversation.id;
           hooks.onConversationCreated(conversation);

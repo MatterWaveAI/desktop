@@ -34,10 +34,17 @@ export function ModelPicker({
   value,
   onChange,
   onModelsLoaded,
+  fixed = null,
 }: {
   conversationId: string | null;
   value: string | null;
   onChange: (model: string | null) => void;
+  /**
+   * A model the conversation's preset fixes, and the preset's name: the
+   * box shows that model and cannot be opened, since the API answers with
+   * the preset's model whatever the body says. Null when no preset is on.
+   */
+  fixed?: { model: string; by: string } | null;
   /**
    * The whole list, once. The composer's attachment control has
    * to know whether the selected model accepts images BEFORE a file is
@@ -91,16 +98,20 @@ export function ModelPicker({
   // the case this exists for: it must be readable while the model is in force,
   // not only in the instant the option was open.
   const all = [...(models ?? []), ...partners, ...previews];
-  const selected = value === null ? null : all.find((m) => m.id === value);
+  // The preset's model when one is on: the box reads it and cannot change.
+  const fixedEntry = fixed === null ? undefined : all.find((m) => m.id === fixed.model);
+  const selected = fixed !== null ? (fixedEntry ?? null) : value === null ? null : all.find((m) => m.id === value);
   // The default by its label when the list names it; the id otherwise.
   const defaultName =
     serverDefault === null ? null : (all.find((m) => m.id === serverDefault)?.label ?? serverDefault);
   const selectedDescription =
-    selected === undefined || selected === null
-      ? defaultName === null
-        ? "Using the default model."
-        : `Using ${defaultName}, the default model.`
-      : describeModel(selected);
+    fixed !== null
+      ? `Set by the ${fixed.by} preset: ${fixedEntry === undefined ? fixed.model : describeModel(fixedEntry)}`
+      : selected === undefined || selected === null
+        ? defaultName === null
+          ? "Using the default model."
+          : `Using ${defaultName}, the default model.`
+        : describeModel(selected);
 
   async function select(model: string | null) {
     onChange(model);
@@ -127,26 +138,34 @@ export function ModelPicker({
             "Default (GRT Nan…", which is the one word it exists to show. */}
         <select
           className="h-8 w-full min-w-0 rounded border border-mw-border bg-transparent px-2 text-xs sm:w-auto pointer-coarse:h-11"
-          value={value ?? ""}
+          value={fixed !== null ? fixed.model : (value ?? "")}
           onChange={(event) => void select(event.target.value === "" ? null : event.target.value)}
-          disabled={models === null}
+          disabled={models === null || fixed !== null}
+          data-mw-model-fixed={fixed === null ? undefined : ""}
+          title={fixed === null ? undefined : `Set by the ${fixed.by} preset`}
           aria-label="Model"
           // Points at the line below, so the description is announced with
           // the control rather than being visual-only.
           aria-describedby="mw-model-description"
         >
+          {/* The fixed model is the box's one option, by its label: the
+              list never opens while it is fixed, and a locked entry's
+              "needs Pro" would be wrong of a model the preset answers with. */}
+          {fixed !== null && <option value={fixed.model}>{fixedEntry?.label ?? fixed.model}</option>}
           {/* Names the model rather than saying only "Default": a user cannot
               judge an answer, or a cost, against a model they cannot name. */}
-          <option value="">
-            {defaultName === null ? "Default" : `Default (${defaultName})`}
-          </option>
-          {models?.map(optionFor)}
-          {partners.length > 0 && (
+          {fixed === null && (
+            <option value="">
+              {defaultName === null ? "Default" : `Default (${defaultName})`}
+            </option>
+          )}
+          {fixed === null && models?.map(optionFor)}
+          {fixed === null && partners.length > 0 && (
             // Another provider's models: offered for testing and usable only
             // on a plan that names them, so never mixed into the list above.
             <optgroup label={PARTNER_MODELS_HEADING}>{partners.map(optionFor)}</optgroup>
           )}
-          {previews.length > 0 && (
+          {fixed === null && previews.length > 0 && (
             // Research previews stay in their own group, never in the main
             // list and never the default — the default option above is the
             // server's, and a research preview is never the default.

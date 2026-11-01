@@ -32,6 +32,10 @@ msgstr "{conversations, plural, one {# conversation} other {# conversations}}"
 msgid "{count, plural, one {enter at least # character} other {enter at least # characters}}"
 msgstr "{count, plural, one {enter at least # character} other {enter at least # characters}}"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "{instructionsLength} of {instructionsMax} characters"
+msgstr "{instructionsLength} of {instructionsMax} characters"
+
 #: src/components/AppError.tsx
 msgid "{name} stopped working"
 msgstr "{name} stopped working"
@@ -95,6 +99,10 @@ msgstr "<0>Verify your email</0> to subscribe."
 #: src/components/AppError.tsx
 msgid "A newer version of MatterWave is available. Reload to pick it up."
 msgstr "A newer version of MatterWave is available. Reload to pick it up."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "A preset is a named assistant: a model, its instructions and its tools. Members pick one in the composer, beside the model."
+msgstr "A preset is a named assistant: a model, its instructions and its tools. Members pick one in the composer, beside the model."
 
 #: src/shell/HelpPage.tsx
 msgid "A report is stored with the conversation and answered with a reference you can quote to support. It does not change the conversation, suspend anyone or tell the model anything. If a report could not be stored you are told so, because a report that was never filed must not look like one that was."
@@ -228,6 +236,10 @@ msgstr "BUILD"
 msgid "Can I cancel or change plans?"
 msgstr "Can I cancel or change plans?"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Cancel"
+msgstr "Cancel"
+
 #: src/shell/Shell.tsx
 msgid "Chat"
 msgstr "Chat"
@@ -251,6 +263,10 @@ msgstr "Checking billing…"
 #: src/apps/billing/PricingPage.tsx
 msgid "Checkout was cancelled, so nothing was charged. Pick a plan whenever you are ready."
 msgstr "Checkout was cancelled, so nothing was charged. Pick a plan whenever you are ready."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Choose a model"
+msgstr "Choose a model"
 
 #: src/shell/Shell.tsx
 msgid "Close sidebar"
@@ -316,9 +332,25 @@ msgstr "Conversations that keep up"
 msgid "Could not check your subscription: {statusError}"
 msgstr "Could not check your subscription: {statusError}"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not create the preset."
+msgstr "Could not create the preset."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not delete the preset."
+msgstr "Could not delete the preset."
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Could not load plans"
 msgstr "Could not load plans"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not load the presets"
+msgstr "Could not load the presets"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not load the presets."
+msgstr "Could not load the presets."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Could not load your email preferences."
@@ -335,6 +367,10 @@ msgstr "Could not reach the MatterWave API."
 #: src/shell/AcceptTermsNotice.tsx
 msgid "Could not record your acceptance."
 msgstr "Could not record your acceptance."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Could not save the preset."
+msgstr "Could not save the preset."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Could not save your preferences."
@@ -354,6 +390,14 @@ msgstr "Could not switch accounts. That account may have been signed out."
 msgid "Create account"
 msgstr "Create account"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Create one to give members a ready-made assistant: a model, instructions and the tools it may use."
+msgstr "Create one to give members a ready-made assistant: a model, instructions and the tools it may use."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Create preset"
+msgstr "Create preset"
+
 #: src/shell/LandingPage.tsx
 #: src/shell/SignupPage.tsx
 msgid "Create your account"
@@ -362,6 +406,10 @@ msgstr "Create your account"
 #: src/shell/SignupPage.tsx
 msgid "Creating account…"
 msgstr "Creating account…"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Creating…"
+msgstr "Creating…"
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Custom instructions"
@@ -376,17 +424,45 @@ msgstr "Dark"
 msgid "Default model: {modelLabel}"
 msgstr "Default model: {modelLabel}"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Default tools"
+msgstr "Default tools"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Delete {presetName}?"
+msgstr "Delete {presetName}?"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Delete preset"
+msgstr "Delete preset"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Delete…"
+msgstr "Delete…"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Description <0>(optional)</0>"
+msgstr "Description <0>(optional)</0>"
+
 #: src/shell/UserMenu.tsx
 msgid "Developers"
 msgstr "Developers"
 
-#: src/shell/FrontDoorChrome.tsx
-msgid "Docs"
-msgstr "Docs"
-
 #: src/apps/billing/PricingPage.tsx
 msgid "Does a free trial need a card?"
 msgstr "Does a free trial need a card?"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "e.g. Support desk"
+msgstr "e.g. Support desk"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Edit the preset"
+msgstr "Edit the preset"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Edit…"
+msgstr "Edit…"
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 #: src/shell/LoginPage.tsx
@@ -547,6 +623,14 @@ msgstr "In the app"
 msgid "Included with every account"
 msgstr "Included with every account"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Instructions"
+msgstr "Instructions"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "It is no longer offered for new conversations. Conversations already on it keep answering with it as it is now."
+msgstr "It is no longer offered for new conversations. Conversations already on it keep answering with it as it is now."
+
 #: src/shell/SignupPage.tsx
 msgid "Join {orgName}"
 msgstr "Join {orgName}"
@@ -618,6 +702,11 @@ msgstr "MatterWave signs you in through your web browser."
 msgid "MatterWave was updated"
 msgstr "MatterWave was updated"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Members who pick it get this model, these instructions after the organisation's, and only these tools."
+msgstr "Members who pick it get this model, these instructions after the organisation's, and only these tools."
+
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/shell/LandingPage.tsx
 msgid "Model"
 msgstr "Model"
@@ -625,6 +714,10 @@ msgstr "Model"
 #: src/apps/billing/PricingPage.tsx
 msgid "Model prices"
 msgstr "Model prices"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Model: {modelLabel}"
+msgstr "Model: {modelLabel}"
 
 #: src/shell/LandingPage.tsx
 msgid "Models"
@@ -642,18 +735,42 @@ msgstr "Monthly"
 msgid "Monthly or annually, in advance, at the price shown on the card, by card when you subscribe. A plan sold per seat is charged for each member of the organisation. Organisations that need invoices on net terms with a PO number can ask sales below."
 msgstr "Monthly or annually, in advance, at the price shown on the card, by card when you subscribe. A plan sold per seat is charged for each member of the organisation. Organisations that need invoices on net terms with a PO number can ask sales below."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Name"
+msgstr "Name"
+
 #: src/shell/palette.ts
 #: src/shell/Shell.tsx
 msgid "New chat"
 msgstr "New chat"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "New preset"
+msgstr "New preset"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "New preset…"
+msgstr "New preset…"
+
 #: src/shell/LoginPage.tsx
 msgid "New to MatterWave? <0>Create account</0>"
 msgstr "New to MatterWave? <0>Create account</0>"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "No presets yet"
+msgstr "No presets yet"
+
 #: src/lib/loginMemory.ts
 msgid "No single sign-on is set up for {detail}. Sign in with your password, or ask an administrator of your organisation to set it up."
 msgstr "No single sign-on is set up for {detail}. Sign in with your password, or ask an administrator of your organisation to set it up."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "No tools"
+msgstr "No tools"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Not available on this deployment"
+msgstr "Not available on this deployment"
 
 #: src/components/AppError.tsx
 #: src/shell/NotFoundPage.tsx
@@ -750,13 +867,21 @@ msgstr "Plans"
 msgid "Preferences saved."
 msgstr "Preferences saved."
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Presets"
+msgstr "Presets"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Presets are set up by an owner or admin. Pick one in the composer to answer with its model, instructions and tools."
+msgstr "Presets are set up by an owner or admin. Pick one in the composer to answer with its model, instructions and tools."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Presets need a database this deployment does not have, so there are none to set up here."
+msgstr "Presets need a database this deployment does not have, so there are none to set up here."
+
 #: src/shell/LandingPage.tsx
 msgid "Priced per million tokens. Each model spends your plan's allowance at its own weight, so an allowance buys the same dollars of list price whichever model you pick. Paid plans add the dearer models; <0>the Plans page</0> says which."
 msgstr "Priced per million tokens. Each model spends your plan's allowance at its own weight, so an allowance buys the same dollars of list price whichever model you pick. Paid plans add the dearer models; <0>the Plans page</0> says which."
-
-#: src/shell/FrontDoorChrome.tsx
-msgid "Pricing"
-msgstr "Pricing"
 
 #: src/shell/FrontDoorChrome.tsx
 msgid "Privacy"
@@ -804,6 +929,10 @@ msgstr "Reporting a conversation or a reply"
 msgid "Retry"
 msgstr "Retry"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Save changes"
+msgstr "Save changes"
+
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Save preferences"
 msgstr "Save preferences"
@@ -817,6 +946,7 @@ msgid "Saved to your account."
 msgstr "Saved to your account."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
+#: src/apps/settings/panes/PresetsPane.tsx
 #: src/shell/AcceptTermsNotice.tsx
 msgid "Saving…"
 msgstr "Saving…"
@@ -857,6 +987,10 @@ msgstr "Show"
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Show a notice in the app when the organisation's budget is nearly spent."
 msgstr "Show a notice in the app when the organisation's budget is nearly spent."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Shown in a new conversation on this preset."
+msgstr "Shown in a new conversation on this preset."
 
 #: src/shell/FrontDoorChrome.tsx
 #: src/shell/LoginPage.tsx
@@ -1056,6 +1190,10 @@ msgstr "The terms have <0>changed</0>"
 msgid "Theme"
 msgstr "Theme"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "This deployment's default tools"
+msgstr "This deployment's default tools"
+
 #: src/shell/authForms.ts
 msgid "this is not in the expected format"
 msgstr "this is not in the expected format"
@@ -1067,6 +1205,10 @@ msgstr "this is required"
 #: src/shell/SignupPage.tsx
 msgid "This is the name of your account."
 msgstr "This is the name of your account."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "This organisation has {maxPresets} presets, the most it may have. Delete one first."
+msgstr "This organisation has {maxPresets} presets, the most it may have. Delete one first."
 
 #: src/components/AppError.tsx
 msgid "This page could not load"
@@ -1087,6 +1229,10 @@ msgstr "To keep using MatterWave, read and accept the current Terms of Service{c
 #: src/shell/Shell.tsx
 msgid "Toggle sidebar"
 msgstr "Toggle sidebar"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Tools"
+msgstr "Tools"
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Try again"
@@ -1188,6 +1334,14 @@ msgstr "Waiting for your passkey…"
 msgid "Web, terminal, VS Code, desktop"
 msgstr "Web, terminal, VS Code, desktop"
 
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Welcome message <0>(optional)</0>"
+msgstr "Welcome message <0>(optional)</0>"
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "Welcome: “{welcome}”"
+msgstr "Welcome: “{welcome}”"
+
 #: src/apps/billing/PricingPage.tsx
 msgid "What"
 msgstr "What"
@@ -1207,6 +1361,14 @@ msgstr "What is the overage cap?"
 #: src/shell/HelpPage.tsx
 msgid "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
 msgstr "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "What this assistant is for, and how it should answer."
+msgstr "What this assistant is for, and how it should answer."
+
+#: src/apps/settings/panes/PresetsPane.tsx
+msgid "When an administrator creates one, it is offered in the composer."
+msgstr "When an administrator creates one, it is offered in the composer."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Which mail this account receives, and what the app warns you about. Receipts and security mail are always sent."

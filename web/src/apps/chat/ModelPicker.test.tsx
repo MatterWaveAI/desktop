@@ -177,4 +177,33 @@ describe("ModelPicker with a priced model list", () => {
     expect(options().every((o) => !o.disabled)).toBe(true);
     expect(container!.querySelector("[data-model-upgrade]")).toBeNull();
   });
+
+  it("shows a preset's model as fixed: named by its label, not changeable, and said to be the preset's", async () => {
+    stubModels(FREE_ORG);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        <RouterContextProvider router={router}>
+          <ModelPicker
+            conversationId={null}
+            value={null}
+            onChange={() => {}}
+            fixed={{ model: "grt-nano-pro", by: "Support desk" }}
+          />
+        </RouterContextProvider>,
+      );
+    });
+    await act(async () => {});
+    const select = container!.querySelector("select")!;
+    expect(select.value).toBe("grt-nano-pro");
+    expect(select.selectedOptions[0]?.textContent).toBe("GRT Nano Pro");
+    expect(select.hasAttribute("data-mw-model-fixed")).toBe(true);
+    expect(select.disabled).toBe(true);
+    expect(select.title).toBe("Set by the Support desk preset");
+    expect(container!.querySelector("#mw-model-description")?.textContent).toBe(
+      "Set by the Support desk preset: $0.50 / $2.00 per 1M · counts 5× · 8k context",
+    );
+  });
 });

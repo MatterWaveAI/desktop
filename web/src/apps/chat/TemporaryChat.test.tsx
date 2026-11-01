@@ -123,7 +123,10 @@ describe("ConversationActions on a temporary thread", () => {
 });
 
 describe("the create request", () => {
-  async function createBody(getTemporary?: () => boolean): Promise<unknown> {
+  async function createBody(
+    getTemporary?: () => boolean,
+    getPresetId?: () => string | null,
+  ): Promise<unknown> {
     const bodies: unknown[] = [];
     vi.stubGlobal(
       "fetch",
@@ -156,6 +159,7 @@ describe("the create request", () => {
       getConversationId: () => null,
       getModel: () => null,
       getTemporary,
+      getPresetId,
       onConversationCreated: vi.fn(),
       onRenamed: vi.fn(),
       onSettled: vi.fn(),
@@ -188,5 +192,14 @@ describe("the create request", () => {
   it("sends the unchanged body for a kept chat", async () => {
     expect(await createBody(() => false)).toEqual({ title: "New chat" });
     expect(await createBody()).toEqual({ title: "New chat" });
+    expect(await createBody(undefined, () => null)).toEqual({ title: "New chat" });
+  });
+
+  it("starts the conversation on the picked preset", async () => {
+    expect(await createBody(() => true, () => "p-support")).toEqual({
+      title: "New chat",
+      temporary: true,
+      preset_id: "p-support",
+    });
   });
 });

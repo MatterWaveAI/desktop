@@ -10,6 +10,7 @@ import { DevicesPane } from "./panes/DevicesPane";
 import { MembersPane } from "./panes/MembersPane";
 import { OrganisationPane } from "./panes/OrganisationPane";
 import { PreferencesPane } from "./panes/PreferencesPane";
+import { PresetsPane } from "./panes/PresetsPane";
 import { UsagePane } from "./panes/UsagePane";
 import { WebhooksPane } from "./panes/WebhooksPane";
 import { desktopDevEnabled } from "../../lib/desktopDev";
@@ -31,6 +32,7 @@ export const paneComponents: Record<string, ComponentType> = {
   data: DataPane,
   organisation: OrganisationPane,
   members: MembersPane,
+  presets: PresetsPane,
   webhooks: WebhooksPane,
   keys: ApiKeysPane,
   devices: DevicesPane,

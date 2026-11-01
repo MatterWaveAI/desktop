@@ -100,6 +100,8 @@ function stub(forkStatus = 201): { calls: string[] } {
         body = { ...PARENT, id: "c-2", title: "Branch of Infra", messages: copies, tree: copies, current_leaf_message_id: "a2", instructions: null };
       } else if (url.includes("/api/models")) {
         body = { data: [], default: null };
+      } else if (url.includes("/api/org/presets")) {
+        body = { data: [], tools: [], limits: {}, can_manage: false };
       } else if (url.includes("/feedback")) {
         body = { data: [] };
       }

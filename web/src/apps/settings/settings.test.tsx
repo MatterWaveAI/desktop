@@ -115,6 +115,7 @@ describe("the settings route", () => {
       "data",
       "organisation",
       "members",
+      "presets",
       "webhooks",
       "keys",
       "devices",

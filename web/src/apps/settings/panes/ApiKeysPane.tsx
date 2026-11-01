@@ -64,6 +64,11 @@ const SCOPES: readonly { id: string; label: string; hint: string }[] = [
     label: "usage:read",
     hint: "Read the org usage report: everyone's for an owner or admin, your own otherwise. Off by default.",
   },
+  {
+    id: "presets:manage",
+    label: "presets:manage",
+    hint: "Create, change and delete the org's presets. Works only while you are an owner or admin. Off by default.",
+  },
 ];
 const DEFAULT_SCOPES: readonly string[] = ["chat:read", "chat:write"];
 

@@ -234,8 +234,8 @@ describe("the API keys pane", () => {
     setInputValue(form.querySelector("input[aria-label='Key name']") as HTMLInputElement, "ci");
     // Narrow the key: drop chat:write, keep the default chat:read.
     const boxes = [...form.querySelectorAll("input[type='checkbox']")] as HTMLInputElement[];
-    // read, write, keys:manage, webhooks:manage, usage:read: the org scopes are opt-in.
-    expect(boxes.map((b) => b.checked)).toEqual([true, true, false, false, false]);
+    // read, write, keys:manage, webhooks:manage, usage:read, presets:manage: the org scopes are opt-in.
+    expect(boxes.map((b) => b.checked)).toEqual([true, true, false, false, false, false]);
     click(boxes[1]);
     click(boxes[4]);
     expect(create.disabled).toBe(false);
@@ -491,7 +491,7 @@ describe("the API keys pane", () => {
     const nameInput = form.querySelector("input[aria-label='Key name']") as HTMLInputElement;
     expect(nameInput.value).toBe("laptop script");
     const boxes = [...form.querySelectorAll("input[type='checkbox']")] as HTMLInputElement[];
-    expect(boxes.map((b) => b.checked)).toEqual([true, true, false, false, false]);
+    expect(boxes.map((b) => b.checked)).toEqual([true, true, false, false, false, false]);
     expect(selectShown(selectNamed(form, "Expires")!)).toBe("Never");
     expect((form.querySelector("textarea") as HTMLTextAreaElement).value).toBe("10.0.0.0/8");
     expect((form.querySelector("input[type='number']") as HTMLInputElement).value).toBe("60");

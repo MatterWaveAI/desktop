@@ -84,6 +84,8 @@ function stub(transcripts: Message[][]): { reads: () => number } {
         };
       } else if (url.includes("/api/models")) {
         body = { data: [], default: null };
+      } else if (url.includes("/api/org/presets")) {
+        body = { data: [], tools: [], limits: {}, can_manage: false };
       } else if (url.includes("/feedback")) {
         body = { data: [] };
       }

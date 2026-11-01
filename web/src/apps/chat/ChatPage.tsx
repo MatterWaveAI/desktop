@@ -8,12 +8,15 @@ import type {
   EffectiveInstructions,
   Message,
   ModelInfo,
+  Preset,
+  PresetRef,
 } from "../../types";
 import { ApiError, apiFetch, currentToken } from "../../lib/api";
 import { useShell } from "../../shell/shellContext";
 import { useOnline } from "../../shell/useOnline";
 import { createChatAdapter, textOfParts } from "./chatAdapter";
 import { ModelPicker } from "./ModelPicker";
+import { PresetPicker } from "./PresetPicker";
 import { InstructionsBadge } from "./InstructionsBadge";
 import { MessageParts } from "./MessageParts";
 import { classifyStreamError, isMissingConversation, type StreamFailure } from "./streamErrors";
@@ -185,6 +188,8 @@ function ChatSession(props: {
   const [instructions, setInstructions] = useState<EffectiveInstructions | null>(null);
   // Whether the stored conversation is temporary, from the same GET.
   const [temporary, setTemporary] = useState(false);
+  // The preset the stored conversation is on, from the same GET.
+  const [preset, setPreset] = useState<PresetRef | null>(null);
   // The load failure keeps its kind, not its raw body: the transcript error
   // component owns the wording (the "never show a raw error body" rule).
   const [loadError, setLoadError] = useState<StreamFailure | null>(null);
@@ -257,6 +262,7 @@ function ChatSession(props: {
         setLeaf(conversation.current_leaf_message_id ?? null);
         setInstructions(conversation.instructions);
         setTemporary(conversation.temporary === true);
+        setPreset(conversation.preset ?? null);
         setAwaitingReply(conversation.messages.at(-1)?.role === "user");
       })
       .catch((err: unknown) => {
@@ -364,6 +370,7 @@ function ChatSession(props: {
       instructions={instructions}
       onInstructionsChanged={setInstructions}
       temporary={temporary}
+      preset={preset}
       onConversationCreated={props.onConversationCreated}
       onSettled={props.onSettled}
       onRenamed={shell.onConversationRenamed}
@@ -386,6 +393,8 @@ function ThreadRuntime(props: {
   onInstructionsChanged: (next: EffectiveInstructions) => void;
   /** The stored conversation is temporary; false for a new chat. */
   temporary: boolean;
+  /** The preset the stored conversation is on; null for none, or a new chat. */
+  preset: PresetRef | null;
   onConversationCreated: (conversation: Conversation) => void;
   onSettled: () => void;
   onRenamed: (conversationId: string, title: string) => void;
@@ -432,6 +441,15 @@ function ThreadRuntime(props: {
   // conversation; the state is what the header and the notice render.
   const [temporary, setTemporary] = useState(props.temporary);
   const temporaryRef = useRef(props.temporary);
+  // The preset in force: the stored conversation's, or the picker's choice
+  // on a new chat. The ref is what the adapter sends on the create; the
+  // state is what the pickers and the empty state render. The full preset
+  // -- its model to fix, its welcome message -- comes from the picker's
+  // list, which it reports as `presets`.
+  const [preset, setPreset] = useState<PresetRef | null>(props.preset);
+  const presetRef = useRef<string | null>(props.preset?.id ?? null);
+  const [presets, setPresets] = useState<readonly Preset[]>([]);
+  const activePreset = preset === null ? null : (presets.find((p) => p.id === preset.id) ?? null);
   // The adapter reports a detail string; it is classified here and the string
   // itself is dropped. Nothing downstream can render it by accident. The
   // correlation id is kept, because it is the one piece of the failure that is
@@ -483,6 +501,7 @@ function ThreadRuntime(props: {
         getConversationId: () => idRef.current,
         getModel: () => modelRef.current,
         getTemporary: () => temporaryRef.current,
+        getPresetId: () => presetRef.current,
         onConversationCreated: (conversation) => {
           idRef.current = conversation.id;
           setConversationId(conversation.id);
@@ -747,7 +766,7 @@ function ThreadRuntime(props: {
     used: context?.used ?? null,
     estimated: context?.estimated === true,
     window: resolveWindow({
-      selectedModel,
+      selectedModel: activePreset?.model ?? selectedModel,
       defaultModel,
       models,
       contextWindow: context === null ? undefined : context.window,
@@ -792,9 +811,19 @@ function ThreadRuntime(props: {
           transcript down under the reader. */}
       <div className="shrink-0 border-b border-mw-border">
         <div className="mx-auto flex min-h-12 w-full max-w-3xl items-center gap-2 px-3 py-1.5 sm:min-h-16 sm:gap-3 sm:px-4">
+          <PresetPicker
+            conversationId={conversationId}
+            value={preset}
+            onChange={(next) => {
+              presetRef.current = next?.id ?? null;
+              setPreset(next === null ? null : { id: next.id, name: next.name });
+            }}
+            onPresetsLoaded={setPresets}
+          />
           <ModelPicker
             conversationId={conversationId}
             value={selectedModel}
+            fixed={activePreset === null ? null : { model: activePreset.model, by: activePreset.name }}
             onChange={(model) => {
               modelRef.current = model;
               setSelectedModel(model);
@@ -857,7 +886,8 @@ function ThreadRuntime(props: {
         readOnly={readOnly}
         onGiveUp={giveUp}
         models={models}
-        selectedModel={selectedModel}
+        selectedModel={activePreset?.model ?? selectedModel}
+        welcome={activePreset?.welcome_message ?? null}
         csrfCookieName={shell.authConfig.csrf_cookie}
         messages={showingSend ? thread.messages : []}
         branched={showingSend ? [] : branches.path}
@@ -949,8 +979,10 @@ function ThreadView(props: {
   onGiveUp: () => void;
   /** The gateway's models, for the vision gate; null until loaded. */
   models: readonly ModelInfo[] | null;
-  /** The picker's current choice; null is "Default", resolved server-side. */
+  /** The model in force: the preset's, else the picker's choice; null is "Default", resolved server-side. */
   selectedModel: string | null;
+  /** The preset's welcome message for the empty state; null for none. */
+  welcome: string | null;
   /** For the upload request's CSRF header; the same cookie `apiFetch` reads. */
   csrfCookieName: string;
   /** The in-flight send's transcript; empty when the tree is on screen. */
@@ -1127,6 +1159,7 @@ function ThreadView(props: {
                 props.onSend(prompt, [], []);
               }}
               disabled={!props.online || props.busy || props.readOnly}
+              welcome={props.welcome}
             />
             {/* /help and /context answer before a first turn too. */}
             {props.notice !== null && (

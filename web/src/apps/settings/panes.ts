@@ -91,6 +91,15 @@ const basePanes: readonly SettingsPane[] = [
     description: "People in your organisation and what they can do.",
   },
   {
+    // Its own pane rather than a tab of Organisation: every member reads
+    // it (it is what the composer offers), while Organisation's tabs are
+    // an admin's, and a preset needs a form of its own.
+    id: "presets",
+    group: "Organisation",
+    title: "Presets",
+    description: "Ready-made assistants: a model, instructions and tools, picked in the composer.",
+  },
+  {
     // Beside Members rather than inside Organisation: an endpoint is the
     // org's, managed by the same owners and admins, and the delivery log
     // and the once-shown secret need a URL of their own to be sent to.
