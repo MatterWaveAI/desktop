@@ -70,8 +70,9 @@ on:
   push:
     tags: ["v*"]
 
+# Read by default; the jobs that create and publish the release widen it.
 permissions:
-  contents: write
+  contents: read
 
 defaults:
   run:
@@ -80,6 +81,8 @@ defaults:
 jobs:
   build:
     name: Installers (${{ matrix.name }})
+    permissions:
+      contents: write
     outputs:
       # The feed job runs only when the updater artifacts exist; without the
       # signing secrets there is no manifest to publish.
@@ -110,18 +113,18 @@ jobs:
             bundles: appimage,deb
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: |
             pnpm-lock.yaml
             web/pnpm-lock.yaml
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           # A universal macOS build is both architectures, lipo'd together.
           targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
@@ -224,7 +227,7 @@ jobs:
           MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
           MW_WINDOWS_TIMESTAMP_URL: ${{ vars.MW_WINDOWS_TIMESTAMP_URL }}
       - name: Build, sign and attach to the draft release
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The bundler signs the updater artifacts (setup.exe, .app.tar.gz,
@@ -265,6 +268,8 @@ jobs:
     # public. One failed target keeps it a draft, with nothing on the feed.
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -278,8 +283,8 @@ jobs:
     if: needs.build.outputs.signed == '1'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - name: Collect the release artifacts

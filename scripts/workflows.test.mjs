@@ -81,6 +81,23 @@ describe("the workflow files", () => {
     });
   }
 
+  for (const file of files) {
+    it(`${file} runs every action at a commit, not a movable tag`, () => {
+      const doc = parse(fs.readFileSync(path.join(WORKFLOWS, file), "utf8"));
+      const uses = Object.values(doc.jobs).flatMap((job) => (job.steps ?? []).map((step) => step.uses).filter(Boolean));
+      assert.ok(uses.length > 0);
+      assert.deepEqual(
+        uses.filter((ref) => !/^[\w.-]+\/[\w.-]+(\/[\w./-]+)?@[0-9a-f]{40}$/.test(ref)),
+        [],
+      );
+    });
+
+    it(`${file} grants the token read access unless a job asks for more`, () => {
+      const doc = parse(fs.readFileSync(path.join(WORKFLOWS, file), "utf8"));
+      assert.deepEqual(doc.permissions, { contents: "read" });
+    });
+  }
+
   it("catches a runner context in a job's env", () => {
     const doc = parse(`
 on: push

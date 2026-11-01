@@ -1,0 +1,31 @@
+# Weekly, one grouped pull request per ecosystem.
+#
+# web/ is not here on purpose: it is the platform's SPA at a pinned commit
+# (spa/upstream.json), and its dependencies move when the platform's do and
+# `pnpm spa:pull` brings them over. A bump made here would fail the SPA
+# sync check.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      tooling:
+        patterns: ["*"]
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    groups:
+      tauri:
+        patterns: ["tauri", "tauri-*"]
+      crates:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

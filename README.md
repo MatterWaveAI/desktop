@@ -29,6 +29,9 @@ pnpm --dir web install  # the SPA's dependencies
 MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri dev   # the API to sign in against
 ```
 
+Once per clone, `pre-commit install` (with [pre-commit](https://pre-commit.com)): gitleaks then
+checks each commit's staged changes, with the rules CI runs (`.gitleaks.toml`).
+
 `tauri dev` starts the web dev server (`pnpm --dir web dev`) and points the window at it, so
 `/api` goes through Vite's proxy exactly as in a browser (`API_PROXY_TARGET` picks the API). The
 native side still signs in against the API named by `MW_DESKTOP_BASE_URL`, which is read **at

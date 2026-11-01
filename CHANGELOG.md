@@ -42,6 +42,13 @@ the API's `MW_RELEASE` all report it).
   `scripts/release-config.mjs` now rewrites it to the page itself, the IPC
   bridge and the origin of `MW_DESKTOP_BASE_URL`, which a release must
   set (https, or http on loopback).
+- **Supply chain**: every action in the workflows runs at a commit SHA
+  rather than a movable tag, the workflows' token is read-only unless a
+  job needs more (only the release's build and publish jobs write), a
+  `gitleaks` job and pre-commit hook refuse committed secrets
+  (`.gitleaks.toml` allows the tests' made-up ones), and Dependabot opens
+  weekly grouped updates for the tooling, the crates and the actions --
+  not for `web/`, whose dependencies come with the platform's SPA.
 
 ### Fixed
 
