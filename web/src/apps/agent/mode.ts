@@ -4,7 +4,7 @@ import { DEFAULT_MODE, MODES_BY_NAME, type ModeName } from "./sdk/types";
 /** Where the last persistable mode is remembered on this device. yolo never is. */
 const MODE_KEY = "mw.agent.mode";
 
-/** The modes Shift+Tab cycles through: never into yolo, which asks natively. */
+/** The modes Shift+Tab cycles through: never into yolo. auto-edit and yolo each ask the desktop app when a run starts. */
 export const CYCLE: readonly ModeName[] = ["plan", "ask", "auto-edit"];
 
 export const MODE_LABELS: Record<ModeName, string> = {

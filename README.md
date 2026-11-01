@@ -321,9 +321,12 @@ mode offers, `/v1` hands the model's `tool_calls` back unexecuted, the native ho
 the results go back as `role: "tool"` messages until the model answers without a call. The server
 keeps metering, the budget, the model allow-list and moderation, and never sees the filesystem.
 Each session's first run creates a conversation ("Agent: ...") and every request carries
-`metadata.conversation_id`, so the run is in the sidebar and on the web. `/v1` records the user's
-text and the model's text; whether it also stores the tool rounds is open on the API side
-(T-1501's first API item).
+`metadata.conversation_id`, so the run is in the sidebar and on the web. The API's
+`agent-tools-api` branch stores the tool rounds too (`tool_call` / `tool_result` parts), reading
+them from the shape the loop sends: the assistant message with its `tool_calls`, then one
+`role: "tool"` message per call with the matching `tool_call_id`, in order (`loop.test.ts`
+checks the shape). Calls a Stop left unanswered are answered "Not run" in the next run's history
+but not stored, since that request ends on the user's message.
 
 **Turning it on.** Settings -> Preferences -> "Agent mode (experimental)". The desktop app asks
 for confirmation in a **native** dialog, which the webview cannot answer for the person; the
@@ -338,18 +341,20 @@ does not send counts as allowed. Then:
 1. **Choose folder** opens the OS folder picker. The webview never names a path to work in; the
    native side takes the picked folder, resolves its links and refuses a drive root or the whole
    home folder. The folder is per app session.
-2. **Pick a mode** (Shift+Tab cycles plan, ask and auto-edit; `/approval-mode <mode>` sets any):
+2. **Pick a mode** (Shift+Tab cycles plan, ask and auto-edit; `/approval-mode <mode>` sets any).
+   A run keeps the mode it started in, so the picker is locked while one runs:
 
    | Mode | Reads and searches | `edit`, `write_file` | `run_shell` |
    |---|---|---|---|
    | `plan` | yes | never offered to the model | never offered |
-   | `ask` (default) | yes | diff shown, Apply or Reject | full command shown, Run or Reject |
-   | `auto-edit` | yes | applied, diff in the transcript | full command shown, Run or Reject |
+   | `ask` (default) | yes | diff in the panel, then **the desktop app's dialog** | **the desktop app's dialog**, command shown whole |
+   | `auto-edit` | yes | applied, diff in the transcript; `MATTERWAVE.md`, `AGENTS.md` and `MATTERWAVE.local.md` still ask natively | **the desktop app's dialog** |
    | `yolo` | yes | applied | runs |
 
-   `yolo` asks the desktop app (natively) the first time a run uses it in an app session and is
-   never remembered; the other modes are remembered on this device. A rejection reaches the model
-   as an answer ("do not send the same change again"), not as an error.
+   `auto-edit` and `yolo` are each allowed in a native dialog the first time a run uses them for
+   the folder in an app session (a new folder asks again); `yolo` is never remembered, the other
+   modes are remembered on this device. A no, in the panel or in the dialog, reaches the model as
+   an answer ("do not send the same change again"), not as an error.
 3. **Send.** `@path` attaches a file (read through the host, so the deny list applies).
    `/restore` lists checkpoints and `/restore <id>` puts files back; `/init` asks the agent to
    draft a `MATTERWAVE.md`, through the same approvals; `/help` lists them.
@@ -370,22 +375,47 @@ The webview gets one command per tool (`agent_read_file`, `agent_list_dir`, `age
 `agent_grep`, `agent_edit`, `agent_write_file`, `agent_run_shell`) plus `agent_state`,
 `agent_set_enabled`, `agent_pick_root`, `agent_trust_root`, `agent_start_run`, `agent_stop_run`,
 `agent_checkpoints` and `agent_restore`, each in `build.rs` and the capability file by name; a test
-holds the three lists together and checks that no `fs:`, `shell:` or `dialog:` permission is
-granted. The folder picker and the confirmations use `rfd` (the crate the dialog plugin wraps)
-from Rust only.
+holds the three lists together, checks that no plugin permission (nothing with a `:`) is granted,
+and that only the `main` window's bundled pages get them (no `remote` origin). The folder picker
+and the confirmations use `rfd` (the crate the dialog plugin wraps) from Rust only.
+
+- **Native approval** (`approval.rs`): the host, not the webview, asks the person, in an OS dialog
+  the webview cannot answer, before every `run_shell` in `ask` and `auto-edit`, every applied
+  write in `ask`, a write to a context file in `auto-edit`, starting `auto-edit` or `yolo`, turning
+  agent mode on, trusting a folder and every `/restore`. The question is raised from inside the
+  command, so script in the webview that calls `agent_run_shell` or `agent_edit` directly meets it
+  too. A command is shown whole, with the folder it runs in and its timeout; one too long to show
+  whole (2,000 characters or 40 lines) is refused with a hint to put it in a script file, never
+  shortened. A write is shown with its full path and its changed lines (30 at most, with how many
+  more), and after the yes the change is computed again and written only if the file is still byte
+  for byte what the dialog showed. Control, bidirectional, zero-width and tag characters are shown
+  as `<U+XXXX>`, so the command read is the command run. Cancel is the default button (Enter,
+  Space and Escape answer no), one question is on screen at a time, and Stop answers an open
+  question no (the dialog stays until it is clicked; its answer is dropped). The panel's diff is
+  for reading: its **Apply…** only leads to the dialog.
 
 - **Confinement** (`confine.rs`, a port of the SDKs' `confine`): every path the webview sends is
   resolved here. A `..` segment is refused outright; an absolute path only when it lies under the
   root; links (symbolic links, and junctions on Windows) are followed and must still lead under
   the root; the deny list (`.env*`, `*.pem`, `id_*`, `.git/`, plus the folder's
-  `.matterwaveignore`) refuses reads as well as writes; `.matterwaveignore` itself can be read but
-  not written. Search (`list_dir`, `glob`, `grep`) also skips what `.gitignore` and
-  `.matterwaveignore` ignore, never enters a denied directory, and confines each link it meets.
+  `.matterwaveignore`) refuses reads as well as writes, matched case-insensitively and against
+  where links (and Windows 8.3 short names) lead as well as the name given; `.matterwaveignore`
+  itself can be read but not written. On Windows a path is also refused when a part of it names
+  an alternate data stream (`a.txt:s`, `x::$DATA`), a device (`NUL`, `con.txt`, `COM1`) or ends in
+  a dot or a space, each a way for the path approved to differ from the one touched; verbatim,
+  device and UNC spellings (`\\?\`, `\\.\`, `\\host\share`) are outside the root. Search
+  (`list_dir`, `glob`, `grep`) also skips what `.gitignore` and `.matterwaveignore` ignore, never
+  enters a denied directory, and confines each link it meets. Reads stop at 16 MiB, checked on the
+  handle that is read, and only regular files are read (a FIFO would block for ever).
 - **Modes**: a run's mode is fixed when it starts, and the host refuses every tool the mode does
   not offer, so `plan` is read-only whatever the webview sends.
 - **Writes** are two steps: a preview (the file before and after, which the SPA turns into the
-  unified diff) and an apply, which recomputes the change and refuses if the file's bytes are not
-  the ones the preview saw, so what lands is what was shown. Before every apply the file is
+  unified diff) and an apply, which must name the preview by its fingerprint, recomputes the change
+  and refuses if the file's bytes are not the ones the preview saw, so what lands is what was
+  shown. The file is written beside its target and renamed over it, so a hard link to a file
+  outside the root is replaced rather than written through, a link swapped in after the check is
+  replaced rather than followed, and the folder is checked once more just before the rename.
+  Before every apply the file is
   **checkpointed** in the app's data directory, outside the project (`checkpoints.rs`); a write
   without a checkpoint does not happen. `/restore <id>` undoes that checkpoint and every later
   one, and never touches the project's `.git`. Changes made by `run_shell` are not checkpointed.
@@ -394,22 +424,32 @@ from Rust only.
   (`timeout_s`, default 120, at most 600) and stdout and stderr together, cut at 64 KiB. The
   command runs in a **job object** (Windows, kill-on-close) or its own **process group** (Unix),
   and Stop or the timeout kills the whole tree; so does the command's own exit, so nothing it left
-  in the background outlives the call.
+  in the background outlives the call. On Windows the shell is created suspended and joins its job
+  before its first instruction. The command inherits the person's environment minus any
+  MatterWave credential in it (`MATTERWAVE_*` / `MW_*` keys, tokens, secrets, passwords); the app's
+  own sign-in is in the OS keychain, never in the environment.
 
 **Where each control lives**, for the security review: the enable switch, the folder, folder
-trust, `yolo`, the mode's tool set, confinement, the deny list, the checkpoints and the
-process-tree kill are enforced in Rust. **The approval of each write and command in `ask` (and of
-commands in `auto-edit`) is the SPA's diff and buttons**: script running in the webview could
-call `agent_edit` or `agent_run_shell` itself. The page's CSP (no remote script, no inline script
-but the one hashed boot script) is what stands between the model's output and that. A native
-approval for `run_shell` is the obvious next step if T-406 wants one.
+trust, the modes and what each lets through, **the approval of every command and every write that
+asks**, confinement, the deny list, the checkpoints and the process-tree kill are all enforced in
+Rust; nothing the webview does can approve on the person's behalf. What script in the webview
+still can do: start runs in `plan` or `ask`, read and search the root (reads are never asked
+about, in any mode), and, once the person has allowed `auto-edit` or `yolo` for the folder this
+session, write (or, in `yolo`, run) as those modes let the model. The page's CSP (no remote
+script, no inline script but the one hashed boot script) is what keeps the model's output from
+being script; its `connect-src` still allows any `https:` origin, so script that did run could
+send what it read anywhere.
 
 **Known limits.** Confinement is not a sandbox: an approved command can reach anything the user
-can. The deny list is a floor, not a guarantee; everything the agent reads goes to MatterWave and
-the model's provider. On Windows the shell is assigned to its job right after it starts, so a
-process it spawned in its first instant could escape (PowerShell's startup makes that window
-small); on Unix a process that calls `setsid` leaves the group. The native dialogs follow the
-dialog plugin's threading (the GTK main thread on Linux) but have only been exercised on Windows.
+can, including the keychain that holds the app's own sign-in. The deny list is a floor, not a
+guarantee; everything the agent reads goes to MatterWave and the model's provider. A hard link in
+the root to a file outside it is read like any file (writes replace it instead). A process the
+command has another service start (WMI `Win32_Process.Create`, the task scheduler, `-Verb RunAs`,
+Explorer) is outside the job and outlives Stop; on Unix so does one that calls `setsid`. A native
+dialog cannot be closed from code, so after Stop it stays until clicked. The native dialogs
+follow the dialog plugin's threading (the GTK main thread on Linux) but have only been exercised
+on Windows, and the Unix-only code paths (process group, FIFO check) are compiled and tested only
+by CI on Linux and macOS.
 
 **The contract.** `src-tauri/agent/contract.json` and `conformance.json` are byte-for-byte copies
 of the Python SDK's `contract.json` and `tests/agent_conformance.json`, the one source both SDKs
@@ -421,13 +461,22 @@ browser-safe agent helpers (`web/src/apps/agent/sdk/`) is tested against the sam
 files from the SDK's `src/agent/`, and fix what the tests name.
 
 **Tests.** `cargo test agent` (confinement: `..`, absolute outside, a link out -- a junction where
-a symbolic link needs privileges -- and `.env`; the shared deny, edit and confinement cases; edit
-semantics; search; preview and apply; checkpoints and restore with the project's `.git` HEAD and
-index unchanged; the capability list; and Stop ending `sleep 60` and the child it started within
-2 s). In `web/`: `pnpm vitest run src/apps/agent` (plan sends only the read tools; a rejected diff
-leaves the file byte-identical; approvals per mode; tool results and `metadata.conversation_id`
-on the wire; the step and token caps; the 402 and 429 copy; Stop; `@path`; the panel, the toggle
-and the Preferences switch).
+a symbolic link needs privileges -- and `.env`; the shared deny, edit and confinement cases; and
+the attacks, each named in its test: `.ENV` and other cases, 8.3 short names, `\\?\`, `\\.\` and
+UNC spellings, alternate data streams, device names, trailing dots and spaces, a folder swapped
+for a junction between preview and apply, a hard link out, grep/glob/list through a link out,
+huge and binary files, an apply with no preview, every command while agent mode is off, a
+MatterWave key in the app's environment. The native gate with a scripted person: a write and a
+command each land only after a yes that shows the path or the command whole, a no leaves the file
+byte-identical, a change on disk while the question is open is not written over, Stop while it is
+open runs nothing, questions never overlap, hidden characters are shown, an over-long command is
+refused, and `auto-edit` / `yolo` / enable / trust / restore each ask. Also checkpoints and
+restore with the project's `.git` HEAD and index unchanged, the capability list, and Stop ending
+`sleep 60` and the child it started within 2 s). In `web/`: `pnpm vitest run src/apps/agent`
+(plan sends only the read tools; a rejected diff leaves the file byte-identical; where the
+desktop's dialog asks in each mode; tool results, their stored shape and
+`metadata.conversation_id` on the wire; the step and token caps; the 402 and 429 copy; Stop;
+`@path`; the panel, its locked mode, the toggle and the Preferences switch).
 
 ## Offline: no send queue
 

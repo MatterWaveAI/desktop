@@ -11,6 +11,7 @@
 //! what to snapshot before it runs.
 
 use super::confine::{confine, DenyList};
+use super::tools::write_confined;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
@@ -93,9 +94,18 @@ impl Store {
         files: &[(PathBuf, String)],
         now: u64,
     ) -> Result<Checkpoint, String> {
-        let id = self.ids().last().map_or(1, |last| last + 1);
-        let dir = self.dir.join(id.to_string());
-        std::fs::create_dir_all(&dir).map_err(|e| format!("checkpoint: {e}"))?;
+        std::fs::create_dir_all(&self.dir).map_err(|e| format!("checkpoint: {e}"))?;
+        // `create_dir`, not `_all`: two writes applied at once each get a
+        // directory of their own rather than sharing one id.
+        let mut id = self.ids().last().map_or(1, |last| last + 1);
+        let dir = loop {
+            let dir = self.dir.join(id.to_string());
+            match std::fs::create_dir(&dir) {
+                Ok(()) => break dir,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => id += 1,
+                Err(e) => return Err(format!("checkpoint: {e}")),
+            }
+        };
         let mut entries = Vec::new();
         for (n, (absolute, relative)) in files.iter().enumerate() {
             let existed = absolute.exists();
@@ -131,6 +141,24 @@ impl Store {
         }
     }
 
+    /// The files a restore to before checkpoint `id` puts back, for the
+    /// native confirmation that comes first.
+    pub fn files_restored_by(&self, id: u64) -> Result<Vec<String>, String> {
+        let ids: Vec<u64> = self.ids().into_iter().filter(|&c| c >= id).collect();
+        if !ids.contains(&id) {
+            return Err(format!("There is no checkpoint {id}."));
+        }
+        let mut files: Vec<String> = Vec::new();
+        for cid in ids.iter().rev() {
+            for entry in self.manifest(*cid).map(|c| c.files).unwrap_or_default() {
+                if !files.contains(&entry.relative) {
+                    files.push(entry.relative);
+                }
+            }
+        }
+        Ok(files)
+    }
+
     /// Put the workspace back as it was before checkpoint `id`: every
     /// checkpoint from the newest down to `id` is undone in turn, so later
     /// writes to the same file cannot survive an earlier restore. Each path
@@ -152,10 +180,11 @@ impl Store {
                 let target = confine(root, &entry.relative, &deny, true)
                     .map_err(|r| format!("checkpoint {cid}: {}", r.message))?;
                 if entry.existed {
-                    if let Some(parent) = target.absolute.parent() {
-                        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-                    }
-                    std::fs::copy(dir.join(format!("blob-{n}")), &target.absolute)
+                    // Written as the tools write (beside, then renamed over),
+                    // so a restore never writes through a link either.
+                    let bytes = std::fs::read(dir.join(format!("blob-{n}")))
+                        .map_err(|e| format!("restoring {}: {e}", entry.relative))?;
+                    write_confined(&target, root, &bytes)
                         .map_err(|e| format!("restoring {}: {e}", entry.relative))?;
                 } else if target.absolute.is_file() {
                     std::fs::remove_file(&target.absolute)

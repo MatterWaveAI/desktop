@@ -11,10 +11,15 @@
  * the web can open. It never sees the filesystem.
  *
  * What each mode lets through is the contract's (`allowed`): `plan` is
- * only ever offered the read tools; in `ask` every write shows its diff
- * and every command its full text before anything happens, and a
- * rejection reaches the model as an answer, not an error. The host
- * enforces the same mode on its side, and confines every path.
+ * only ever offered the read tools. The approval itself is the desktop
+ * app's: the host puts every command in `ask` and `auto-edit`, and every
+ * write in `ask`, to the person in a native dialog before it happens, so
+ * nothing in this webview can approve on their behalf. What the loop adds
+ * is the reading: in `ask` a write's whole diff is shown here first, and
+ * only once the person has read it and chosen Apply... does the host ask.
+ * A no, here or in the dialog, reaches the model as an answer, not an
+ * error. The host enforces the same mode on its side, and confines every
+ * path.
  */
 import { ApiError, apiFetch } from "../../lib/api";
 import { STREAM_ERROR_COPY, classifyStreamError } from "../chat/streamErrors";
@@ -73,10 +78,27 @@ export interface Caps {
 
 export const DEFAULT_CAPS: Caps = { maxSteps: 25, maxTokens: 200_000 };
 
-/** What the person is asked before a write or a command in `ask` (and a command in `auto-edit`). */
-export type ApprovalRequest =
-  | { kind: "write"; tool: "edit" | "write_file"; path: string; diff: string; created: boolean }
-  | { kind: "shell"; command: string; timeoutS: number | null };
+/**
+ * A write in `ask`, shown here with its diff before the desktop app's own
+ * dialog asks: true goes on to that dialog, false rejects it here.
+ */
+export type ApprovalRequest = {
+  kind: "write";
+  tool: "edit" | "write_file";
+  path: string;
+  diff: string;
+  created: boolean;
+};
+
+/** The files the host loads into every run as instructions; in auto-edit a write to one still asks. */
+const CONTEXT_FILES: readonly string[] = ["matterwave.md", "agents.md", "matterwave.local.md"];
+
+/** Whether the host will ask the person natively before this call goes ahead (approval.rs's `needs_native`). */
+export function asksNatively(decision: "allow" | "ask", mode: ModeName, tool: string, path: string | null): boolean {
+  if (decision === "ask") return true;
+  const write = tool === "edit" || tool === "write_file";
+  return write && mode !== "yolo" && path !== null && CONTEXT_FILES.includes(path.toLowerCase());
+}
 
 export type AgentEvent =
   | { kind: "assistant"; text: string }
@@ -94,7 +116,9 @@ export type AgentEvent =
       rejected?: boolean;
     }
   | { kind: "usage"; steps: number; tokens: number }
-  | { kind: "notice"; text: string };
+  | { kind: "notice"; text: string }
+  /** The desktop app is asking the person about this call in its own dialog; its result follows. */
+  | { kind: "confirming"; id: string; what: "command" | "write"; text: string };
 
 export type StopReason =
   | "done"
@@ -128,7 +152,7 @@ export interface AgentRunOptions {
   caps: Caps;
   host: AgentHost;
   transport: ModelTransport;
-  /** Resolves true to go ahead, false to reject. */
+  /** A write's diff in `ask`, read before the desktop app asks: true goes on to its dialog, false rejects. */
   approve: (request: ApprovalRequest) => Promise<boolean>;
   onEvent: (event: AgentEvent) => void;
   /** The started run, so the caller can show the root it works in. */
@@ -442,6 +466,7 @@ async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): 
     }
     const diff = unifiedDiff(preview.before ?? "", preview.after, preview.relative);
     if (decision === "ask") {
+      // The panel's reading of the diff; the desktop app's dialog decides.
       const ok = await untilAborted(
         opts.approve({ kind: "write", tool: name, path: preview.relative, diff, created: preview.before === null }),
         signal,
@@ -456,10 +481,16 @@ async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): 
         );
       }
     }
+    if (asksNatively(decision, mode, name, preview.relative)) {
+      opts.onEvent({ kind: "confirming", id: call.id, what: "write", text: preview.relative });
+    }
     const applied = await untilAborted(
       host.write(run.run_id, name, args, { apply: true, expectedSha256: preview.before_sha256 }),
       signal,
     );
+    if (applied.status === "rejected") {
+      return report({ output: applied.output, is_error: false }, { diff, rejected: true });
+    }
     if (applied.status !== "applied") {
       const output = applied.status === "error" ? applied.output : `${preview.relative} was not written.`;
       return report({ output, is_error: true }, { diff });
@@ -468,28 +499,14 @@ async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): 
   }
 
   if (name === "run_shell") {
-    const command = typeof args.command === "string" ? args.command : "";
-    if (decision === "ask") {
-      const ok = await untilAborted(
-        opts.approve({
-          kind: "shell",
-          command,
-          timeoutS: typeof args.timeout_s === "number" ? args.timeout_s : null,
-        }),
-        signal,
-      );
-      if (!ok) {
-        return report(
-          {
-            output:
-              "Rejected by the user: the command was not run. Do not send the same command again; ask what they want instead, or try another approach.",
-            is_error: false,
-          },
-          { rejected: true },
-        );
-      }
+    // No question here: the host shows the command whole in the desktop
+    // app's dialog, which is where the person says yes or no.
+    if (asksNatively(decision, mode, name, null)) {
+      const command = typeof args.command === "string" ? args.command : "";
+      opts.onEvent({ kind: "confirming", id: call.id, what: "command", text: command });
     }
-    return report(await untilAborted(host.shell(run.run_id, args), signal));
+    const result = await untilAborted(host.shell(run.run_id, args), signal);
+    return report(result, result.rejected ? { rejected: true } : {});
   }
 
   return report({ output: `Refused: ${name} is not a tool this client has.`, is_error: true });

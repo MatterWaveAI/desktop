@@ -183,6 +183,10 @@ pub(crate) enum Refusal {
     Symlink,
     Denied,
     Protected,
+    /// The host's own, beyond the contract's six: a name Windows would not
+    /// store as given (an alternate data stream, a device name, a trailing
+    /// dot or space), so what was approved is not what would be touched.
+    WindowsName,
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -195,6 +199,7 @@ impl Refusal {
             Refusal::Symlink => "symlink",
             Refusal::Denied => "denied",
             Refusal::Protected => "protected",
+            Refusal::WindowsName => "windows_name",
         }
     }
 
@@ -209,9 +214,11 @@ impl Refusal {
             Refusal::Symlink => "Refused: {path} is a link that leads outside the workspace root.",
             Refusal::Denied => "Refused: {path} is protected (a secret, a key, .git or an entry in .matterwaveignore) and is not sent to the model.",
             Refusal::Protected => "Refused: {path} can be read but not changed by the agent.",
+            Refusal::WindowsName => "Refused: {path} is not a plain file name on Windows (it names an alternate data stream or a device, or a part of it ends in a dot or a space).",
         }
     }
 
+    /// The contract's refusals; `WindowsName` is the host's and not among them.
     pub const ALL: [Refusal; 6] = [
         Refusal::Empty,
         Refusal::Parent,

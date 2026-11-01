@@ -690,10 +690,13 @@ pub fn run() {
             hotkey::register_on_launch(app);
             // Agent mode's tool host: its switch is read from the config
             // directory, and it stays off until the person turns it on.
+            // Its questions (each command, each write in `ask`) are native
+            // dialogs, which script in the webview cannot answer.
             let paths = app.path();
             app.manage(agent::AgentState::new(
                 paths.app_config_dir()?,
                 paths.app_data_dir()?,
+                agent::approval::native(app.handle().clone()),
             ));
             Ok(())
         })

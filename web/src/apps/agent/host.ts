@@ -3,7 +3,9 @@
  * wrappers over its allow-listed commands, and nothing else. Every file
  * read or write and every command happens in Rust, which confines each
  * path itself; nothing here touches a file, and nothing here is trusted
- * by the other side.
+ * by the other side. A command, and a write the mode asks about, is
+ * approved by the person in the desktop app's own dialog, which the host
+ * raises from inside the call: nothing here can answer it.
  *
  * `AgentHost` is the seam the loop runs against, so the loop's tests drive
  * it with an in-memory fake instead of a desktop.
@@ -22,6 +24,8 @@ export interface AgentStatus {
   shell: string;
   contract_version: string;
   yolo_confirmed: boolean;
+  /** auto-edit was allowed in the desktop app's dialog for this folder this session. */
+  auto_edit_confirmed: boolean;
 }
 
 export const AGENT_OFF: AgentStatus = {
@@ -32,6 +36,7 @@ export const AGENT_OFF: AgentStatus = {
   shell: "sh",
   contract_version: "",
   yolo_confirmed: false,
+  auto_edit_confirmed: false,
 };
 
 export interface ContextFile {
@@ -55,6 +60,8 @@ export interface RunStarted {
 export interface ToolOutput {
   output: string;
   is_error: boolean;
+  /** The person said no in the desktop app's dialog: an answer, not an error. */
+  rejected?: boolean;
 }
 
 /** What a write would do, for the diff the approval shows. */
@@ -70,6 +77,8 @@ export interface WritePreview {
 export type WriteOutcome =
   | WritePreview
   | { status: "applied"; output: string; relative: string; checkpoint: number }
+  /** The person said no in the desktop app's dialog. */
+  | { status: "rejected"; output: string }
   | { status: "error"; output: string };
 
 export type ReadTool = "read_file" | "list_dir" | "glob" | "grep";
@@ -92,14 +101,20 @@ export interface AgentHost {
   startRun(mode: ModeName, label: string | null): Promise<RunStarted>;
   stopRun(runId: string): Promise<void>;
   read(runId: string, tool: ReadTool, args: unknown): Promise<ToolOutput>;
+  /**
+   * A write's preview, or its apply against the preview's fingerprint.
+   * Where the mode asks, the apply waits on the desktop app's dialog.
+   */
   write(
     runId: string,
     tool: WriteTool,
     args: unknown,
     step: { apply: false } | { apply: true; expectedSha256: string },
   ): Promise<WriteOutcome>;
+  /** One command; where the mode asks, after the desktop app's dialog. */
   shell(runId: string, args: unknown): Promise<ToolOutput>;
   checkpoints(): Promise<Checkpoint[]>;
+  /** Confirmed in the desktop app's dialog, with the files it puts back. */
   restore(checkpointId: number): Promise<{ restored: string[] }>;
 }
 

@@ -21,12 +21,21 @@ the API's `MW_RELEASE` all report it).
   mode (`plan` is read-only whatever the webview asks), applies a write only as previewed and
   after a checkpoint, and runs `run_shell` with a timeout, a 64 KiB output cap and a process-tree
   kill on Stop (a job object on Windows, a process group on Unix). Modes plan / ask (default) /
-  auto-edit / yolo (natively confirmed once per session, never saved); unified diffs to approve or
-  reject; step and token caps; the chat's budget copy on a 402 and a rate-limit copy on a 429;
+  auto-edit / yolo (each of the last two confirmed natively once per folder per session; yolo
+  never saved); unified diffs to read before the native approval below; step and token caps; the chat's budget copy on a 402 and a rate-limit copy on a 429;
   greyed out when `/api/me` has `local_agent_tools: false` or the model `supports_tools: false`.
   Also `/approval-mode`, `/restore`, `/init`, `@path`, Shift+Tab through the modes, and a trusted
   folder's `MATTERWAVE.md` / `AGENTS.md`. The contract is the Python SDK's `contract.json`, copied,
   and tested against in Rust and in the SPA. README: "Agent mode".
+- **Agent mode: approval is native.** Every `run_shell` in ask and auto-edit, every applied write
+  in ask, a write to `MATTERWAVE.md` / `AGENTS.md` / `MATTERWAVE.local.md` in auto-edit, starting
+  auto-edit or yolo (once per folder per session) and every `/restore` are confirmed in an OS
+  dialog the host raises from inside the call, so script in the webview that calls the commands
+  directly cannot skip it. The dialog shows the command whole (one too long to show whole is
+  refused) or the file's full path and changed lines, with hidden and bidirectional characters
+  spelled out; Cancel is the default; one question at a time; Stop answers an open one no; after a
+  yes the write is recomputed and lands only if the file is still what was shown. The panel keeps
+  the diff for reading, and its Apply… leads to the dialog. The mode picker is locked during a run.
 
 ### Changed
 
@@ -34,6 +43,21 @@ the API's `MW_RELEASE` all report it).
   and folds inside the stream; the chat restarts its one-minute wait for the first token on it
   and says the earlier messages are being summarised, instead of giving up on a turn that was
   working (the web app's change of 2026-10-26, caught up).
+
+### Security
+
+- **Agent mode, from an adversarial review of the tool host** (none of it released): on Windows,
+  a path naming an alternate data stream (`notes.txt:hidden`, `x:Zone.Identifier`) could be
+  written, and device names and trailing dots or spaces were let through -- all now refused; a
+  write to a hard link in the root went through to the file outside it, and a write followed a
+  link swapped in after the check -- writes now land beside the target and are renamed over it,
+  with the folder checked again; an apply could be sent without a preview; a webview could start
+  an auto-edit run (unasked writes) without the person; `/restore` wrote files unasked; a command
+  inherited a `MATTERWAVE_API_KEY` from the app's environment; on Windows the shell ran for an
+  instant before joining its kill-on-Stop job (it now starts suspended); a huge context file was
+  read whole, reads trusted a size taken before the open and would block on a FIFO, and
+  `write_file` content had no cap; two applies at once could share a checkpoint; changing the mode
+  mid-run looked like it applied but did not.
 
 ## [0.3.0] - 2026-10-31
 

@@ -306,6 +306,11 @@ fn comparable(path: &Path) -> String {
     }
 }
 
+/// The same place, as `within` compares paths.
+pub(crate) fn same_path(a: &Path, b: &Path) -> bool {
+    comparable(a) == comparable(b)
+}
+
 pub(crate) fn within(child: &Path, parent: &Path) -> bool {
     let c = comparable(child);
     let p = comparable(parent);
@@ -325,6 +330,51 @@ pub(crate) fn relative_to(child: &Path, parent: &Path) -> String {
         .unwrap_or("")
         .trim_start_matches('/')
         .to_string()
+}
+
+/// The device names Windows reserves in every folder, with or without an
+/// extension (`nul`, `con.txt`, `COM1.log`).
+const WINDOWS_DEVICES: &[&str] = &["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$"];
+
+/// Whether Windows would store `segment` as something other than the file
+/// it names: an alternate data stream (`a.txt:s`, which writes data no
+/// listing, diff or git shows, or rewrites a download's
+/// `:Zone.Identifier`), a device (`NUL`, `com1.txt`), or a name ending in a
+/// dot or a space, which Windows drops (`key.pem.` is `key.pem`). Each is a
+/// way for the path the person approved to differ from the one touched.
+pub(crate) fn windows_unsafe_segment(segment: &str) -> bool {
+    if segment.contains(':') {
+        return true;
+    }
+    if segment != "." && (segment.ends_with('.') || segment.ends_with(' ')) {
+        return true;
+    }
+    let stem = segment
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches(' ')
+        .to_ascii_uppercase();
+    if WINDOWS_DEVICES.contains(&stem.as_str()) {
+        return true;
+    }
+    let numbered = |prefix: &str| {
+        stem.strip_prefix(prefix).is_some_and(|rest| {
+            let mut chars = rest.chars();
+            matches!(
+                (chars.next(), chars.next()),
+                (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
+            )
+        })
+    };
+    numbered("COM") || numbered("LPT")
+}
+
+fn has_windows_unsafe_segment(relative: &str) -> bool {
+    relative
+        .split(['/', '\\'])
+        .filter(|s| !s.is_empty())
+        .any(windows_unsafe_segment)
 }
 
 /// Where a tool's path really leads: `absolute`, with every link followed,
@@ -383,11 +433,21 @@ pub(crate) fn confine(
         (lexical, rel)
     };
 
+    // Before anything is resolved: Windows would resolve these to a
+    // stream, a device or another name, and the answer would say so less
+    // plainly.
+    if cfg!(windows) && has_windows_unsafe_segment(&lexical_rel) {
+        return Err(PathRefused::new(Refusal::WindowsName, path));
+    }
+
     let real = resolve_links(&lexical).map_err(|_| PathRefused::new(Refusal::Symlink, path))?;
     if !within(&real, &real_root) {
         return Err(PathRefused::new(Refusal::Symlink, path));
     }
     let real_rel = relative_to(&real, &real_root);
+    if cfg!(windows) && has_windows_unsafe_segment(&real_rel) {
+        return Err(PathRefused::new(Refusal::WindowsName, path));
+    }
 
     let is_dir = real.is_dir();
     for rel in [&lexical_rel, &real_rel] {
@@ -628,6 +688,134 @@ pub(crate) mod tests {
         std::os::unix::fs::symlink(outer.path().join("not-yet"), root.join("out.txt")).unwrap();
         let err = confine(&root, "out.txt", &DenyList::defaults(), true).unwrap_err();
         assert_eq!(err.reason, Refusal::Symlink);
+    }
+
+    #[test]
+    fn windows_names_that_are_not_plain_files_are_spotted() {
+        for s in [
+            "a.txt:s",
+            "a.txt::$DATA",
+            "f:Zone.Identifier",
+            "nul",
+            "NUL.txt",
+            "con",
+            "Com1",
+            "lpt9.log",
+            "COM\u{b9}",
+            "CONIN$",
+            "aux .py",
+            "key.pem.",
+            "key.pem ",
+            "dir.",
+        ] {
+            assert!(windows_unsafe_segment(s), "{s}");
+        }
+        for s in [
+            "a.txt",
+            ".env",
+            "console.log",
+            "nullable.rs",
+            "com10",
+            "lpt",
+            ".",
+            "auxiliary.py",
+            "conf",
+            ".gitignore",
+        ] {
+            assert!(!windows_unsafe_segment(s), "{s}");
+        }
+    }
+
+    /// Attack (Windows): alternate data streams, device names, and names
+    /// Windows silently shortens -- each a path whose approval would name
+    /// one thing while another is touched. Refused before anything is
+    /// resolved.
+    #[cfg(windows)]
+    #[test]
+    fn streams_devices_and_dropped_dots_are_refused_on_windows() {
+        let ws = tempfile::tempdir().unwrap();
+        let root = resolve_links(ws.path()).unwrap();
+        std::fs::write(root.join("notes.txt"), "n").unwrap();
+        std::fs::write(root.join("key.pem"), "PEM").unwrap();
+        let deny = DenyList::load(&root);
+        for (path, write) in [
+            ("notes.txt:hidden", true),
+            ("notes.txt:hidden", false),
+            ("download.exe:Zone.Identifier", true),
+            ("key.pem::$DATA", false),
+            ("notes.txt::$DATA", false),
+            ("NUL", true),
+            ("con.txt", false),
+            ("aux.py", true),
+            ("sub/COM1", true),
+            ("secrets.pem.", true),
+            ("new.txt ", true),
+            ("dir./x.txt", true),
+        ] {
+            let err = confine(&root, path, &deny, write).unwrap_err();
+            assert_eq!(err.reason, Refusal::WindowsName, "{path}");
+        }
+        assert!(confine(&root, "notes.txt", &deny, true).is_ok());
+    }
+
+    /// Attack (Windows): the deny list matched in another case, through an
+    /// 8.3 short name, or through a verbatim, device or UNC spelling of a
+    /// path in the root.
+    #[cfg(windows)]
+    #[test]
+    fn the_deny_list_holds_against_case_short_names_and_other_spellings() {
+        let outer = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(outer.path().join("ws/.git")).unwrap();
+        let root = resolve_links(&outer.path().join("ws")).unwrap();
+        std::fs::write(root.join(".env.production"), "K=1").unwrap();
+        std::fs::write(root.join("deploy.pem"), "PEM").unwrap();
+        std::fs::write(root.join(".git/config"), "c").unwrap();
+        std::fs::write(root.join("notes.txt"), "n").unwrap();
+        let deny = DenyList::load(&root);
+        for path in [
+            ".ENV.PRODUCTION",
+            "Deploy.PEM",
+            ".GIT/config",
+            ".Git\\CONFIG",
+        ] {
+            let err = confine(&root, path, &deny, false).unwrap_err();
+            assert_eq!(err.reason, Refusal::Denied, "{path}");
+        }
+        // The short names Windows gave the files, when it gives them.
+        let short = |name: &str| -> Option<String> {
+            let out = std::process::Command::new("cmd")
+                .args(["/C", &format!("for %I in ({name}) do @echo %~snxI")])
+                .current_dir(&root)
+                .output()
+                .ok()?;
+            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            (!s.is_empty() && s != name).then_some(s)
+        };
+        for name in [".env.production", ".git"] {
+            match short(name) {
+                Some(s) => {
+                    let err = confine(&root, &s, &deny, false).unwrap_err();
+                    assert_eq!(err.reason, Refusal::Denied, "{name} as {s}");
+                }
+                None => eprintln!("skipped: no 8.3 name for {name} on this volume"),
+            }
+        }
+        let r = root.display().to_string();
+        for path in [
+            format!("\\\\?\\{r}\\.env.production"),
+            format!("\\\\.\\{r}\\notes.txt"),
+            format!("\\\\localhost\\C$\\{}\\notes.txt", &r[3..]),
+            format!("//?/{}/notes.txt", r.replace('\\', "/")),
+        ] {
+            let err = confine(&root, &path, &deny, false).unwrap_err();
+            assert_eq!(err.reason, Refusal::Outside, "{path}");
+        }
+        // The same path in another case is the same file.
+        let upper = format!("{}\\NOTES.TXT", r.to_uppercase());
+        assert_eq!(
+            confine(&root, &upper, &deny, false).unwrap().relative,
+            "notes.txt"
+        );
     }
 
     #[test]

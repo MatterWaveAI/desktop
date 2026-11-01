@@ -40,11 +40,11 @@ export function parseAgentCommand(text: string): AgentCommand | null {
 
 export const AGENT_HELP =
   "Agent commands: /approval-mode [plan|ask|auto-edit|yolo] shows or sets the mode " +
-  "(Shift+Tab cycles plan, ask and auto-edit; yolo asks the desktop app first and lasts this session only). " +
+  "(Shift+Tab cycles plan, ask and auto-edit while no run is going; auto-edit and yolo are each allowed in the desktop app's own dialog once per folder per session, and yolo is never remembered). " +
   "/restore lists the file checkpoints, and /restore <id> puts the files back as they were before it. " +
   "/init drafts a MATTERWAVE.md for this folder. @path attaches a file from the folder to your message.";
 
-/** What /init asks the agent to do. It goes through approval like any write. */
+/** What /init asks the agent to do. It goes through approval like any write (and in auto-edit, MATTERWAVE.md still asks). */
 export const INIT_PROMPT =
   "Look around this folder and draft a MATTERWAVE.md at its root for future agent runs: what the project is, " +
   "how it is laid out, how to build, test and lint it, and the conventions its code follows. Read before you " +

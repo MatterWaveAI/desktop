@@ -58,6 +58,8 @@ export function AgentPanel(props: {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [approval, setApproval] = useState<PendingApproval | null>(null);
+  // A call the desktop app is asking the person about in its own dialog.
+  const [confirming, setConfirming] = useState<Extract<AgentEvent, { kind: "confirming" }> | null>(null);
   const [caps, setCaps] = useState<Caps>(DEFAULT_CAPS);
   const [usage, setUsage] = useState<{ steps: number; tokens: number } | null>(null);
   const [draft, setDraft] = useState("");
@@ -99,6 +101,13 @@ export function AgentPanel(props: {
   };
 
   const onEvent = useCallback((event: AgentEvent) => {
+    if (event.kind === "confirming") {
+      setConfirming(event);
+      return;
+    }
+    if (event.kind === "tool_result") {
+      setConfirming((open) => (open?.id === event.id ? null : open));
+    }
     setEntries((current) => {
       switch (event.kind) {
         case "assistant":
@@ -182,6 +191,7 @@ export function AgentPanel(props: {
       }
     } finally {
       setApproval(null);
+      setConfirming(null);
       setRunning(false);
       controller.current = null;
     }
@@ -270,6 +280,12 @@ export function AgentPanel(props: {
       void submit();
     } else if (event.key === "Tab" && event.shiftKey) {
       event.preventDefault();
+      if (running) {
+        // A run keeps the mode it started with, on both sides; changing it
+        // here mid-run would only seem to.
+        say("Stop the run to change the mode: a run keeps the mode it started in.");
+        return;
+      }
       const at = CYCLE.indexOf(mode);
       setMode(CYCLE[(at + 1) % CYCLE.length]!);
     } else if (event.key === "Escape" && running) {
@@ -320,6 +336,7 @@ export function AgentPanel(props: {
             aria-label="Approval mode"
             size="sm"
             value={mode}
+            disabled={running}
             onValueChange={setMode}
             options={(Object.keys(MODE_LABELS) as ModeName[]).map((m) => ({ value: m, label: MODE_LABELS[m] }))}
           />
@@ -368,14 +385,9 @@ export function AgentPanel(props: {
           {entries.map((entry, i) => (
             <EntryView key={i} entry={entry} />
           ))}
-          {approval && (
-            <ApprovalCard
-              request={approval.request}
-              root={status?.root ?? ""}
-              onAnswer={(ok) => approval.resolve(ok)}
-            />
-          )}
-          {running && !approval && (
+          {approval && <ApprovalCard request={approval.request} onAnswer={(ok) => approval.resolve(ok)} />}
+          {confirming && <ConfirmingCard event={confirming} root={status?.root ?? ""} />}
+          {running && !approval && !confirming && (
             <p aria-live="polite" className="text-mw-text-muted">
               Working…
             </p>
@@ -495,49 +507,64 @@ export function DiffView(props: { diff: string }) {
 }
 
 /**
- * The approval: the whole change or the whole command, never shortened,
- * and two answers. Nothing happens until one is chosen.
+ * A write in `ask`: the whole change, never shortened, to read before the
+ * desktop app asks. Apply... goes on to the app's own dialog, which shows
+ * the file's full path and is where the change is approved; Reject ends it
+ * here. Nothing is written by either button.
  */
-export function ApprovalCard(props: {
-  request: ApprovalRequest;
-  root: string;
-  onAnswer: (ok: boolean) => void;
-}) {
+export function ApprovalCard(props: { request: ApprovalRequest; onAnswer: (ok: boolean) => void }) {
   const { request } = props;
   return (
     <div
       role="group"
-      aria-label="Approval"
+      aria-label="Review the change"
       data-mw-agent-approval=""
       className="rounded-lg border border-mw-border-emphasis bg-card px-3 py-2"
     >
-      {request.kind === "write" ? (
-        <>
-          <p className="font-medium">
-            {request.created ? "Create" : "Change"} <span className="font-mono">{request.path}</span>?
-          </p>
-          <DiffView diff={request.diff} />
-        </>
-      ) : (
-        <>
-          <p className="font-medium">Run this command?</p>
-          <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-mw-border px-2 py-1 font-mono text-xs">
-            {request.command}
-          </pre>
-          <p className="mt-1 text-xs text-mw-text-muted">
-            In {props.root}, as you, with no sandbox
-            {request.timeoutS === null ? "" : `; stopped after ${request.timeoutS} s`}.
-          </p>
-        </>
-      )}
+      <p className="font-medium">
+        {request.created ? "Create" : "Change"} <span className="font-mono">{request.path}</span>?
+      </p>
+      <DiffView diff={request.diff} />
+      <p className="mt-1 text-xs text-mw-text-muted">
+        Apply… opens the desktop app's own dialog, where you confirm it; nothing is written before that.
+      </p>
       <div className="mt-2 flex gap-2">
         <Button size="sm" onClick={() => props.onAnswer(true)}>
-          {request.kind === "write" ? "Apply" : "Run"}
+          Apply…
         </Button>
         <Button size="sm" variant="outline" onClick={() => props.onAnswer(false)}>
           Reject
         </Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * While the desktop app's dialog is open: what it is asking about, and
+ * where to answer. There is nothing to click here; this page cannot
+ * answer it.
+ */
+export function ConfirmingCard(props: { event: Extract<AgentEvent, { kind: "confirming" }>; root: string }) {
+  const { event } = props;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-mw-agent-confirming=""
+      className="rounded-lg border border-mw-border-emphasis bg-card px-3 py-2"
+    >
+      <p className="font-medium">
+        {event.what === "command"
+          ? "Run this command? Answer in the desktop app's dialog."
+          : "Confirm the change in the desktop app's dialog."}
+      </p>
+      <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-mw-border px-2 py-1 font-mono text-xs">
+        {event.text}
+      </pre>
+      {event.what === "command" && (
+        <p className="mt-1 text-xs text-mw-text-muted">In {props.root}, as you, with no sandbox. Stop answers no.</p>
+      )}
     </div>
   );
 }

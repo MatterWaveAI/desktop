@@ -10,8 +10,11 @@
 //! - **Windows**: a job object with `KILL_ON_JOB_CLOSE`. Every process the
 //!   command starts joins the job (unless it asks to break away, which the
 //!   job does not allow), and terminating the job ends them all. The shell
-//!   is assigned right after it spawns, before PowerShell has started
-//!   anything of its own.
+//!   is created suspended, put in the job, and only then let run, so not
+//!   even its first instruction runs outside the job. What the job cannot
+//!   hold: a process another service starts on the command's behalf (WMI's
+//!   `Win32_Process.Create`, the task scheduler, an elevated `-Verb RunAs`,
+//!   a document handed to an already-running Explorer). Those outlive Stop.
 //! - **Unix**: a process group (`setpgid(0, 0)` at spawn), killed with
 //!   `SIGKILL` to the group. A process that calls `setsid` to leave the
 //!   group escapes it; that is a daemon, and confinement is not a sandbox.
@@ -19,6 +22,13 @@
 //! When the command exits on its own the rest of its tree is ended too:
 //! a background process it left behind would keep the pipes open and run
 //! on after the run, unseen.
+//!
+//! The command inherits the app's environment, which is the person's,
+//! minus any MatterWave credential in it (`MATTERWAVE_API_KEY` and the
+//! like, `credential_vars`): the app keeps its own sign-in in the OS
+//! keychain, never in the environment, and a command has no business with
+//! a key the person exported for the SDK. That is hygiene, not a wall: a
+//! command runs as the person and can read their keychain too.
 
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
@@ -104,6 +114,10 @@ async fn drain(mut pipe: impl tokio::io::AsyncRead + Unpin, sink: Arc<Mutex<Capp
 }
 
 /// The process group (Unix) or job (Windows) the command runs in.
+/// Killed when `kill` is called and, failing that, when it is dropped: a
+/// call whose future is dropped part way (the webview went away) still
+/// takes the tree with it. On Windows the job's last handle closing does
+/// the same (`KILL_ON_JOB_CLOSE`).
 struct Tree {
     #[cfg(unix)]
     pgid: Option<i32>,
@@ -112,9 +126,9 @@ struct Tree {
 }
 
 impl Tree {
-    fn kill(&self) {
+    fn kill(&mut self) {
         #[cfg(unix)]
-        if let Some(pgid) = self.pgid {
+        if let Some(pgid) = self.pgid.take() {
             // SAFETY: kill(2) with a negative pid signals the group; it has
             // no memory effects on this process.
             unsafe {
@@ -126,6 +140,31 @@ impl Tree {
             job.terminate();
         }
     }
+}
+
+impl Drop for Tree {
+    fn drop(&mut self) {
+        self.kill();
+    }
+}
+
+/// Whether an environment variable holds a MatterWave credential the
+/// command should not inherit: `MATTERWAVE_*` or `MW_*` naming a key, a
+/// token, a secret or a password.
+pub(crate) fn is_credential_var(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    (upper.starts_with("MATTERWAVE_") || upper.starts_with("MW_"))
+        && ["KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL"]
+            .iter()
+            .any(|w| upper.contains(w))
+}
+
+/// The credential variables in this process's environment, by name.
+fn credential_vars() -> Vec<std::ffi::OsString> {
+    std::env::vars_os()
+        .map(|(name, _)| name)
+        .filter(|name| is_credential_var(&name.to_string_lossy()))
+        .collect()
 }
 
 #[cfg(windows)]
@@ -187,6 +226,50 @@ mod job {
         }
     }
 
+    /// Lets a process created suspended run: resumes each of its threads
+    /// (a fresh process has the one). An error when there was none to
+    /// resume, so a process that never started is not waited on.
+    pub fn resume(pid: u32) -> std::io::Result<()> {
+        use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+        use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+        };
+        use windows_sys::Win32::System::Threading::{
+            OpenThread, ResumeThread, THREAD_SUSPEND_RESUME,
+        };
+        // SAFETY: a snapshot handle and thread handles this function opens
+        // and closes; the entry struct is sized as the API requires.
+        unsafe {
+            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+            if snapshot == INVALID_HANDLE_VALUE {
+                return Err(std::io::Error::last_os_error());
+            }
+            let mut entry = THREADENTRY32 {
+                dwSize: std::mem::size_of::<THREADENTRY32>() as u32,
+                ..Default::default()
+            };
+            let mut resumed = 0;
+            let mut more = Thread32First(snapshot, &mut entry) != 0;
+            while more {
+                if entry.th32OwnerProcessID == pid {
+                    let thread = OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID);
+                    if !thread.is_null() {
+                        if ResumeThread(thread) != u32::MAX {
+                            resumed += 1;
+                        }
+                        CloseHandle(thread);
+                    }
+                }
+                more = Thread32Next(snapshot, &mut entry) != 0;
+            }
+            CloseHandle(snapshot);
+            if resumed == 0 {
+                return Err(std::io::Error::other("no thread of the command to start"));
+            }
+            Ok(())
+        }
+    }
+
     impl Drop for Job {
         fn drop(&mut self) {
             // SAFETY: closing the last handle also ends whatever is left in
@@ -200,7 +283,7 @@ mod job {
 
 /// Resolves once the run's stop flag is set (or its sender is gone, which
 /// means the run is over too).
-async fn stopped(mut stop: watch::Receiver<bool>) {
+pub(crate) async fn stopped(mut stop: watch::Receiver<bool>) {
     loop {
         if *stop.borrow_and_update() {
             return;
@@ -233,13 +316,18 @@ pub(crate) async fn run(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    for name in credential_vars() {
+        cmd.env_remove(name);
+    }
     #[cfg(unix)]
     cmd.process_group(0);
     #[cfg(windows)]
     {
-        // No console window flashing up behind a GUI app.
+        // No console window flashing up behind a GUI app; and suspended,
+        // so it joins the job before it runs at all.
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
+        const CREATE_SUSPENDED: u32 = 0x0000_0004;
+        cmd.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
     }
     // The job exists before the process does, so a failure to make one is
     // a refusal to run rather than a command that cannot be stopped.
@@ -251,7 +339,7 @@ pub(crate) async fn run(
         .map_err(|e| format!("could not start {program}: {e}"))?;
 
     #[cfg(windows)]
-    let tree = {
+    let mut tree = {
         let handle = child
             .raw_handle()
             .ok_or_else(|| "the shell exited before it could be tracked".to_string())?;
@@ -259,10 +347,18 @@ pub(crate) async fn run(
             let _ = child.start_kill();
             return Err(format!("could not track the command's processes: {e}"));
         }
-        Tree { job: Some(job) }
+        let tree = Tree { job: Some(job) };
+        if let Err(e) = child.id().map_or_else(
+            || Err(std::io::Error::other("the shell has no process id")),
+            job::resume,
+        ) {
+            // Dropping the tree ends the suspended shell with its job.
+            return Err(format!("could not start the command: {e}"));
+        }
+        tree
     };
     #[cfg(unix)]
-    let tree = Tree {
+    let mut tree = Tree {
         pgid: child.id().map(|id| id as i32),
     };
 
@@ -380,6 +476,56 @@ mod tests {
         assert!(r
             .render(1024, Duration::from_secs(60))
             .starts_with("Exit code: 3\n"));
+    }
+
+    #[test]
+    fn matterwave_credentials_are_named_and_nothing_else() {
+        for name in [
+            "MATTERWAVE_API_KEY",
+            "matterwave_api_key",
+            "MW_TOKEN",
+            "MW_OIDC_CLIENT_SECRET",
+            "MATTERWAVE_REFRESH_TOKEN",
+            "MW_DB_PASSWORD",
+        ] {
+            assert!(is_credential_var(name), "{name}");
+        }
+        for name in [
+            "PATH",
+            "MW_ENV",
+            "MATTERWAVE_AGENT_CONTRACT",
+            "OPENAI_API_KEY",
+            "HOME",
+        ] {
+            assert!(!is_credential_var(name), "{name}");
+        }
+    }
+
+    /// Attack: a command reading the app's environment for a MatterWave
+    /// key the person exported for the SDK.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_matterwave_key_in_the_apps_environment_does_not_reach_the_command() {
+        // SAFETY (edition 2024 makes this unsafe): no other test reads or
+        // writes these two names.
+        std::env::set_var("MATTERWAVE_API_KEY", "mw_live_secret");
+        std::env::set_var("MW_AGENT_TEST_PLAIN", "kept");
+        let dir = tempfile::tempdir().unwrap();
+        let command = if cfg!(windows) {
+            "Write-Output \"key=[$env:MATTERWAVE_API_KEY] plain=[$env:MW_AGENT_TEST_PLAIN]\""
+        } else {
+            "echo \"key=[$MATTERWAVE_API_KEY] plain=[$MW_AGENT_TEST_PLAIN]\""
+        };
+        let r = run(
+            argv(),
+            command,
+            dir.path(),
+            Duration::from_secs(60),
+            1024,
+            never_stopped(),
+        )
+        .await
+        .unwrap();
+        assert!(r.output.contains("key=[] plain=[kept]"), "{}", r.output);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

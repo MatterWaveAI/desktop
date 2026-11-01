@@ -8,7 +8,9 @@
 //! confined like any other path before it is read. Refusals come back as
 //! the tool's result, in the contract's words, for the model to read.
 
-use super::confine::{confine, glob_to_regex, relative_to, Confined, DenyList};
+use super::confine::{
+    confine, glob_to_regex, relative_to, resolve_links, same_path, within, Confined, DenyList,
+};
 use super::contract::{
     EditFailure, LIST_MAX_ENTRIES, READ_MAX_BYTES, READ_MAX_LINES, SEARCH_IGNORE_FILES,
     SEARCH_MAX_RESULTS,
@@ -21,18 +23,20 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Files larger than this are not read whole, searched, or snapshotted.
-const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+pub(crate) const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
 /// Bytes looked at to decide that a file is binary (a NUL among them).
 const BINARY_SNIFF_BYTES: usize = 8000;
 /// A grep match line is shown up to this many characters.
 const GREP_LINE_CHARS: usize = 400;
 
-/// What a tool hands back for the model: the text, and whether it is an
-/// error (a refusal, a bad argument, a failed edit).
+/// What a tool hands back for the model: the text, whether it is an error
+/// (a refusal, a bad argument, a failed edit), and whether the person said
+/// no to it in the native dialog (which is an answer, not an error).
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(crate) struct ToolOutput {
     pub output: String,
     pub is_error: bool,
+    pub rejected: bool,
 }
 
 impl ToolOutput {
@@ -40,6 +44,7 @@ impl ToolOutput {
         ToolOutput {
             output: output.into(),
             is_error: false,
+            rejected: false,
         }
     }
 
@@ -47,6 +52,15 @@ impl ToolOutput {
         ToolOutput {
             output: output.into(),
             is_error: true,
+            rejected: false,
+        }
+    }
+
+    pub fn rejected(output: impl Into<String>) -> Self {
+        ToolOutput {
+            output: output.into(),
+            is_error: false,
+            rejected: true,
         }
     }
 }
@@ -150,24 +164,62 @@ fn is_binary(bytes: &[u8]) -> bool {
     bytes[..bytes.len().min(BINARY_SNIFF_BYTES)].contains(&0)
 }
 
+/// At most `max` bytes of the file at `path`, or the reason it cannot be
+/// had: missing, a directory, not a regular file (a FIFO or a device would
+/// block the read for ever), or longer than `max`. The size is checked on
+/// the handle that is read, and the read itself stops one byte past `max`,
+/// so a file that grows in between cannot slip a larger read through.
+pub(crate) fn read_capped(path: &Path, max: u64) -> Result<Vec<u8>, ReadRefusal> {
+    use std::io::Read;
+    let meta = std::fs::metadata(path).map_err(|_| ReadRefusal::Missing)?;
+    if meta.is_dir() {
+        return Err(ReadRefusal::Directory);
+    }
+    let file = std::fs::File::open(path).map_err(|e| ReadRefusal::Io(e.to_string()))?;
+    let meta = file
+        .metadata()
+        .map_err(|e| ReadRefusal::Io(e.to_string()))?;
+    if !meta.is_file() {
+        return Err(ReadRefusal::NotAFile);
+    }
+    if meta.len() > max {
+        return Err(ReadRefusal::TooLarge(meta.len()));
+    }
+    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    file.take(max + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| ReadRefusal::Io(e.to_string()))?;
+    if bytes.len() as u64 > max {
+        return Err(ReadRefusal::TooLarge(bytes.len() as u64));
+    }
+    Ok(bytes)
+}
+
+/// Why `read_capped` read nothing.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ReadRefusal {
+    Missing,
+    Directory,
+    NotAFile,
+    TooLarge(u64),
+    Io(String),
+}
+
 /// The text of a file, or why it cannot be had as text.
 fn read_text(path: &Path, shown: &str) -> Result<String, ToolOutput> {
-    let meta = std::fs::metadata(path)
-        .map_err(|_| ToolOutput::error(format!("{shown} does not exist.")))?;
-    if meta.is_dir() {
-        return Err(ToolOutput::error(format!(
-            "{shown} is a directory. Use list_dir to see what is in it."
-        )));
-    }
-    if meta.len() > MAX_FILE_BYTES {
-        return Err(ToolOutput::error(format!(
-            "{shown} is {} bytes, over the {} bytes a tool reads.",
-            meta.len(),
-            MAX_FILE_BYTES
-        )));
-    }
-    let bytes = std::fs::read(path)
-        .map_err(|e| ToolOutput::error(format!("{shown} could not be read: {e}")))?;
+    let bytes = read_capped(path, MAX_FILE_BYTES).map_err(|why| {
+        ToolOutput::error(match why {
+            ReadRefusal::Missing => format!("{shown} does not exist."),
+            ReadRefusal::Directory => {
+                format!("{shown} is a directory. Use list_dir to see what is in it.")
+            }
+            ReadRefusal::NotAFile => format!("{shown} is not a regular file."),
+            ReadRefusal::TooLarge(len) => {
+                format!("{shown} is {len} bytes, over the {MAX_FILE_BYTES} bytes a tool reads.")
+            }
+            ReadRefusal::Io(e) => format!("{shown} could not be read: {e}"),
+        })
+    })?;
     if is_binary(&bytes) {
         return Err(ToolOutput::error(format!(
             "{shown} is a binary file, not text."
@@ -481,13 +533,7 @@ pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
         if ws.stopped() {
             return ToolOutput::error("Stopped by the user.");
         }
-        let Ok(meta) = std::fs::metadata(&path) else {
-            continue;
-        };
-        if meta.len() > MAX_FILE_BYTES {
-            continue;
-        }
-        let Ok(bytes) = std::fs::read(&path) else {
+        let Ok(bytes) = read_capped(&path, MAX_FILE_BYTES) else {
             continue;
         };
         if is_binary(&bytes) {
@@ -533,10 +579,12 @@ pub(crate) struct WritePreview {
 }
 
 /// The fingerprint of a file's current bytes; `absent` when there is none.
+/// Never a whole read past the cap: such a file has no preview anyway.
 pub(crate) fn fingerprint(path: &Path) -> String {
-    match std::fs::read(path) {
+    match read_capped(path, MAX_FILE_BYTES) {
         Ok(bytes) => hex(&Sha256::digest(&bytes)),
-        Err(_) => "absent".to_string(),
+        Err(ReadRefusal::Missing) => "absent".to_string(),
+        Err(why) => format!("unreadable: {why:?}"),
     }
 }
 
@@ -572,6 +620,12 @@ pub(crate) fn preview_write(
     ws: &Workspace,
     args: &WriteFileArgs,
 ) -> Result<(Confined, WritePreview), ToolOutput> {
+    if args.content.len() as u64 > MAX_FILE_BYTES {
+        return Err(ToolOutput::error(format!(
+            "The content is {} bytes, over the {MAX_FILE_BYTES} bytes a tool writes.",
+            args.content.len()
+        )));
+    }
     let target = ws.confine(&args.path, true)?;
     if target.absolute.is_dir() {
         return Err(ToolOutput::error(format!(
@@ -593,14 +647,65 @@ pub(crate) fn preview_write(
     Ok((target, preview))
 }
 
-/// Writes `content` to the confined target, creating missing parents
-/// (they are under the root: the target was confined, and so is each
-/// parent of a path under the root).
-pub(crate) fn write_confined(target: &Confined, content: &str) -> Result<(), String> {
-    if let Some(parent) = target.absolute.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+/// Writes `content` to the confined target, creating missing parents, by
+/// writing a new file beside it and renaming that over the target.
+///
+/// The rename replaces the directory entry rather than writing through it,
+/// so a target that is a hard link to a file outside the root (pnpm's
+/// store, or a planted link to a dotfile) is unlinked from it rather than
+/// overwritten, and a link put in the target's place since it was confined
+/// is replaced, not followed. The parent is resolved again just before the
+/// rename and must still be under `root`, which catches a directory on the
+/// way swapped for a link out. A reader never sees a half-written file.
+pub(crate) fn write_confined(target: &Confined, root: &Path, content: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let parent = target
+        .absolute
+        .parent()
+        .ok_or_else(|| "the target has no parent folder".to_string())?;
+    let name = target
+        .absolute
+        .file_name()
+        .ok_or_else(|| "the target has no file name".to_string())?
+        .to_os_string();
+    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    // The folder as it is now must be the one confined: not a link out of
+    // the root, and not a link to some other folder inside it either.
+    let moved = || {
+        format!(
+            "{} is not where it was when it was checked",
+            target.relative
+        )
+    };
+    let real_parent = resolve_links(parent).map_err(|_| moved())?;
+    if !within(&real_parent, root) || !same_path(&real_parent, parent) {
+        return Err(moved());
     }
-    std::fs::write(&target.absolute, content).map_err(|e| e.to_string())
+    let existing = std::fs::symlink_metadata(&target.absolute).ok();
+    let suffix: u64 = rand::random();
+    let temp = real_parent.join(format!(".{}.mw-{suffix:016x}.tmp", name.to_string_lossy()));
+    let written = (|| -> std::io::Result<()> {
+        // create_new: never opens (or follows) something already there.
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)?;
+        file.write_all(content)?;
+        file.flush()?;
+        drop(file);
+        if let Some(meta) = existing.as_ref().filter(|m| m.is_file()) {
+            // The file's own permissions carry over (the executable bit on
+            // Unix); a read-only file stays read-only, and the rename over
+            // it fails rather than forcing it.
+            std::fs::set_permissions(&temp, meta.permissions())?;
+        }
+        std::fs::rename(&temp, parent.join(&name))
+    })();
+    if let Err(e) = written {
+        let _ = std::fs::remove_file(&temp);
+        return Err(e.to_string());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -704,6 +809,67 @@ pub(crate) mod tests {
             },
         );
         assert!(bin.is_error && bin.output.contains("binary"));
+    }
+
+    /// Attack: a file past the cap (read whole, it would be in memory and
+    /// sent on), and a write of content past it.
+    #[test]
+    fn a_huge_file_is_neither_read_nor_written() {
+        let dir = ws_files(&[("small.txt", "s\n")]);
+        let root = canonical(&dir);
+        let big = std::fs::File::create(root.join("big.log")).unwrap();
+        big.set_len(MAX_FILE_BYTES + 1).unwrap();
+        drop(big);
+        let ws = Workspace::new(&root, &RUNNING);
+        let out = read_file(
+            &ws,
+            ReadFileArgs {
+                path: "big.log".into(),
+                start_line: None,
+                end_line: None,
+            },
+        );
+        assert!(
+            out.is_error && out.output.contains("over the 16777216 bytes"),
+            "{}",
+            out.output
+        );
+        assert_eq!(
+            read_capped(&root.join("big.log"), MAX_FILE_BYTES),
+            Err(ReadRefusal::TooLarge(MAX_FILE_BYTES + 1))
+        );
+        assert!(fingerprint(&root.join("big.log")).starts_with("unreadable"));
+        let huge = "x".repeat(MAX_FILE_BYTES as usize + 1);
+        let refused = preview_write(
+            &ws,
+            &WriteFileArgs {
+                path: "small.txt".into(),
+                content: huge,
+            },
+        )
+        .err()
+        .unwrap();
+        assert!(refused
+            .output
+            .contains("over the 16777216 bytes a tool writes"));
+        assert_eq!(
+            read_capped(&root.join("nope"), 10),
+            Err(ReadRefusal::Missing)
+        );
+        assert_eq!(read_capped(&root, 10), Err(ReadRefusal::Directory));
+    }
+
+    /// A FIFO would block the read for ever, past Stop.
+    #[cfg(unix)]
+    #[test]
+    fn a_fifo_is_not_read() {
+        let dir = ws_files(&[]);
+        let root = canonical(&dir);
+        let fifo = root.join("pipe");
+        let c = std::ffi::CString::new(fifo.to_string_lossy().as_bytes()).unwrap();
+        // SAFETY: a plain mkfifo(3) on a path this test owns.
+        assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
+        assert_eq!(read_capped(&fifo, 10), Err(ReadRefusal::NotAFile));
     }
 
     #[test]

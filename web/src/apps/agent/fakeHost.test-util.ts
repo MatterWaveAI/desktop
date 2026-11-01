@@ -1,7 +1,9 @@
 /**
  * Test doubles for agent mode: an in-memory tool host with the native
- * host's shape (preview, then apply against the previewed fingerprint),
- * and a scripted `/v1`. Not a test file itself; the suites import it.
+ * host's shape (preview, then apply against the previewed fingerprint;
+ * the desktop app's own dialog before a command in ask and auto-edit and
+ * before a write in ask), and a scripted `/v1`. Not a test file itself;
+ * the suites import it.
  */
 import type { AgentHost, AgentStatus, ReadTool, RunStarted, ToolOutput, WriteOutcome, WriteTool } from "./host";
 import type { CompletionRequest, CompletionResponse, ModelTransport, ToolCall } from "./loop";
@@ -29,6 +31,13 @@ export class FakeHost implements AgentHost {
   untrusted: string[] = [];
   root = "/work/demo";
   enabled = true;
+  /** The desktop app's dialog, scripted: each question takes the next answer, yes once they run out. */
+  nativeAnswers: boolean[] = [];
+  /** What the dialog asked about, in order: a command, or a write's path. */
+  readonly nativeAsked: string[] = [];
+  /** The commands that ran. */
+  readonly ran: string[] = [];
+  private mode: ModeName = "ask";
 
   constructor(files: Record<string, string> = {}) {
     for (const [k, v] of Object.entries(files)) this.files.set(k, v);
@@ -43,6 +52,7 @@ export class FakeHost implements AgentHost {
       shell: "sh",
       contract_version: "1.0.0",
       yolo_confirmed: false,
+      auto_edit_confirmed: false,
     });
   }
   setEnabled(enabled: boolean): Promise<AgentStatus> {
@@ -55,7 +65,12 @@ export class FakeHost implements AgentHost {
   trustRoot(): Promise<AgentStatus> {
     return this.status();
   }
+  private native(about: string): boolean {
+    this.nativeAsked.push(about);
+    return this.nativeAnswers.length > 0 ? this.nativeAnswers.shift()! : true;
+  }
   startRun(mode: ModeName): Promise<RunStarted> {
+    this.mode = mode;
     this.calls.push({ kind: "start", tool: mode });
     return Promise.resolve({
       run_id: "run-1",
@@ -127,12 +142,21 @@ export class FakeHost implements AgentHost {
     if (step.expectedSha256 !== sha(before)) {
       return Promise.resolve({ status: "error", output: `${a.path} changed after the change was shown.` });
     }
+    const context = ["matterwave.md", "agents.md", "matterwave.local.md"].includes(a.path.toLowerCase());
+    if ((this.mode === "ask" || (this.mode === "auto-edit" && context)) && !this.native(a.path)) {
+      return Promise.resolve({ status: "rejected", output: `Rejected by the user: ${a.path} was not changed.` });
+    }
     this.files.set(a.path, after);
     return Promise.resolve({ status: "applied", output: `Edited ${a.path}.`, relative: a.path, checkpoint: 1 });
   }
   async shell(_runId: string, args: unknown): Promise<ToolOutput> {
     this.calls.push({ kind: "shell", args });
+    const command = (args as { command?: string }).command ?? "";
     if (this.shellGate) await this.shellGate;
+    if ((this.mode === "ask" || this.mode === "auto-edit") && !this.native(command)) {
+      return { output: "Rejected by the user: the command was not run.", is_error: false, rejected: true };
+    }
+    this.ran.push(command);
     return { output: "Exit code: 0\nok", is_error: false };
   }
   checkpoints() {
