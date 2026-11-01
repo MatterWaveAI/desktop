@@ -89,6 +89,24 @@ describe("release-check", () => {
     }
   });
 
+  it("finds this checkout's CHANGELOG newest first, with Unreleased on top", () => {
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    const headings = fs
+      .readFileSync(path.join(root, "CHANGELOG.md"), "utf8")
+      .split(/\r?\n/)
+      .filter((l) => l.startsWith("## "));
+    assert.equal(headings[0], "## [Unreleased]");
+    const versions = headings.slice(1).map((h) => {
+      const m = /^## \[(\d+)\.(\d+)\.(\d+)\] - \d{4}-\d{2}-\d{2}$/.exec(h);
+      assert.ok(m, h);
+      return m.slice(1).map(Number);
+    });
+    const newer = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+    for (let i = 1; i < versions.length; i += 1) {
+      assert.ok(newer(versions[i - 1], versions[i]) > 0, `${headings[i]} before ${headings[i + 1]}`);
+    }
+  });
+
   it("agrees with this checkout's own current version", () => {
     const root = fileURLToPath(new URL("..", import.meta.url));
     const { version } = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));

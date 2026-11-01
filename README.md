@@ -43,14 +43,15 @@ decision, loopback parsing, the keychain's save/load rules against an in-memory 
 key's shape checks, the device pairing's code normalization, redeem and unpair against a fake
 platform on loopback, the updater's build flag, the whole sign-in flow -- discovery,
 authorize URL, loopback callback, PKCE exchange, refresh, revoke -- against a fake issuer on
-127.0.0.1 with a closure standing in for the browser, and the updater's check and download against
-a local feed whose artifact is signed with a test key, `src-tauri/tests/updater_local.rs`). The SPA
-side, inside `web/`:
-`pnpm vitest run src/lib/desktopAuth.test.ts src/lib/desktopAuth.notify.test.ts
-src/apps/chat/chatAdapter.test.ts` (the desktop bearer path, the reply-ready notification, the
-streaming adapter), plus the settings pane and update banner tests
-(`pnpm vitest run src/apps/settings/panes/AccountPane.test.ts src/apps/settings/panes/DevicesPane.test.ts
-src/shell/UpdateBanner.test.tsx`).
+127.0.0.1 with a closure standing in for the browser, the hotkey's toggle decision, the
+`matterwave://` allow-list, the committed bundle config -- `src-tauri/tests/bundle_config.rs` --
+and the updater's check and download against a local feed whose artifact is signed with a test
+key, `src-tauri/tests/updater_local.rs`). The SPA side, `pnpm --dir web vitest run`: the platform's
+suite plus the desktop's own -- the bearer path, the bridge calls against the capability file, links
+in and out of the app, Stripe in the browser (`src/lib/desktop*.test.ts*`), the update banner
+(`src/shell/UpdateBanner.test.tsx`) and the desktop sections of the settings panes. The repository
+scripts, `pnpm test:scripts`: the SPA sync, the release config and gate, the workflow files, and
+the scan for ticket ids.
 
 What the tests do not cover: the real OS keychain (the `Store` seam in `keychain.rs` is what the
 tests drive; the keyring-backed one needs a desktop session), the deep-link delivery (a Tauri
@@ -132,17 +133,17 @@ native client refuses the webview rather than half-working.
 1. The SPA's `/login` page, inside the shell, offers "Sign in with your browser" and calls
    `sign_in` (`web/src/shell/LoginPage.tsx`); it never starts the browser redirect the web app
    uses, because the webview has no cookie jar for that callback to fill. The native side reads
-   `/api/auth-config` for the native the identity provider client (`native_client_id`, `authorization_endpoint`,
+   `/api/auth-config` for the native client (`native_client_id`, `authorization_endpoint`,
    `token_endpoint`).
 2. It makes a PKCE verifier and a `state`, and opens the authorize URL in the **system browser**
    (never an embedded page: password managers and passkeys live there).
-3. the identity provider redirects to `matterwave://auth/callback`. The deep-link plugin hands the URL to the
+3. The identity provider redirects to `matterwave://auth/callback`. The deep-link plugin hands the URL to the
    running app (a second launch on Windows and Linux is folded into the first by the
    single-instance plugin). Where the scheme is not registered (a dev build on macOS, a Linux
    desktop without the `.desktop` entry), the redirect is `http://127.0.0.1:<port>/callback`
    instead, served once by a listener bound to loopback only. Both redirects are registered on
-   the native client the gateway play provisions (`matterwave-desktop`,
-   `deploy/ansible/roles/the identity provider/tasks/provision.yml`): the scheme as is, and the loopback as
+   the native client the gateway play provisions (`matterwave-desktop`; matterwave-infra,
+   `ansible/roles/zitadel/tasks/provision_gateway_app.yml`): the scheme as is, and the loopback as
    `http://127.0.0.1/callback` without a port, because the port is picked by the OS per sign-in
    and the identity provider matches loopback redirects of a native app on host and path only (RFC 8252 7.3).
 4. The callback's `state` is checked before its code is used; the code is exchanged with the
@@ -172,8 +173,9 @@ tokens involved. Only the id half is shown again (`api_key_state`). Removing the
 to the browser session -- which stays signed in underneath -- while `sign_out` clears key and
 tokens together. OIDC stays the default: a completed browser sign-in supersedes a stored key.
 
-The webview may call only the app's own sixteen commands (`src-tauri/capabilities/default.json`);
-no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
+The webview may call only the app's own commands and the event plugin's listen and unlisten
+(`src-tauri/capabilities/default.json`, one `allow-<command>` per command declared in
+`src-tauri/build.rs`); no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
 (`tauri.conf.json`): no remote script (one hash, for the theme boot script inlined to avoid a
 flash), `wasm-unsafe-eval` for the syntax highlighter, and network access only to the page's own
 origin and the IPC bridge plus, in the committed config, any https host. A release narrows that
