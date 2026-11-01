@@ -44,6 +44,10 @@ the API's `MW_RELEASE` all report it).
   forward: opening the tray menu takes focus from the window, so a toggle
   there could not tell in front from behind. A deep link, a finished
   sign-in or a second launch now also shows a window the hotkey hid.
+- **Dropping a file on the window reaches the page**: Tauri took the OS
+  drop for itself (`dragDropEnabled` defaults to on), so the composer's
+  drop-to-attach and Settings → Data's drop-to-import never fired. The
+  window now leaves drops to the webview.
 
 ## [0.3.0] - 2026-10-31
 
