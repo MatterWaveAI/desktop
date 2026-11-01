@@ -39,11 +39,11 @@ the API's `MW_RELEASE` all report it).
 
 ### Changed
 
-- **Agent mode speaks agent contract 1.1.0** (none of it released). The host and the SPA take the
-  SDKs' 1.1 contract (`contract.json` and the shared conformance cases, copied byte for byte; the
+- **Agent mode speaks agent contract 1.2.0** (none of it released). The host and the SPA take the
+  SDKs' 1.2 contract (`contract.json` and the shared conformance cases, copied byte for byte; the
   TypeScript helpers re-vendored with `web/scripts/vendor-agent-sdk.mjs`), and the Rust host runs
-  every one of the contract's conformance cases (`paths`, `tools`, `ignore`, `shell`) in
-  `cargo test`. Visible to the model: read_file has no LF after its last line; list_dir lists
+  every one of the contract's conformance cases (`paths`, `tools`, `ignore`, `shell`,
+  `alias_roots`, with the `links` and `fifos` the platform can make) in `cargo test`. Visible to the model: read_file has no LF after its last line; list_dir lists
   protected entries and says "has nothing to list" when empty; glob matches a pattern without `/`
   at any depth and ignores case; grep cuts lines at 400 characters and skips files over 4 MiB;
   search reads `.gitignore` and `.matterwaveignore` in every folder from the root down (and no
@@ -51,9 +51,15 @@ the API's `MW_RELEASE` all report it).
   subfolders; run_shell says `Exit code N` and keeps the head and tail of long output around a
   middle marker; refusals and the person's no use the contract's sentences (`rejected`,
   `unknown_tool`, `mode`); a whole-number `timeout_s` is required. Context files go in the
-  contract's fenced "Project instructions" section in its order (MATTERWAVE.md,
-  MATTERWAVE.local.md, AGENTS.md), 32,768 characters each. Windows aliases are refused on every
-  platform with the contract's `stream`, `trailing`, `device` and `unc` codes.
+  contract's fenced "Project instructions" section in its order (MATTERWAVE.md, AGENTS.md, then
+  the person's own MATTERWAVE.local.md, which wins), 32,768 characters each. Windows aliases are
+  refused on every platform with the contract's `stream`, `trailing`, `device` and `unc` codes,
+  in the names below the root only, so a root inside a folder such as `con` still works. 1.2's
+  fixes: a link that loops is the refusal `loop`; a pipe, socket or device is `special_file` for
+  every read tool, never opened, and left out of searches; a glob class reads the same in every
+  client (`!`/`^` negates, a leading `]` is literal) and a backwards range is `invalid_glob`; an
+  ignore or deny file's byte-order mark is dropped and an invalid line skipped, as git does; and
+  grep stops at 30 s with `timeout`.
 - **A send that folds first says so.** The API now opens such a send with a `compacting` frame
   and folds inside the stream; the chat restarts its one-minute wait for the first token on it
   and says the earlier messages are being summarised, instead of giving up on a turn that was

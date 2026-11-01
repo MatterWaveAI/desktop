@@ -8,12 +8,16 @@
 //! down, files before subdirectories, links confined), and the text is
 //! output.rs's, so what the model reads is what every client returns
 //! (`conformance.rs` runs the contract's cases against these functions).
-//! The host keeps checks of its own on top: a read stops one byte past the
-//! cap on the handle it reads (a file that grows between the size check and
-//! the read cannot slip a larger read through), only regular files are
-//! read (a FIFO would block for ever), a search stops when the run does,
-//! and a run in a mode the person has not confirmed for the folder leaves
-//! out the read-gated paths (`approval::read_gate`).
+//! As the contract has it, a read stops one byte past the cap on the
+//! handle it reads (a file that grows between the size check and the read
+//! is still `too_large`), and only regular files and directories are used:
+//! a pipe, socket or device is `special_file`, checked before anything is
+//! opened, and opened without blocking where it could be swapped in (a
+//! FIFO would otherwise wait for ever). The host keeps checks of its own
+//! on top: a search stops when the run does, grep stops at a time limit
+//! (`GREP_TIMEOUT`, the contract's `timeout`), and a run in a mode the
+//! person has not confirmed for the folder leaves out the read-gated paths
+//! (`approval::read_gate`).
 
 use super::approval;
 use super::confine::{confine, resolve_links, same_path, within, Access, Confined, DenyList};
@@ -29,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 /// What a tool hands back for the model: the text, whether it is an error
 /// (a refusal, a bad argument, a failed edit), and whether the person said
@@ -75,6 +80,12 @@ impl From<ToolError> for ToolOutput {
 /// The sentence a search stopped by the run ends with.
 const STOPPED: &str = "Stopped by the user.";
 
+/// How long one grep may take, walk and match together, before it answers
+/// with the contract's `timeout` and no matches. `regex` matches in linear
+/// time, so this bounds a search over a huge tree rather than one
+/// pathological line; the VS Code client uses the same 30 s.
+pub(crate) const GREP_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// A workspace: the root the person picked, already canonical, its deny
 /// list and search rules as of this call, and the limits the tools hold
 /// to. `cancelled` lets a long walk stop early when the run is stopped;
@@ -87,6 +98,8 @@ pub(crate) struct Workspace<'a> {
     pub cancelled: &'a AtomicBool,
     pub limits: Limits,
     pub gated: bool,
+    /// grep's time limit (`GREP_TIMEOUT`).
+    pub grep_timeout: Duration,
 }
 
 impl<'a> Workspace<'a> {
@@ -99,6 +112,7 @@ impl<'a> Workspace<'a> {
             cancelled,
             limits: Limits::default(),
             gated: false,
+            grep_timeout: GREP_TIMEOUT,
         }
     }
 
@@ -204,10 +218,13 @@ pub(crate) struct RunShellArgs {
 }
 
 /// At most `max` bytes of the file at `path`, or the reason it cannot be
-/// had: missing, a directory, not a regular file (a FIFO or a device would
-/// block the read for ever), or longer than `max`. The size is checked on
-/// the handle that is read, and the read itself stops one byte past `max`,
-/// so a file that grows in between cannot slip a larger read through.
+/// had: missing, a directory, a pipe, socket or device (`special_file`:
+/// one would block the read for ever), or longer than `max`. The kind is
+/// checked before the file is opened, and the open does not wait (on Unix,
+/// `O_NONBLOCK`), so a FIFO swapped in between is seen on the handle and
+/// never read. The size is checked on that handle too, and the read itself
+/// stops one byte past `max`, so a file that grows in between is still
+/// too large.
 pub(crate) fn read_capped(path: &Path, max: u64) -> Result<Vec<u8>, ReadRefusal> {
     use std::io::Read;
     let meta = std::fs::metadata(path).map_err(|_| ReadRefusal::Missing)?;
@@ -215,14 +232,14 @@ pub(crate) fn read_capped(path: &Path, max: u64) -> Result<Vec<u8>, ReadRefusal>
         return Err(ReadRefusal::Directory);
     }
     if !meta.is_file() {
-        return Err(ReadRefusal::NotAFile);
+        return Err(ReadRefusal::Special);
     }
-    let file = std::fs::File::open(path).map_err(|e| ReadRefusal::Io(e.to_string()))?;
+    let file = open_without_waiting(path).map_err(|e| ReadRefusal::Io(e.to_string()))?;
     let meta = file
         .metadata()
         .map_err(|e| ReadRefusal::Io(e.to_string()))?;
     if !meta.is_file() {
-        return Err(ReadRefusal::NotAFile);
+        return Err(ReadRefusal::Special);
     }
     if meta.len() > max {
         return Err(ReadRefusal::TooLarge(meta.len()));
@@ -237,12 +254,28 @@ pub(crate) fn read_capped(path: &Path, max: u64) -> Result<Vec<u8>, ReadRefusal>
     Ok(bytes)
 }
 
+/// `path` opened for reading without waiting on it: on Unix with
+/// `O_NONBLOCK`, so a FIFO swapped in after its kind was checked opens at
+/// once (and its handle then says what it is) instead of waiting for a
+/// writer. A regular file reads as it always does.
+pub(crate) fn open_without_waiting(path: &Path) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK | libc::O_NOCTTY);
+    }
+    options.open(path)
+}
+
 /// Why `read_capped` read nothing.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ReadRefusal {
     Missing,
     Directory,
-    NotAFile,
+    /// A pipe, socket or device.
+    Special,
     TooLarge(u64),
     Io(String),
 }
@@ -253,9 +286,7 @@ impl ReadRefusal {
         match self {
             ReadRefusal::Missing => ToolFailure::NotFound.message(&[("path", path)]),
             ReadRefusal::Directory => ToolFailure::IsDirectory.message(&[("path", path)]),
-            ReadRefusal::NotAFile => {
-                format!("{path} is not a regular file; only regular files are read.")
-            }
+            ReadRefusal::Special => ToolFailure::SpecialFile.message(&[("path", path)]),
             ReadRefusal::TooLarge(size) => ToolFailure::TooLarge.message(&[
                 ("path", path),
                 ("size", &size.to_string()),
@@ -295,19 +326,31 @@ pub(crate) fn read_file(ws: &Workspace, args: ReadFileArgs) -> ToolOutput {
     }
 }
 
-/// The directory a search starts from: confined, gated, and a directory.
-fn search_dir(ws: &Workspace, path: Option<&str>) -> Result<Confined, ToolOutput> {
-    let target = ws.confine_read(path.unwrap_or("."))?;
-    let failure = if target.absolute.is_file() {
-        ToolFailure::NotDirectory
-    } else if !target.absolute.is_dir() {
-        ToolFailure::NotFound
-    } else {
-        return Ok(target);
+/// Whether a tool's confined path is a regular file (`Ok(true)`) or a
+/// directory (`Ok(false)`), its links followed; otherwise the error for
+/// nothing there (`not_found`) or a pipe, socket or device
+/// (`special_file`), which is only looked at, never opened.
+fn file_or_dir(target: &Confined) -> Result<bool, ToolOutput> {
+    let failure = match std::fs::metadata(&target.absolute) {
+        Ok(meta) if meta.is_dir() => return Ok(false),
+        Ok(meta) if meta.is_file() => return Ok(true),
+        Ok(_) => ToolFailure::SpecialFile,
+        Err(_) => ToolFailure::NotFound,
     };
     Err(ToolOutput::error(
         failure.message(&[("path", &target.relative)]),
     ))
+}
+
+/// The directory a search starts from: confined, gated, and a directory.
+fn search_dir(ws: &Workspace, path: Option<&str>) -> Result<Confined, ToolOutput> {
+    let target = ws.confine_read(path.unwrap_or("."))?;
+    if file_or_dir(&target)? {
+        return Err(ToolOutput::error(
+            ToolFailure::NotDirectory.message(&[("path", &target.relative)]),
+        ));
+    }
+    Ok(target)
 }
 
 /// list_dir: the entries of `path`, directories first.
@@ -348,6 +391,11 @@ pub(crate) fn glob(ws: &Workspace, args: GlobArgs) -> ToolOutput {
     if args.pattern.trim().is_empty() {
         return ToolOutput::error(ToolFailure::EmptyPattern.message(&[]));
     }
+    // An invalid glob is answered before anything is searched.
+    let matcher = match GlobMatcher::new(&args.pattern) {
+        Ok(m) => m,
+        Err(e) => return e.into(),
+    };
     let target = match search_dir(ws, args.path.as_deref()) {
         Ok(t) => t,
         Err(e) => return e,
@@ -357,7 +405,6 @@ pub(crate) fn glob(ws: &Workspace, args: GlobArgs) -> ToolOutput {
     } else {
         target.relative.as_str()
     };
-    let matcher = GlobMatcher::new(&args.pattern);
     let cap = ws.limits.search_max_results;
     let mut found: Vec<String> = Vec::new();
     let (mut truncated, mut stopped) = (false, false);
@@ -409,14 +456,22 @@ pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
             )
         }
     };
+    // An invalid glob filter is answered before anything is searched.
+    let filter = match args.glob.as_deref().filter(|g| !g.is_empty()) {
+        Some(glob) => match GlobMatcher::new(glob) {
+            Ok(m) => Some(m),
+            Err(e) => return e.into(),
+        },
+        None => None,
+    };
     let target = match ws.confine_read(args.path.as_deref().unwrap_or(".")) {
         Ok(t) => t,
         Err(e) => return e,
     };
-    let start_is_file = target.absolute.is_file();
-    if !start_is_file && !target.absolute.is_dir() {
-        return ToolOutput::error(ToolFailure::NotFound.message(&[("path", &target.relative)]));
-    }
+    let start_is_file = match file_or_dir(&target) {
+        Ok(is_file) => is_file,
+        Err(e) => return e,
+    };
     let base = if start_is_file {
         target.relative.rsplit_once('/').map_or("", |(dir, _)| dir)
     } else if target.relative == "." {
@@ -424,15 +479,12 @@ pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
     } else {
         target.relative.as_str()
     };
-    let filter = args
-        .glob
-        .as_deref()
-        .filter(|g| !g.is_empty())
-        .map(GlobMatcher::new);
     let cap = ws.limits.search_max_results;
     let max_file = ws.limits.grep_max_file_bytes;
     let mut found: Vec<(String, usize, String)> = Vec::new();
-    let (mut truncated, mut stopped) = (false, false);
+    let (mut truncated, mut stopped, mut timed_out) = (false, false, false);
+    let deadline = Instant::now() + ws.grep_timeout;
+    let mut lines_since_check = 0u32;
     let hidden = |relative: &str, is_dir: bool| ws.hidden(relative, is_dir);
     walk(
         ws.root,
@@ -443,6 +495,10 @@ pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
         |relative| {
             if ws.stopped() {
                 stopped = true;
+                return Walk::Stop;
+            }
+            if Instant::now() >= deadline {
+                timed_out = true;
                 return Walk::Stop;
             }
             if filter
@@ -470,6 +526,14 @@ pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
             }
             let text = decode_text(&bytes);
             for (n, line) in text_lines(&text).into_iter().enumerate() {
+                lines_since_check += 1;
+                if lines_since_check == 4096 {
+                    lines_since_check = 0;
+                    if Instant::now() >= deadline {
+                        timed_out = true;
+                        return Walk::Stop;
+                    }
+                }
                 if !regex.is_match(line) {
                     continue;
                 }
@@ -485,7 +549,23 @@ pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
     if stopped {
         return ToolOutput::error(STOPPED);
     }
+    if timed_out {
+        return ToolOutput::error(ToolFailure::Timeout.message(&[
+            ("pattern", &args.pattern),
+            ("timeout_s", &seconds(ws.grep_timeout)),
+        ]));
+    }
     ToolOutput::ok(format_grep(&args.pattern, &found, truncated, &ws.limits))
+}
+
+/// A time limit as the contract's messages print it: `30` for whole
+/// seconds, `0.5` otherwise.
+fn seconds(limit: Duration) -> String {
+    if limit.subsec_nanos() == 0 {
+        limit.as_secs().to_string()
+    } else {
+        limit.as_secs_f64().to_string()
+    }
 }
 
 /// What a write would do, for the approval's diff: the file as it is (none
@@ -783,23 +863,95 @@ pub(crate) mod tests {
         assert_eq!(read_capped(&root, 10), Err(ReadRefusal::Directory));
     }
 
-    /// A FIFO would block the read for ever, past Stop.
+    /// A FIFO would block the read for ever, past Stop: every tool names it
+    /// `special_file` without opening it, and searches leave it out.
     #[cfg(unix)]
     #[test]
-    fn a_fifo_is_not_read() {
-        let dir = ws_files(&[]);
+    fn a_fifo_is_special_and_never_waited_on() {
+        let dir = ws_files(&[("a.txt", "x\n")]);
         let root = canonical(&dir);
         let fifo = root.join("pipe");
         let c = std::ffi::CString::new(fifo.to_string_lossy().as_bytes()).unwrap();
         // SAFETY: a plain mkfifo(3) on a path this test owns.
         assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
-        assert_eq!(read_capped(&fifo, 10), Err(ReadRefusal::NotAFile));
+        assert_eq!(read_capped(&fifo, 10), Err(ReadRefusal::Special));
         let ws = Workspace::new(&root, &RUNNING);
-        // Not listed, and not searched.
+        let special =
+            "pipe is a pipe, socket or device, not a file or directory, so it is not opened.";
         assert_eq!(
-            list_dir(&ws, ListDirArgs { path: None }).output,
-            "(. has nothing to list: it is empty or holds only ignored entries.)"
+            read_file(&ws, read("pipe", None, None)),
+            ToolOutput::error(special)
         );
+        let listed = list_dir(
+            &ws,
+            ListDirArgs {
+                path: Some("pipe".into()),
+            },
+        );
+        assert_eq!(listed, ToolOutput::error(special));
+        let globbed = glob(
+            &ws,
+            GlobArgs {
+                pattern: "*".into(),
+                path: Some("pipe".into()),
+            },
+        );
+        assert_eq!(globbed, ToolOutput::error(special));
+        let grepped = grep(
+            &ws,
+            GrepArgs {
+                pattern: "x".into(),
+                path: Some("pipe".into()),
+                glob: None,
+                ignore_case: None,
+            },
+        );
+        assert_eq!(grepped, ToolOutput::error(special));
+        // Not listed, and not searched.
+        assert_eq!(list_dir(&ws, ListDirArgs { path: None }).output, "a.txt");
+        let all = grep(
+            &ws,
+            GrepArgs {
+                pattern: ".".into(),
+                path: None,
+                glob: None,
+                ignore_case: None,
+            },
+        );
+        assert_eq!(all.output, "a.txt:1: x");
+        // A device is special the same way.
+        let ws_dev = Workspace::new(Path::new("/dev"), &RUNNING);
+        let null = read_file(&ws_dev, read("null", None, None));
+        assert!(
+            null.is_error && null.output.contains("pipe, socket or device"),
+            "{}",
+            null.output
+        );
+    }
+
+    /// grep's time limit ends the search with the contract's `timeout` and
+    /// no matches.
+    #[test]
+    fn a_grep_past_its_time_limit_is_timeout() {
+        let dir = ws_files(&[("a.txt", "TODO\n")]);
+        let root = canonical(&dir);
+        let mut ws = Workspace::new(&root, &RUNNING);
+        let args = || GrepArgs {
+            pattern: "TODO".into(),
+            path: None,
+            glob: None,
+            ignore_case: None,
+        };
+        assert_eq!(grep(&ws, args()).output, "a.txt:1: TODO");
+        ws.grep_timeout = Duration::ZERO;
+        assert_eq!(
+            grep(&ws, args()),
+            ToolOutput::error(
+                "The search for TODO stopped after 0 s without finishing. Try a simpler pattern, a narrower path or a glob."
+            )
+        );
+        assert_eq!(seconds(Duration::from_millis(1500)), "1.5");
+        assert_eq!(seconds(GREP_TIMEOUT), "30");
     }
 
     #[test]

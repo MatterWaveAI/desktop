@@ -816,17 +816,21 @@ fn the_searches_do_not_follow_a_link_out_of_the_root() {
 fn context_files_load_only_in_a_trusted_root_and_only_their_head() {
     let (_ws, root, _) = workspace();
     std::fs::write(root.join("MATTERWAVE.md"), "Use tabs.").unwrap();
+    std::fs::write(root.join("MATTERWAVE.local.md"), "Use spaces.").unwrap();
     std::fs::write(root.join("AGENTS.md"), "Run make test.").unwrap();
     let (loaded, skipped) = context_files(&root, false);
     assert!(loaded.is_empty());
-    assert_eq!(skipped, vec!["MATTERWAVE.md", "AGENTS.md"]);
+    // Shared files first, the person's own last, so it wins.
+    let order = vec!["MATTERWAVE.md", "AGENTS.md", "MATTERWAVE.local.md"];
+    assert_eq!(skipped, order);
     let (loaded, skipped) = context_files(&root, true);
     assert!(skipped.is_empty());
     assert_eq!(
         loaded.iter().map(|c| c.path.as_str()).collect::<Vec<_>>(),
-        vec!["MATTERWAVE.md", "AGENTS.md"]
+        order
     );
     assert_eq!(loaded[0].text, "Use tabs.");
+    assert_eq!(loaded[2].text, "Use spaces.");
     // A huge one: its head only, cut on a character boundary.
     let big = format!(
         "{}é{}",

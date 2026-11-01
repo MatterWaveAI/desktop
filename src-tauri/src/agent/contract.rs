@@ -15,7 +15,7 @@
 //! the source.
 
 /// The contract version this host implements.
-pub(crate) const CONTRACT_VERSION: &str = "1.1.0";
+pub(crate) const CONTRACT_VERSION: &str = "1.2.0";
 
 /// The contract's own copy, for the parity tests and nothing else.
 #[cfg(test)]
@@ -199,8 +199,9 @@ pub(crate) const PROTECTED: &[&str] = &[
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) const SETTINGS_DIR: &str = ".matterwave/";
 /// The instruction files a trusted root's runs are given, in the
-/// contract's order (where two disagree, the later one wins).
-pub(crate) const CONTEXT_FILES: &[&str] = &["MATTERWAVE.md", "MATTERWAVE.local.md", "AGENTS.md"];
+/// contract's order: the shared MATTERWAVE.md and AGENTS.md, then the
+/// person's own MATTERWAVE.local.md last, so it wins where two disagree.
+pub(crate) const CONTEXT_FILES: &[&str] = &["MATTERWAVE.md", "AGENTS.md", "MATTERWAVE.local.md"];
 
 /// Why a path was refused, by the contract's code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -209,6 +210,8 @@ pub(crate) enum Refusal {
     Parent,
     Outside,
     Symlink,
+    /// A link that loops, or takes more than 40 hops to resolve.
+    Loop,
     Denied,
     Protected,
     /// A `:` in a name: an alternate data stream, or a drive-relative path.
@@ -229,6 +232,7 @@ impl Refusal {
             Refusal::Parent => "parent",
             Refusal::Outside => "outside",
             Refusal::Symlink => "symlink",
+            Refusal::Loop => "loop",
             Refusal::Denied => "denied",
             Refusal::Protected => "protected",
             Refusal::Stream => "stream",
@@ -247,6 +251,7 @@ impl Refusal {
             }
             Refusal::Outside => "Refused: {path} is outside the workspace root.",
             Refusal::Symlink => "Refused: {path} is a link that leads outside the workspace root.",
+            Refusal::Loop => "Refused: {path} is a link that loops back on itself or goes through too many links, so it leads nowhere.",
             Refusal::Denied => "Refused: {path} is protected (a secret, a key, .git or an entry in .matterwaveignore) and is not sent to the model.",
             Refusal::Protected => "Refused: {path} can be read but not changed by the agent.",
             Refusal::Stream => "Refused: {path} has a ':' in a name, which Windows reads as an alternate data stream or another drive, not the file it seems to name.",
@@ -256,11 +261,12 @@ impl Refusal {
         }
     }
 
-    pub const ALL: [Refusal; 10] = [
+    pub const ALL: [Refusal; 11] = [
         Refusal::Empty,
         Refusal::Parent,
         Refusal::Outside,
         Refusal::Symlink,
+        Refusal::Loop,
         Refusal::Denied,
         Refusal::Protected,
         Refusal::Stream,
@@ -435,6 +441,12 @@ pub(crate) enum ToolFailure {
     EmptyPattern,
     InvalidRegex,
     BadTimeout,
+    /// A glob with a `[...]` range that runs backwards (`[z-a]`).
+    InvalidGlob,
+    /// A pipe, socket or device: never opened, so never waited on.
+    SpecialFile,
+    /// A search that ran past the host's time limit.
+    Timeout,
 }
 
 impl ToolFailure {
@@ -452,6 +464,9 @@ impl ToolFailure {
             ToolFailure::EmptyPattern => "empty_pattern",
             ToolFailure::InvalidRegex => "invalid_regex",
             ToolFailure::BadTimeout => "bad_timeout",
+            ToolFailure::InvalidGlob => "invalid_glob",
+            ToolFailure::SpecialFile => "special_file",
+            ToolFailure::Timeout => "timeout",
         }
     }
 
@@ -476,6 +491,9 @@ impl ToolFailure {
             ToolFailure::BadTimeout => {
                 "timeout_s must be a whole number of seconds from 1 to {max}."
             }
+            ToolFailure::InvalidGlob => "The glob {glob} is not valid: a range in a [...] class runs backwards (z-a rather than a-z).",
+            ToolFailure::SpecialFile => "{path} is a pipe, socket or device, not a file or directory, so it is not opened.",
+            ToolFailure::Timeout => "The search for {pattern} stopped after {timeout_s} s without finishing. Try a simpler pattern, a narrower path or a glob.",
         }
     }
 
@@ -485,7 +503,7 @@ impl ToolFailure {
     }
 
     #[cfg_attr(not(test), allow(dead_code))]
-    pub const ALL: [ToolFailure; 11] = [
+    pub const ALL: [ToolFailure; 14] = [
         ToolFailure::NotFound,
         ToolFailure::IsDirectory,
         ToolFailure::NotDirectory,
@@ -497,6 +515,9 @@ impl ToolFailure {
         ToolFailure::EmptyPattern,
         ToolFailure::InvalidRegex,
         ToolFailure::BadTimeout,
+        ToolFailure::InvalidGlob,
+        ToolFailure::SpecialFile,
+        ToolFailure::Timeout,
     ];
 }
 

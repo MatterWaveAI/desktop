@@ -7,11 +7,12 @@
 //! against the workspace root here, never trusted as given:
 //!
 //! - an empty path, and a path with a `..` segment, are refused outright;
-//! - so, on every platform, is a name Windows would read as another file
-//!   or a device (`windows_alias`);
+//! - so, on every platform, is a name below the root that Windows would
+//!   read as another file or a device (`windows_alias`);
 //! - an absolute path is allowed only when it lies under the root;
 //! - links (symbolic links, and junctions on Windows) are followed, and
-//!   the place they lead must still be under the root;
+//!   the place they lead must still be under the root; a link that loops
+//!   is refused as `loop`;
 //! - the deny list (the contract's defaults plus `.matterwaveignore`)
 //!   refuses a path by its own name or by where its links lead, for
 //!   reading as well as writing, ignoring case;
@@ -27,6 +28,8 @@ use regex::Regex;
 use std::path::{Component, Path, PathBuf};
 
 const MAX_LINK_HOPS: usize = 40;
+/// A UTF-8 byte-order mark, which an ignore or deny file may start with.
+pub(crate) const BOM: char = '\u{feff}';
 
 /// A path the agent may not use: the contract's code and its sentence.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,11 +47,62 @@ impl PathRefused {
     }
 }
 
+/// A glob the contract calls invalid: a `[...]` class with a range that
+/// runs backwards (`[z-a]`). glob and grep answer it with `invalid_glob`;
+/// an ignore or deny file skips the line, as git does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct GlobError;
+
+fn escape_char(c: char) -> String {
+    regex::escape(c.encode_utf8(&mut [0; 4]))
+}
+
+/// The regex for the `[...]` class at `chars[start]` and the index after
+/// it, or `None` when no `]` closes it (the `[` is then literal). A `!` or
+/// `^` first negates it, a `]` right after that (or right after the `[`) is
+/// literal, `a-z` is a range and every other character is itself, each
+/// escaped, so every regex dialect reads the class alike.
+fn glob_class(chars: &[char], start: usize) -> Result<Option<(String, usize)>, GlobError> {
+    let mut i = start + 1;
+    let negate = matches!(chars.get(i), Some('!' | '^'));
+    if negate {
+        i += 1;
+    }
+    let body_start = i;
+    if chars.get(i) == Some(&']') {
+        i += 1;
+    }
+    let Some(end) = (i..chars.len()).find(|&j| chars[j] == ']') else {
+        return Ok(None);
+    };
+    let body = &chars[body_start..end];
+    let mut out = String::from(if negate { "[^" } else { "[" });
+    let mut k = 0;
+    while k < body.len() {
+        if k + 2 < body.len() && body[k + 1] == '-' {
+            let (low, high) = (body[k], body[k + 2]);
+            if low > high {
+                return Err(GlobError);
+            }
+            out.push_str(&escape_char(low));
+            out.push('-');
+            out.push_str(&escape_char(high));
+            k += 3;
+        } else {
+            out.push_str(&escape_char(body[k]));
+            k += 1;
+        }
+    }
+    out.push(']');
+    Ok(Some((out, end + 1)))
+}
+
 /// The regular expression (to be matched whole) for one glob: `*` and `?`
 /// stay within a segment, `**` followed by `/` spans any number of
-/// segments, `[...]` is a class (`[!...]` negated), everything else is
-/// literal.
-pub(crate) fn glob_to_regex(glob: &str) -> String {
+/// segments, `[...]` is a class (`[!...]` or `[^...]` negated, a `]` first
+/// in it literal), everything else is literal. `GlobError` when a class's
+/// range runs backwards (`[z-a]`).
+pub(crate) fn glob_to_regex(glob: &str) -> Result<String, GlobError> {
     let chars: Vec<char> = glob.chars().collect();
     let mut out = String::new();
     let mut i = 0;
@@ -69,40 +123,18 @@ pub(crate) fn glob_to_regex(glob: &str) -> String {
         } else if c == '?' {
             out.push_str("[^/]");
         } else if c == '[' {
-            // The class runs to the next `]` after at least one character.
-            let end = (i + 2..chars.len()).find(|&j| chars[j] == ']');
-            match end {
-                None => out.push_str("\\["),
-                Some(end) => {
-                    let mut body: String = chars[i + 1..end].iter().collect();
-                    if let Some(rest) = body.strip_prefix('!') {
-                        body = format!("^{rest}");
-                    }
-                    // Within a class only `\`, `[` and the set operators mean
-                    // anything to `regex` beyond what a glob class means;
-                    // they are taken literally.
-                    let escaped: String = body
-                        .chars()
-                        .enumerate()
-                        .map(|(n, ch)| match ch {
-                            '\\' | '[' | '&' | '~' => format!("\\{ch}"),
-                            '-' if n == 0 => "\\-".to_string(),
-                            other => other.to_string(),
-                        })
-                        .collect();
-                    out.push('[');
-                    out.push_str(&escaped);
-                    out.push(']');
-                    i = end + 1;
-                    continue;
-                }
+            if let Some((class, next)) = glob_class(&chars, i)? {
+                out.push_str(&class);
+                i = next;
+                continue;
             }
+            out.push_str("\\[");
         } else {
-            out.push_str(&regex::escape(&c.to_string()));
+            out.push_str(&escape_char(c));
         }
         i += 1;
     }
-    out
+    Ok(out)
 }
 
 struct Pattern {
@@ -123,12 +155,9 @@ fn compile(pattern: &str) -> Option<Pattern> {
     if text.is_empty() {
         return None;
     }
-    let source = format!("(?i)^(?:{})$", glob_to_regex(text));
-    // A pattern `regex` cannot compile is taken literally rather than
-    // dropped: a deny list fails closed.
-    let regex = Regex::new(&source)
-        .or_else(|_| Regex::new(&format!("(?i)^{}$", regex::escape(text))))
-        .ok()?;
+    // An invalid line (a `[...]` range that runs backwards) is skipped, as
+    // git skips it, rather than failing every search and every `confine`.
+    let regex = Regex::new(&format!("(?i)^(?:{})$", glob_to_regex(text).ok()?)).ok()?;
     Some(Pattern {
         regex,
         dir_only,
@@ -139,7 +168,8 @@ fn compile(pattern: &str) -> Option<Pattern> {
 /// Patterns a path may not match: the contract's defaults plus the
 /// workspace's `.matterwaveignore` lines. The syntax is the contract's
 /// `pattern_syntax`, a subset of .gitignore's without negation; matching
-/// ignores case. The protected list is matched the same way.
+/// ignores case, and a line whose pattern is invalid is skipped. The
+/// protected list is matched the same way.
 pub(crate) struct DenyList {
     compiled: Vec<Pattern>,
 }
@@ -155,8 +185,10 @@ impl DenyList {
         Self::new(DEFAULT_DENY.iter().copied())
     }
 
-    /// The defaults plus every pattern line of a `.matterwaveignore`'s text.
+    /// The defaults plus every pattern line of a `.matterwaveignore`'s text,
+    /// a leading byte-order mark dropped.
     pub fn with_ignore_file(text: &str) -> Self {
+        let text = text.strip_prefix(BOM).unwrap_or(text);
         Self::new(DEFAULT_DENY.iter().copied().chain(text.lines()))
     }
 
@@ -235,7 +267,14 @@ pub(crate) fn is_absolute_any(path: &str) -> bool {
 ///
 /// Each is a way for the path the person approved to differ from the one
 /// touched.
-pub(crate) fn windows_alias(path: &str) -> Option<Refusal> {
+///
+/// With `root`, the names are those below the root: an absolute path whose
+/// leading names are the root's (compared name by name, case ignored, `/`
+/// and `\` both separators) is checked from the name after them, so a root
+/// inside `/x/con/` still takes absolute paths into it. Any other path is
+/// checked whole, and the UNC check always reads the whole path. Pure:
+/// nothing is read from disk.
+pub(crate) fn windows_alias(path: &str, root: Option<&str>) -> Option<Refusal> {
     let mut chars = path.chars();
     let separator = |c: Option<char>| matches!(c, Some('\\' | '/'));
     if separator(chars.next()) && separator(chars.next()) {
@@ -244,20 +283,30 @@ pub(crate) fn windows_alias(path: &str) -> Option<Refusal> {
     if path.starts_with("\\??\\") || path.starts_with("/??/") {
         return Some(Refusal::Unc);
     }
-    let b = path.as_bytes();
-    let rest = if b.len() >= 2
-        && b[0].is_ascii_alphabetic()
-        && b[1] == b':'
-        && matches!(b.get(2), None | Some(b'\\' | b'/'))
-    {
-        &path[2..]
-    } else {
-        path
-    };
-    for name in rest.split(['\\', '/']) {
-        if name.is_empty() || name == "." {
-            continue;
-        }
+    let below_root = root.filter(|_| is_absolute_any(path)).and_then(|root| {
+        let root: Vec<String> = names(root).map(str::to_lowercase).collect();
+        let given: Vec<&str> = names(path).collect();
+        let leading = given.get(..root.len())?;
+        leading
+            .iter()
+            .zip(&root)
+            .all(|(g, r)| g.to_lowercase() == *r)
+            .then(|| given[root.len()..].to_vec())
+    });
+    let checked = below_root.unwrap_or_else(|| {
+        let b = path.as_bytes();
+        let rest = if b.len() >= 2
+            && b[0].is_ascii_alphabetic()
+            && b[1] == b':'
+            && matches!(b.get(2), None | Some(b'\\' | b'/'))
+        {
+            &path[2..]
+        } else {
+            path
+        };
+        names(rest).collect()
+    });
+    for name in checked {
         if name.contains(':') {
             return Some(Refusal::Stream);
         }
@@ -270,6 +319,12 @@ pub(crate) fn windows_alias(path: &str) -> Option<Refusal> {
         }
     }
     None
+}
+
+/// The names of `path`, split at `/` and `\`, without empty ones and `.`.
+fn names(path: &str) -> impl Iterator<Item = &str> {
+    path.split(['\\', '/'])
+        .filter(|name| !name.is_empty() && *name != ".")
 }
 
 /// CON, PRN, AUX, NUL, COM1-9, LPT1-9 (¹ ² ³ too), CONIN$, CONOUT$, any case.
@@ -335,12 +390,38 @@ fn is_link(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// Why `resolve_links` could not say where a path leads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum LinkError {
+    /// The links loop, or take more than 40 hops.
+    Loop,
+    /// The path cannot be made absolute, or a link cannot be read.
+    Io(String),
+}
+
+impl std::fmt::Display for LinkError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LinkError::Loop => f.write_str("too many levels of links"),
+            LinkError::Io(e) => f.write_str(e),
+        }
+    }
+}
+
+impl From<LinkError> for String {
+    fn from(e: LinkError) -> String {
+        e.to_string()
+    }
+}
+
 /// `path` with every link in it followed, whether or not its target
 /// exists: the deepest part that exists is resolved by the OS, and a
 /// dangling link is read and followed by hand, so a write through it is
-/// caught as well as a read.
-pub(crate) fn resolve_links(path: &Path) -> Result<PathBuf, String> {
-    let mut current = lexical_normalize(&std::path::absolute(path).map_err(|e| e.to_string())?);
+/// caught as well as a read. `LinkError::Loop` when the links loop, or
+/// take more than 40 hops.
+pub(crate) fn resolve_links(path: &Path) -> Result<PathBuf, LinkError> {
+    let io = |e: std::io::Error| LinkError::Io(e.to_string());
+    let mut current = lexical_normalize(&std::path::absolute(path).map_err(io)?);
     for _ in 0..MAX_LINK_HOPS {
         let mut head = current.clone();
         let mut rest: Vec<std::ffi::OsString> = Vec::new();
@@ -355,7 +436,7 @@ pub(crate) fn resolve_links(path: &Path) -> Result<PathBuf, String> {
         }
         let rest_path: PathBuf = rest.iter().rev().collect();
         if is_link(&head) && !head.exists() {
-            let target = strip_verbatim(std::fs::read_link(&head).map_err(|e| e.to_string())?);
+            let target = strip_verbatim(std::fs::read_link(&head).map_err(io)?);
             let base = if target.is_absolute() {
                 target
             } else {
@@ -373,10 +454,7 @@ pub(crate) fn resolve_links(path: &Path) -> Result<PathBuf, String> {
             real.join(rest_path)
         });
     }
-    Err(format!(
-        "too many levels of links resolving {}",
-        path.display()
-    ))
+    Err(LinkError::Loop)
 }
 
 /// The comparable form of a path: `/`-separated, without a trailing
@@ -454,9 +532,10 @@ impl Confined {
 /// unless the person approved it (`Access::ApprovedWrite`).
 ///
 /// In order, as the SDKs check: an empty path, a NUL, a `..` segment, a
-/// Windows alias (`windows_alias`), then the path against the root, its
-/// links, the deny list and, for a write, the protected list. No I/O or
-/// path error escapes as anything but a refusal.
+/// Windows alias in the names below the root (`windows_alias`), then the
+/// path against the root, its links (a loop is `loop`), the deny list and,
+/// for a write, the protected list. No I/O or path error escapes as
+/// anything but a refusal.
 pub(crate) fn confine(
     root: &Path,
     path: &str,
@@ -472,13 +551,25 @@ pub(crate) fn confine(
     if path.split(['/', '\\']).any(|segment| segment == "..") {
         return Err(PathRefused::new(Refusal::Parent, path));
     }
-    if let Some(alias) = windows_alias(path) {
-        return Err(PathRefused::new(alias, path));
-    }
     let outside = || PathRefused::new(Refusal::Outside, path);
+    // A loop of links is `loop` wherever it is met; any other failure to
+    // follow them is the refusal the caller names.
+    let unresolved = |e: LinkError, otherwise: Refusal| match e {
+        LinkError::Loop => PathRefused::new(Refusal::Loop, path),
+        LinkError::Io(_) => PathRefused::new(otherwise, path),
+    };
 
     let given_root = lexical_normalize(&std::path::absolute(root).map_err(|_| outside())?);
-    let real_root = resolve_links(&given_root).map_err(|_| outside())?;
+    let real_root = resolve_links(&given_root).map_err(|e| unresolved(e, Refusal::Outside))?;
+    // Only the names below the root are the agent's; the folders above it
+    // are the person's, whatever they are called.
+    let mut alias = windows_alias(path, Some(&given_root.to_string_lossy()));
+    if alias.is_some() && real_root != given_root {
+        alias = windows_alias(path, Some(&real_root.to_string_lossy()));
+    }
+    if let Some(alias) = alias {
+        return Err(PathRefused::new(alias, path));
+    }
     let (lexical, lexical_rel) = if is_absolute_any(path) {
         let mut candidate = PathBuf::from(path);
         // `/etc/passwd` on Windows has no drive; it is on the root's drive.
@@ -505,7 +596,7 @@ pub(crate) fn confine(
         (lexical, rel)
     };
 
-    let real = resolve_links(&lexical).map_err(|_| PathRefused::new(Refusal::Symlink, path))?;
+    let real = resolve_links(&lexical).map_err(|e| unresolved(e, Refusal::Symlink))?;
     if !within(&real, &real_root) {
         return Err(PathRefused::new(Refusal::Symlink, path));
     }
@@ -513,7 +604,7 @@ pub(crate) fn confine(
     // The host's own, beyond the SDKs': on Windows the place a link leads
     // is held to the same rule as the path given.
     if cfg!(windows) {
-        if let Some(alias) = windows_alias(&real_rel) {
+        if let Some(alias) = windows_alias(&real_rel, None) {
             return Err(PathRefused::new(alias, path));
         }
     }
@@ -855,7 +946,7 @@ pub(crate) mod tests {
             (r"\??\C:\x", Refusal::Unc),
             (r"/\server\x", Refusal::Unc),
         ] {
-            assert_eq!(windows_alias(path), Some(code), "{path}");
+            assert_eq!(windows_alias(path, None), Some(code), "{path}");
         }
         for path in [
             "a.txt",
@@ -876,7 +967,7 @@ pub(crate) mod tests {
             "/etc/passwd",
             r"\Users\me",
         ] {
-            assert_eq!(windows_alias(path), None, "{path}");
+            assert_eq!(windows_alias(path, None), None, "{path}");
         }
     }
 
@@ -978,13 +1069,118 @@ pub(crate) mod tests {
 
     #[test]
     fn globs_compile_as_the_sdks_do() {
-        assert_eq!(glob_to_regex("*.py"), "[^/]*\\.py");
-        assert_eq!(glob_to_regex("src/**/*.ts"), "src/(?:.*/)?[^/]*\\.ts");
-        assert_eq!(glob_to_regex("a?c"), "a[^/]c");
-        assert_eq!(glob_to_regex("[!x]y"), "[^x]y");
-        assert_eq!(glob_to_regex("[abc"), "\\[abc");
-        let re = Regex::new(&format!("^{}$", glob_to_regex("**/cache"))).unwrap();
+        let g = |glob: &str| glob_to_regex(glob).unwrap();
+        assert_eq!(g("*.py"), "[^/]*\\.py");
+        assert_eq!(g("src/**/*.ts"), "src/(?:.*/)?[^/]*\\.ts");
+        assert_eq!(g("a?c"), "a[^/]c");
+        assert_eq!(g("[!x]y"), "[^x]y");
+        assert_eq!(g("[abc"), "\\[abc");
+        let re = Regex::new(&format!("^{}$", g("**/cache"))).unwrap();
         assert!(re.is_match("cache"));
         assert!(re.is_match("a/b/cache"));
+    }
+
+    /// The contract's class rules: `!` or `^` first negates, a `]` right
+    /// after the `[` (or the negation) is literal, `a-z` is a range, every
+    /// other character stands for itself, and a backwards range is invalid.
+    #[test]
+    fn glob_classes_translate_alike_in_every_dialect() {
+        let matches = |glob: &str, name: &str| {
+            Regex::new(&format!("(?i)^(?:{})$", glob_to_regex(glob).unwrap()))
+                .unwrap()
+                .is_match(name)
+        };
+        assert!(matches("[!bm]*.py", "util.py") && !matches("[!bm]*.py", "main.py"));
+        assert!(matches("[^bm]*", "x") && !matches("[^bm]*", "B"));
+        assert!(matches("[]w]*", "wide.txt") && matches("[]w]*", "]x"));
+        assert!(matches("[!]]", "a") && !matches("[!]]", "]"));
+        assert!(matches("[!]", "[!]"), "no ] closes it: a literal [!]");
+        assert!(matches("[a-c]", "B") && !matches("[a-c]", "d"));
+        assert!(matches("[-a]", "-") && matches("[a-]", "-"));
+        assert!(matches("[\\]", "\\") && matches("[&~]", "~") && matches("[[]", "["));
+        assert!(matches("[^]", "[^]") && !matches("[^]", "^"));
+        assert_eq!(glob_to_regex("[z-a].py"), Err(GlobError));
+        assert_eq!(glob_to_regex("src/[9-0]*"), Err(GlobError));
+    }
+
+    /// A byte-order mark is dropped and a line with a backwards range is
+    /// skipped, as git skips it, rather than failing the whole list.
+    #[test]
+    fn a_deny_file_drops_its_bom_and_skips_an_invalid_line() {
+        let deny = DenyList::with_ignore_file("\u{feff}private/\n[z-a]\nkeys/\n");
+        assert!(deny.matches("private/a.md", false));
+        assert!(deny.matches("keys/k", false));
+        assert!(!deny.matches("z", false));
+        assert!(deny.matches(".env", false), "the defaults still hold");
+    }
+
+    #[test]
+    fn only_the_names_below_the_root_are_checked_for_aliases() {
+        let root = Some("/x/con/repo");
+        assert_eq!(windows_alias("/x/con/repo/src/main.py", root), None);
+        assert_eq!(windows_alias("/X/CON/Repo\\a.txt", root), None);
+        assert_eq!(
+            windows_alias("/x/con/repo/nul.txt", root),
+            Some(Refusal::Device)
+        );
+        assert_eq!(
+            windows_alias("/x/con/other/a.txt", root),
+            Some(Refusal::Device)
+        );
+        assert_eq!(windows_alias("src/con.h", root), Some(Refusal::Device));
+        assert_eq!(
+            windows_alias("//x/con/repo/a.txt", root),
+            Some(Refusal::Unc)
+        );
+        assert_eq!(windows_alias("/x/con", root), Some(Refusal::Device));
+    }
+
+    /// A link to itself, and a pair that point at each other, are `loop`,
+    /// whether the path ends at the link or goes through it.
+    #[test]
+    fn a_loop_of_links_is_refused_as_loop() {
+        let ws = tempfile::tempdir().unwrap();
+        let root = resolve_links(ws.path()).unwrap();
+        if let Err(why) = link_file(Path::new("self.lnk"), &root.join("self.lnk")) {
+            eprintln!("skipped: cannot make a file link here ({why})");
+            return;
+        }
+        link_file(Path::new("b.lnk"), &root.join("a.lnk")).unwrap();
+        link_file(Path::new("a.lnk"), &root.join("b.lnk")).unwrap();
+        assert_eq!(resolve_links(&root.join("self.lnk")), Err(LinkError::Loop));
+        let deny = DenyList::defaults();
+        for (path, access) in [
+            ("self.lnk", Access::Read),
+            ("self.lnk/x.txt", Access::Write),
+            ("a.lnk", Access::Read),
+            ("b.lnk/deeper/x", Access::ApprovedWrite),
+        ] {
+            let err = confine(&root, path, &deny, access).unwrap_err();
+            assert_eq!(err.reason, Refusal::Loop, "{path}");
+        }
+        // A workspace root that is itself a loop is refused the same way.
+        let err = confine(&root.join("self.lnk"), "x", &deny, Access::Read).unwrap_err();
+        assert_eq!(err.reason, Refusal::Loop);
+    }
+
+    /// A link at `link` to `target` (relative to the link's folder when
+    /// relative), which need not exist, or why it cannot be made. Windows
+    /// needs Developer Mode or the privilege for a symbolic link, so a
+    /// directory junction to the same place stands in there: for a link
+    /// that loops or dangles, which is what the tests make, either reads
+    /// the same to `resolve_links` and the walk.
+    pub(crate) fn link_file(target: &Path, link: &Path) -> Result<(), String> {
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link).map_err(|e| e.to_string())
+        }
+        #[cfg(windows)]
+        {
+            if std::os::windows::fs::symlink_file(target, link).is_ok() {
+                return Ok(());
+            }
+            let absolute = link.parent().ok_or("a link needs a folder")?.join(target);
+            link_dir(&absolute, link)
+        }
     }
 }

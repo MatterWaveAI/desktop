@@ -668,6 +668,61 @@ mod tests {
         );
     }
 
+    /// The contract's `shell` cases with `omitted` give a client's kept
+    /// ends; the host keeps the first and last `cap` bytes of the stream,
+    /// so the same output streamed through its capture must read the same.
+    /// A case that keeps less than half the cap at an end is one the host
+    /// never produces, and is left to `format_shell_kept`.
+    #[test]
+    fn the_capture_reads_as_the_contracts_omitted_cases() {
+        let contract: serde_json::Value =
+            serde_json::from_str(crate::agent::contract::CONTRACT_JSON).unwrap();
+        let mut checked = 0;
+        for case in contract["conformance"]["shell"].as_array().unwrap() {
+            let Some(omitted) = case["omitted"].as_u64() else {
+                continue;
+            };
+            let cap = case["limits"]["shell_output_max_bytes"]
+                .as_u64()
+                .map_or(crate::agent::contract::SHELL_OUTPUT_MAX_BYTES, |c| {
+                    c as usize
+                });
+            let kept = case["output"].as_str().unwrap().as_bytes();
+            let half = cap / 2;
+            if kept.len() < half + (cap - half) {
+                continue;
+            }
+            let mut stream = kept[..half].to_vec();
+            stream.extend(std::iter::repeat_n(b'.', omitted as usize));
+            stream.extend_from_slice(&kept[half..]);
+            let mut c = Capped {
+                head: Vec::new(),
+                tail: VecDeque::new(),
+                total: 0,
+                cap,
+            };
+            for chunk in stream.chunks(3) {
+                c.take(chunk);
+            }
+            let r = ShellResult {
+                ended: Ended::Exited(case["exit_code"].as_i64().map(|n| n as i32)),
+                head: c.head.clone(),
+                tail: c.tail.iter().copied().collect(),
+                total_bytes: c.total,
+            };
+            assert_eq!(
+                r.render(cap, Duration::from_secs(1)),
+                case["expected"].as_str().unwrap(),
+                "{case}"
+            );
+            checked += 1;
+        }
+        assert_eq!(
+            checked, 2,
+            "the two cases that keep half the cap at each end"
+        );
+    }
+
     #[test]
     fn matterwave_credentials_are_named_and_nothing_else() {
         for name in [

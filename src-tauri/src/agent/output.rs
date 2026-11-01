@@ -404,17 +404,54 @@ pub(crate) fn format_shell_parts(
     )
 }
 
+/// run_shell's result for a client that kept only the start and the end of
+/// a long output (the SDKs' `format_shell(..., omitted=n)`): `kept` is the
+/// two joined, as the command wrote them, and `omitted` the bytes dropped
+/// from between them. The text is cut as though it were the whole output
+/// -- the first half of the cap from its start, the last half from what
+/// follows that -- `omitted` is added to the count, and the cut always
+/// shows when anything was omitted. Kept with at least half the cap at
+/// each end, the text is the one the whole output gives; with `omitted` 0,
+/// `kept` is the whole output.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn format_shell_kept(
+    end: ShellEnd,
+    kept: &[u8],
+    omitted: usize,
+    limits: &Limits,
+) -> String {
+    let status = shell_status(end);
+    if kept.is_empty() && omitted == 0 {
+        return format!("{status}\n{}", outputs::SHELL_NO_OUTPUT);
+    }
+    let cap = limits.shell_output_max_bytes;
+    let total = kept.len() + omitted;
+    if total <= cap && omitted == 0 {
+        return format!("{status}\n{}", String::from_utf8_lossy(kept));
+    }
+    let half = cap / 2;
+    let head = byte_head(kept, half);
+    // The tail comes from what follows the head, so text kept short of the
+    // cap is never shown twice.
+    let tail = byte_tail(&kept[head.len()..], cap - half);
+    let cut = total - head.len() - tail.len();
+    let marker = fill(outputs::SHELL_CUT, &[("omitted", &cut.to_string())]);
+    format!(
+        "{status}\n{}\n{marker}\n{}",
+        String::from_utf8_lossy(head),
+        String::from_utf8_lossy(tail)
+    )
+}
+
 /// run_shell's result for the whole of a command's output.
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn format_shell(output: &str, end: ShellEnd, limits: &Limits) -> String {
-    format_shell_parts(end, output.as_bytes(), b"", output.len(), limits)
+    format_shell_kept(end, output.as_bytes(), 0, limits)
 }
 
 /// glob's pattern as the search tools apply it (`globMatches`).
 pub(crate) struct GlobMatcher {
-    /// None for a pattern too large to compile even as a literal, which
-    /// then matches nothing.
-    regex: Option<Regex>,
+    regex: Regex,
     whole_path: bool,
 }
 
@@ -422,19 +459,20 @@ impl GlobMatcher {
     /// A leading `./` is dropped and a leading `/` anchors the pattern at
     /// the search's path; a pattern with a `/` matches the path from there,
     /// one without matches a file's name at any depth. Case is ignored.
-    pub fn new(pattern: &str) -> Self {
+    /// `invalid_glob` for a pattern whose `[...]` range runs backwards (or
+    /// that `regex` cannot compile), which glob and grep return before
+    /// anything is searched.
+    pub fn new(pattern: &str) -> Result<Self, ToolError> {
         let text = pattern.strip_prefix("./").unwrap_or(pattern);
         let anchored = text.starts_with('/');
         let text = text.trim_start_matches('/');
-        let source = format!("(?i)^(?:{})$", glob_to_regex(text));
-        // A class `regex` cannot compile is matched as the literal text.
-        let regex = Regex::new(&source)
-            .or_else(|_| Regex::new(&format!("(?i)^{}$", regex::escape(text))))
-            .ok();
-        GlobMatcher {
+        let invalid = || ToolError::new(ToolFailure::InvalidGlob, &[("glob", pattern)]);
+        let source = glob_to_regex(text).map_err(|_| invalid())?;
+        let regex = Regex::new(&format!("(?i)^(?:{source})$")).map_err(|_| invalid())?;
+        Ok(GlobMatcher {
             regex,
             whole_path: anchored || text.contains('/'),
-        }
+        })
     }
 
     /// Whether the file at `relative` (to the search's path, `/`-separated)
@@ -445,7 +483,7 @@ impl GlobMatcher {
         } else {
             relative.rsplit('/').next().unwrap_or(relative)
         };
-        self.regex.as_ref().is_some_and(|r| r.is_match(subject))
+        self.regex.is_match(subject)
     }
 }
 
@@ -555,12 +593,48 @@ mod tests {
 
     #[test]
     fn a_glob_without_a_slash_matches_names_at_any_depth_ignoring_case() {
-        let g = GlobMatcher::new("*.py");
+        let g = GlobMatcher::new("*.py").unwrap();
         assert!(g.matches("src/lib/deep.py") && g.matches("Upper.PY"));
-        let anchored = GlobMatcher::new("/README.MD");
+        let anchored = GlobMatcher::new("/README.MD").unwrap();
         assert!(anchored.matches("README.md") && !anchored.matches("docs/README.md"));
-        let rooted = GlobMatcher::new("src/**/*.ts");
+        let rooted = GlobMatcher::new("src/**/*.ts").unwrap();
         assert!(rooted.matches("src/a.ts") && rooted.matches("src/x/y/b.ts"));
         assert!(!rooted.matches("lib/src/a.ts"));
+    }
+
+    #[test]
+    fn a_backwards_range_is_invalid_glob_with_the_pattern_as_given() {
+        let err = GlobMatcher::new("./src/[z-a]*").err().unwrap();
+        assert_eq!(err.reason, ToolFailure::InvalidGlob);
+        assert_eq!(
+            err.message,
+            "The glob ./src/[z-a]* is not valid: a range in a [...] class runs backwards (z-a rather than a-z)."
+        );
+    }
+
+    /// The SDKs' `omitted` form: the kept ends joined, cut as though they
+    /// were the whole output, the dropped bytes counted, the cut always
+    /// shown.
+    #[test]
+    fn kept_ends_with_bytes_omitted_between_them_are_cut_as_the_whole() {
+        let small = Limits {
+            shell_output_max_bytes: 10,
+            ..Limits::default()
+        };
+        let end = ShellEnd::Exited(Some(0));
+        assert_eq!(
+            format_shell_kept(end, b"01234BCDEF", 6, &small),
+            format_shell("01234XXXXXXBCDEF", end, &small)
+        );
+        // Kept short of half the cap: all of it shown, the cut still marked.
+        assert_eq!(
+            format_shell_kept(end, b"ab", 3, &Limits::default()),
+            "Exit code 0\nab\n[... 3 bytes of output cut from the middle ...]\n"
+        );
+        // Nothing kept and nothing dropped is no output.
+        assert_eq!(
+            format_shell_kept(end, b"", 0, &small),
+            "Exit code 0\n(no output)"
+        );
     }
 }

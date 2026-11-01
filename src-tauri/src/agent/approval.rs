@@ -14,7 +14,7 @@
 //! - in every mode that writes, `yolo` included, a write to a protected
 //!   path: the deny file, the agent's settings (`.matterwave/`), the files
 //!   the app loads into every run's prompt as the person's instructions
-//!   (MATTERWAVE.md, MATTERWAVE.local.md, AGENTS.md), shell startup files
+//!   (MATTERWAVE.md, AGENTS.md, MATTERWAVE.local.md), shell startup files
 //!   and credential folders (`.bashrc`, `.ssh/`, `.aws/` ...), so a run
 //!   cannot plant instructions for the next one, or a login hook, unasked;
 //! - in a run whose mode the person has not confirmed for the folder this

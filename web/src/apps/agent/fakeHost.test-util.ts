@@ -53,7 +53,7 @@ export class FakeHost implements AgentHost {
       trusted: false,
       platform: "linux",
       shell: "sh",
-      contract_version: "1.1.0",
+      contract_version: "1.2.0",
       yolo_confirmed: false,
       auto_edit_confirmed: false,
     });

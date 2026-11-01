@@ -18,6 +18,11 @@
 //!   subdirectories, each in code-point order of their names; a link to a
 //!   file is followed when it leads inside the root to a path that is not
 //!   denied, and a link to a directory is listed but never walked into;
+//! - only regular files and directories are walked: a pipe, socket or
+//!   device, or a link to one, is left out (and never opened);
+//! - a leading byte-order mark in an ignore file is dropped, and a line
+//!   whose pattern is invalid (a `[...]` range that runs backwards) is
+//!   skipped, as git skips it;
 //! - the path a search is given is not itself checked against the ignore
 //!   rules, though what is under it is.
 //!
@@ -26,7 +31,7 @@
 //! the folder this session leaves out the paths read only with their
 //! native yes (`approval::read_gated`).
 
-use super::confine::{glob_to_regex, relative_to, resolve_links, within, DenyList};
+use super::confine::{glob_to_regex, relative_to, resolve_links, within, DenyList, GlobError, BOM};
 use super::contract::SEARCH_IGNORE_FILES;
 use regex::Regex;
 use std::cell::RefCell;
@@ -42,15 +47,15 @@ struct Rule {
 }
 
 /// One pattern's regular expression: the glob, with a backslash making the
-/// next character literal.
-fn pattern_regex(pattern: &str) -> String {
+/// next character literal. `GlobError` for a backwards `[...]` range.
+fn pattern_regex(pattern: &str) -> Result<String, GlobError> {
     let mut out = String::new();
     let mut chunk = String::new();
     let mut chars = pattern.chars();
     while let Some(c) = chars.next() {
         if c == '\\' {
             if let Some(next) = chars.next() {
-                out.push_str(&glob_to_regex(&chunk));
+                out.push_str(&glob_to_regex(&chunk)?);
                 out.push_str(&regex::escape(&next.to_string()));
                 chunk.clear();
                 continue;
@@ -58,8 +63,8 @@ fn pattern_regex(pattern: &str) -> String {
         }
         chunk.push(c);
     }
-    out.push_str(&glob_to_regex(&chunk));
-    out
+    out.push_str(&glob_to_regex(&chunk)?);
+    Ok(out)
 }
 
 fn parse(line: &str) -> Option<Rule> {
@@ -83,11 +88,9 @@ fn parse(line: &str) -> Option<Rule> {
     if text.is_empty() {
         return None;
     }
-    let source = format!("(?i)^(?:{})$", pattern_regex(text));
-    // A pattern `regex` cannot compile is matched as its literal text.
-    let regex = Regex::new(&source)
-        .or_else(|_| Regex::new(&format!("(?i)^{}$", regex::escape(text))))
-        .ok()?;
+    // An invalid line (a `[...]` range that runs backwards) is skipped, as
+    // git skips it.
+    let regex = Regex::new(&format!("(?i)^(?:{})$", pattern_regex(text).ok()?)).ok()?;
     Some(Rule {
         regex,
         negate,
@@ -97,7 +100,8 @@ fn parse(line: &str) -> Option<Rule> {
 }
 
 /// The rules of one .gitignore-syntax file, for the directory holding it
-/// (`base`, relative to the workspace root, empty for the root).
+/// (`base`, relative to the workspace root, empty for the root). A leading
+/// byte-order mark is dropped, and an invalid line is skipped.
 pub(crate) struct IgnoreFile {
     base: String,
     rules: Vec<Rule>,
@@ -105,6 +109,7 @@ pub(crate) struct IgnoreFile {
 
 impl IgnoreFile {
     pub fn new(text: &str, base: &str) -> Self {
+        let text = text.strip_prefix(BOM).unwrap_or(text);
         IgnoreFile {
             base: base.trim_matches('/').to_string(),
             rules: text.split('\n').filter_map(parse).collect(),
@@ -248,17 +253,21 @@ pub(crate) struct Entry {
 }
 
 /// What an entry is, for one the tools may show: `(is_dir, is_link)`, or
-/// `None` for a link that leads out of the root, dangles or lands on a
-/// denied path, and for anything that is neither a file nor a directory.
+/// `None` for a link that leads out of the root, dangles, loops or lands on
+/// a denied path, and for anything that is neither a regular file nor a
+/// directory (a pipe, a socket, a device), a link's target included.
 fn kind_of(path: &Path, real_root: &Path, deny: &DenyList) -> Option<(bool, bool)> {
     let meta = std::fs::symlink_metadata(path).ok()?;
     if meta.file_type().is_symlink() {
         let target = resolve_links(path).ok()?;
-        if !within(&target, real_root) || !target.exists() {
+        if !within(&target, real_root) {
+            return None;
+        }
+        let is_dir = target.is_dir();
+        if !is_dir && !target.is_file() {
             return None;
         }
         let rel = relative_to(&target, real_root);
-        let is_dir = target.is_dir();
         if !rel.is_empty() && deny.matches(&rel, is_dir) {
             return None;
         }
@@ -414,6 +423,19 @@ mod tests {
         assert!(r.ignored("!bang.txt", false, true));
         assert!(r.ignored("trail.txt", false, true));
         assert!(!r.ignored("# note", false, true));
+    }
+
+    #[test]
+    fn a_bom_is_dropped_and_an_invalid_line_skipped_not_matched_literally() {
+        let r = rules(&[
+            (".gitignore", "\u{feff}*.log\n[z-a]*\n!keep.log\n"),
+            ("src/.matterwaveignore", "\u{feff}gen/\n[9-0]\n"),
+        ]);
+        assert!(r.ignored("app.log", false, true));
+        assert!(!r.ignored("keep.log", false, true));
+        assert!(!r.ignored("z.py", false, true) && !r.ignored("[z-a]x", false, true));
+        assert!(r.ignored("src/gen/x.py", false, true));
+        assert!(!r.ignored("src/[9-0]", false, true));
     }
 
     #[test]

@@ -1,19 +1,21 @@
 //! The contract's conformance cases, run against the host itself: every
 //! case `agent/contract.json` carries under `conformance` (`paths`, `tools`,
-//! `ignore`, `shell`, over the `tree` it describes) and the approval cases
+//! `ignore`, `shell`, `alias_roots`, over the `tree` it describes, with its
+//! `links` and `fifos` made where the platform can) and the approval cases
 //! of the SDKs' helper file (`agent/conformance.json`: `decisions`,
 //! `protected`, `refusals`). The SDKs run the same cases; these keep the
 //! Rust port honest each time the contract changes.
 
 use super::approval::{decision, Decision};
-use super::confine::tests::{conformance as helper_cases, tree};
-use super::confine::{confine, resolve_links, Access, DenyList};
+use super::confine::tests::{conformance as helper_cases, link_file, tree};
+use super::confine::{confine, resolve_links, windows_alias, Access, DenyList};
 use super::contract::{self, ApprovalRefusal, Refusal, CONTRACT_JSON};
-use super::output::{format_shell, Limits, ShellEnd};
+use super::output::{format_shell_kept, Limits, ShellEnd};
 use super::search::SearchIgnore;
 use super::tools::{self, ToolOutput, Workspace};
 use serde_json::Value;
-use std::path::PathBuf;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
@@ -29,11 +31,60 @@ fn list<'a>(v: &'a Value, key: &str) -> &'a Vec<Value> {
         .unwrap_or_else(|| panic!("conformance.{key}"))
 }
 
-/// The conformance tree as a workspace, and its canonical root.
-fn workspace(cases: &Value) -> (tempfile::TempDir, PathBuf) {
+/// The conformance tree as a workspace, its canonical root, and which of
+/// `links` and `fifos` could be made in it after the tree (a case that
+/// `needs` one that could not is skipped).
+fn workspace(cases: &Value) -> (tempfile::TempDir, PathBuf, BTreeSet<&'static str>) {
     let dir = tree(cases["tree"].as_object().expect("conformance.tree"));
     let root = resolve_links(dir.path()).unwrap();
-    (dir, root)
+    let mut made = BTreeSet::new();
+    match make_fifos(&root, list(cases, "fifos")) {
+        Ok(()) => {
+            made.insert("fifos");
+        }
+        Err(why) => eprintln!("fifos not made: {why}"),
+    }
+    let links = cases["links"].as_object().expect("conformance.links");
+    let linked = links.iter().try_for_each(|(link, target)| {
+        link_file(Path::new(target.as_str().unwrap()), &root.join(link))
+    });
+    match linked {
+        Ok(()) => {
+            made.insert("links");
+        }
+        Err(why) => eprintln!("links not made: {why}"),
+    }
+    (dir, root, made)
+}
+
+/// The named pipes `fifos` lists, made with mkfifo(3); none on Windows,
+/// whose named pipes live outside the filesystem.
+fn make_fifos(root: &Path, fifos: &[Value]) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        for fifo in fifos {
+            let path = root.join(fifo.as_str().unwrap());
+            let c = std::ffi::CString::new(path.to_string_lossy().as_bytes())
+                .map_err(|e| e.to_string())?;
+            // SAFETY: a plain mkfifo(3) on a path in this test's own tree.
+            if unsafe { libc::mkfifo(c.as_ptr(), 0o600) } != 0 {
+                return Err(std::io::Error::last_os_error().to_string());
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (root, fifos);
+        Err("Windows has no named pipes in the filesystem".into())
+    }
+}
+
+/// Whether a case can run: everything it `needs` was made.
+fn runnable(case: &Value, made: &BTreeSet<&str>) -> bool {
+    case["needs"]
+        .as_array()
+        .is_none_or(|needs| needs.iter().all(|n| made.contains(n.as_str().unwrap())))
 }
 
 /// The contract's limits with a case's `limits` laid over them.
@@ -61,11 +112,16 @@ fn limits_of(case: &Value) -> Limits {
 #[test]
 fn every_paths_case() {
     let cases = contract_cases();
-    let (_dir, root) = workspace(&cases);
+    let (_dir, root, made) = workspace(&cases);
     let deny = DenyList::load(&root);
     let all = list(&cases, "paths");
-    assert_eq!(all.len(), 56, "the contract's 56 paths cases");
+    assert_eq!(all.len(), 59, "the contract's 59 paths cases");
+    let mut skipped = 0;
     for case in all {
+        if !runnable(case, &made) {
+            skipped += 1;
+            continue;
+        }
         let path = case["path"].as_str().unwrap();
         let access = if case["write"].as_bool().unwrap_or(false) {
             Access::Write
@@ -88,6 +144,14 @@ fn every_paths_case() {
                 assert_eq!(ok.relative, case["relative"].as_str().unwrap(), "{path:?}");
             }
         }
+    }
+    report_skipped("paths", skipped, &made);
+}
+
+/// Says how many cases were skipped for a fixture the platform cannot make.
+fn report_skipped(kind: &str, skipped: usize, made: &BTreeSet<&str>) {
+    if skipped > 0 {
+        eprintln!("skipped {skipped} {kind} cases: they need a link or a named pipe this platform could not make (made: {made:?})");
     }
 }
 
@@ -112,10 +176,15 @@ fn run_tool(ws: &Workspace, tool: &str, args: Value) -> ToolOutput {
 #[test]
 fn every_tools_case() {
     let cases = contract_cases();
-    let (_dir, root) = workspace(&cases);
+    let (_dir, root, made) = workspace(&cases);
     let all = list(&cases, "tools");
-    assert_eq!(all.len(), 49, "the contract's 49 tools cases");
+    assert_eq!(all.len(), 59, "the contract's 59 tools cases");
+    let mut skipped = 0;
     for case in all {
+        if !runnable(case, &made) {
+            skipped += 1;
+            continue;
+        }
         let tool = case["tool"].as_str().unwrap();
         let name = format!("{tool} {}", case["args"]);
         let mut ws = Workspace::new(&root, &RUNNING);
@@ -138,15 +207,16 @@ fn every_tools_case() {
             assert!(out.output.starts_with(prefix), "{name}: {}", out.output);
         }
     }
+    report_skipped("tools", skipped, &made);
 }
 
 #[test]
 fn every_ignore_case() {
     let cases = contract_cases();
-    let (_dir, root) = workspace(&cases);
+    let (_dir, root, _) = workspace(&cases);
     let rules = SearchIgnore::load(&root, DenyList::load(&root));
     let all = list(&cases, "ignore");
-    assert_eq!(all.len(), 36, "the contract's 36 ignore cases");
+    assert_eq!(all.len(), 38, "the contract's 38 ignore cases");
     for case in all {
         let path = case["path"].as_str().unwrap();
         let is_dir = case["is_dir"].as_bool().unwrap_or(false);
@@ -163,7 +233,7 @@ fn every_ignore_case() {
 fn every_shell_case() {
     let cases = contract_cases();
     let all = list(&cases, "shell");
-    assert_eq!(all.len(), 7, "the contract's 7 shell cases");
+    assert_eq!(all.len(), 10, "the contract's 10 shell cases");
     for case in all {
         let end = if case["timed_out"].as_bool().unwrap_or(false) {
             ShellEnd::TimedOut(case["timeout_s"].as_u64().unwrap())
@@ -173,11 +243,28 @@ fn every_shell_case() {
             ShellEnd::Exited(case["exit_code"].as_i64().map(|c| c as i32))
         };
         let output = case["output"].as_str().unwrap();
+        // A case with `omitted` passes the kept ends of a longer output.
+        let omitted = case["omitted"].as_u64().unwrap_or(0) as usize;
         assert_eq!(
-            format_shell(output, end, &limits_of(case)),
+            format_shell_kept(end, output.as_bytes(), omitted, &limits_of(case)),
             case["expected"].as_str().unwrap(),
             "{case}"
         );
+    }
+}
+
+/// `windows_alias(path, root)` for roots inside folders whose names are
+/// Windows aliases: only the names below the root count.
+#[test]
+fn every_alias_roots_case() {
+    let cases = contract_cases();
+    let all = list(&cases, "alias_roots");
+    assert_eq!(all.len(), 13, "the contract's 13 alias_roots cases");
+    for case in all {
+        let root = case["root"].as_str().unwrap();
+        let path = case["path"].as_str().unwrap();
+        let got = windows_alias(path, Some(root)).map(Refusal::code);
+        assert_eq!(got, case["refused"].as_str(), "{path} under {root}");
     }
 }
 

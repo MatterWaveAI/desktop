@@ -943,7 +943,8 @@ pub(crate) struct RunStarted {
 }
 
 /// The context files of `root`, in the contract's order (MATTERWAVE.md,
-/// MATTERWAVE.local.md, AGENTS.md; where two disagree the later wins):
+/// AGENTS.md, then the person's own MATTERWAVE.local.md, which wins where
+/// two disagree, since the later one does):
 /// loaded when it is trusted, only named when it is not. Each goes through
 /// confinement like any tool path, and only the first `CONTEXT_MAX_BYTES`
 /// of each is read.
@@ -962,8 +963,13 @@ pub(crate) fn context_files(root: &Path, trusted: bool) -> (Vec<ContextFile>, Ve
             skipped.push(target.relative);
             continue;
         }
-        let Ok(mut bytes) = std::fs::File::open(&target.absolute).and_then(|f| {
+        // Never waited on: a pipe swapped in since the check above is seen
+        // on the handle and skipped.
+        let Ok(mut bytes) = tools::open_without_waiting(&target.absolute).and_then(|f| {
             use std::io::Read;
+            if !f.metadata()?.is_file() {
+                return Err(std::io::Error::other("not a regular file"));
+            }
             let mut bytes = Vec::new();
             f.take(CONTEXT_MAX_BYTES as u64 + 1)
                 .read_to_end(&mut bytes)?;

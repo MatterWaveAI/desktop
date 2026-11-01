@@ -61,6 +61,7 @@ const contractCases = (hostContract as {
     ignore: { path: string; is_dir?: boolean; ancestors?: boolean; ignored: boolean }[];
     shell: {
       output: string;
+      omitted?: number;
       exit_code: number | null;
       timed_out?: boolean;
       stopped?: boolean;
@@ -68,13 +69,14 @@ const contractCases = (hostContract as {
       limits?: Limits;
       expected: string;
     }[];
+    alias_roots: { root: string; path: string; refused: string | null }[];
   };
 }).conformance;
 
 describe("the vendored agent contract", () => {
   it("is the contract the native host reads", () => {
     expect(CONTRACT).toEqual(hostContract);
-    expect(CONTRACT_VERSION).toBe("1.1.0");
+    expect(CONTRACT_VERSION).toBe("1.2.0");
   });
 
   it("has the hash it was generated with", () => {
@@ -153,6 +155,13 @@ describe("the contract's own cases the SPA can run", () => {
     }
   });
 
+  it("checks only the names below the root", () => {
+    expect(contractCases.alias_roots).toHaveLength(13);
+    for (const c of contractCases.alias_roots) {
+      expect(windowsAlias(c.path, c.root), `${c.path} under ${c.root}`).toBe(c.refused);
+    }
+  });
+
   it("ignores what search ignores", () => {
     const tree = contractCases.tree;
     const rules = new SearchIgnore((relative) => tree[relative] ?? null);
@@ -172,6 +181,7 @@ describe("the contract's own cases the SPA can run", () => {
           stopped: c.stopped ?? false,
           timeoutS: c.timeout_s,
           limits: c.limits,
+          omitted: c.omitted,
         }),
       ).toBe(c.expected);
     }

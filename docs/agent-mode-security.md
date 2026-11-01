@@ -6,7 +6,7 @@ security gate) signs off. T-406 asks two things of any tool-calling feature befo
 1. a named design pattern, and
 2. a written prompt-injection analysis.
 
-This file provides both for the desktop's agent mode, as of agent contract 1.1.0. The README's
+This file provides both for the desktop's agent mode, as of agent contract 1.2.0. The README's
 "Agent mode" section describes how the feature works. This file describes what stops it from going
 wrong.
 

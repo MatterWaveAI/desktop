@@ -492,12 +492,13 @@ it stays until clicked. The native dialogs follow the dialog plugin's threading 
 thread on Linux) but have only been exercised on Windows. The full list, with the
 prompt-injection analysis, is in [docs/agent-mode-security.md](docs/agent-mode-security.md).
 
-**The contract** (1.1.0). `src-tauri/agent/contract.json` and `conformance.json` are byte-for-byte
+**The contract** (1.2.0). `src-tauri/agent/contract.json` and `conformance.json` are byte-for-byte
 copies of the Python SDK's `contract.json` and `tests/agent_conformance.json`, the one source both
 SDKs are generated from. `contract.rs` restates the tools, modes, deny and protected lists,
 limits, output sentences and refusals, and its tests fail when the copy and the code disagree;
-`conformance.rs` runs every case the contract carries (`paths`, `tools`, `ignore`, `shell`, over
-its `tree`) and the helper file's `decisions`, `protected` and `refusals` against the Rust host
+`conformance.rs` runs every case the contract carries (`paths`, `tools`, `ignore`, `shell`,
+`alias_roots`, over its `tree`, with its `links` and `fifos` made where the platform can) and the
+helper file's `decisions`, `protected` and `refusals` against the Rust host
 itself. With `MATTERWAVE_AGENT_CONTRACT` / `MATTERWAVE_AGENT_CONFORMANCE` naming the Python SDK's
 files, or a `python-sdk` checkout beside this one, the copies are also checked against their
 source (CI checks out the SDK's `develop` for it, without gating on it). The SPA's copy of the
