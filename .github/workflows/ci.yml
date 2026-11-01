@@ -6,8 +6,9 @@ name: CI
 # will not start is as broken as one that does not compile.
 on:
   push:
-    branches: [main, develop]
+    branches: [develop, main]
   pull_request:
+    branches: [develop, main]
 
 # Read the code, nothing else: no job here writes to the repository.
 permissions:
