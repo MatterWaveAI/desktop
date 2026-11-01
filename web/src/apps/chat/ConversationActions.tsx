@@ -158,9 +158,9 @@ export function ConversationActions(props: {
           <DropdownMenuTrigger
             ref={buttonRef}
             aria-label="Conversation actions"
-            className="inline-flex size-8 items-center justify-center rounded border border-mw-border text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text pointer-coarse:size-11"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-mw-text-muted outline-none hover:bg-mw-surface-hover hover:text-mw-text focus-visible:ring-2 focus-visible:ring-mw-focus data-popup-open:bg-mw-surface-hover pointer-coarse:size-11"
           >
-            <MoreHorizontalIcon className="size-4" aria-hidden />
+            <MoreHorizontalIcon className="size-5" aria-hidden />
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"

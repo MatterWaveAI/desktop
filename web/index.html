@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <!--
-      T-804 step 1. Three things in one line:
+      This page is the desktop app's own, not a copy of the platform's
+      (spa/upstream.json excludes it): the CSP in src-tauri/tauri.conf.json
+      allows the theme script below by its hash, so a change to that script
+      is a change to the CSP too, and a test holds the two together.
+
+      The viewport, three things in one line:
       - `viewport-fit=cover` lets the page paint under the notch and the home
         indicator, which is what makes env(safe-area-inset-*) non-zero.
       - `interactive-widget=resizes-content` tells Chromium to resize the LAYOUT
@@ -23,8 +28,8 @@
     <meta name="description" content="MatterWave — the platform your AI apps run on." />
     <title>MatterWave</title>
 
-    <!-- Brand basics (T-801 step 10): favicons at every size, PWA manifest,
-         per-scheme theme colour, OG image. -->
+    <!-- Brand basics: favicons at every size, PWA manifest, per-scheme
+         theme colour, OG image. -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />

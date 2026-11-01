@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { ChevronDownIcon } from "lucide-react";
+import { StatusDot } from "../../components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+} from "../../components/ui/select";
 import type { ModelInfo } from "../../types";
 import { apiFetch } from "../../lib/api";
 import { PARTNER_MODELS_HEADING } from "../../lib/billing";
-import {
-  describeModel,
-  groupModels,
-  loadModels,
-  lockedOptionText,
-  upgradeGroups,
-} from "../../lib/models";
+import { describeModel, groupModels, loadModels, upgradeGroups } from "../../lib/models";
 
 /** The composer's model picker.
 
@@ -24,7 +29,7 @@ import {
  *
  * Models are named by their label from the price list, never by a name
  * written here. A model the plan does not include is listed but disabled,
- * with the plan that has it, and the line under the control names that plan
+ * with the plan that has it, and a note under the list names that plan
  * and links to /pricing the way UpgradePrompt does for any other gated
  * feature: hiding it would leave a person not knowing it exists, and
  * offering it would only earn a 402.
@@ -102,8 +107,8 @@ export function ModelPicker({
   const fixedEntry = fixed === null ? undefined : all.find((m) => m.id === fixed.model);
   const selected = fixed !== null ? (fixedEntry ?? null) : value === null ? null : all.find((m) => m.id === value);
   // The default by its label when the list names it; the id otherwise.
-  const defaultName =
-    serverDefault === null ? null : (all.find((m) => m.id === serverDefault)?.label ?? serverDefault);
+  const defaultEntry = serverDefault === null ? undefined : all.find((m) => m.id === serverDefault);
+  const defaultName = serverDefault === null ? null : (defaultEntry?.label ?? serverDefault);
   const selectedDescription =
     fixed !== null
       ? `Set by the ${fixed.by} preset: ${fixedEntry === undefined ? fixed.model : describeModel(fixedEntry)}`
@@ -127,112 +132,150 @@ export function ModelPicker({
     }
   }
 
+  // What the pill reads: the model in force, by its label. "Default" is a
+  // word in the list, not on the pill -- the pill answers "which model".
+  const pillLabel =
+    fixed !== null
+      ? (fixedEntry?.label ?? fixed.model)
+      : selected !== undefined && selected !== null
+        ? selected.label
+        : (defaultName ?? (models === null ? "Model" : "Default"));
+  // A research preview in force is the one choice the pill must not call
+  // healthy: amber, and the warning is its description.
+  const dotTone = models === null ? "neutral" : selected?.research_preview ? "warning" : "positive";
+
+  const upgradeNote =
+    locked.length > 0 ? (
+      <p
+        data-model-upgrade=""
+        className="mx-1 mt-1 border-t border-mw-border px-1.5 pt-2 pb-1 text-xs text-mw-text-muted"
+      >
+        {locked
+          .map((group) =>
+            group.plan === null
+              ? `${group.labels.join(", ")}: not on your plan.`
+              : `${group.plan} includes ${group.labels.join(", ")}.`,
+          )
+          .join(" ")}{" "}
+        <Link to="/pricing" className="text-mw-link underline underline-offset-2 hover:text-mw-link-hover">
+          See plans
+        </Link>
+      </p>
+    ) : null;
+
   return (
-    /* The header row's own width and padding belong to the row (the
-       instructions affordance sits beside this one), not to each control in it. */
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-none">
-      <label className="flex min-w-0 items-center gap-2 text-xs text-mw-text-muted">
-        <span className="sr-only sm:not-sr-only">Model</span>
-        {/* On a phone the box takes the row's spare width rather than a
-            fixed one: capped at 9rem it clipped the default's own name to
-            "Default (GRT Nan…", which is the one word it exists to show. */}
-        <select
-          className="h-8 w-full min-w-0 rounded border border-mw-border bg-transparent px-2 text-xs sm:w-auto pointer-coarse:h-11"
-          value={fixed !== null ? fixed.model : (value ?? "")}
-          onChange={(event) => void select(event.target.value === "" ? null : event.target.value)}
-          disabled={models === null || fixed !== null}
-          data-mw-model-fixed={fixed === null ? undefined : ""}
-          title={fixed === null ? undefined : `Set by the ${fixed.by} preset`}
-          aria-label="Model"
-          // Points at the line below, so the description is announced with
-          // the control rather than being visual-only.
-          aria-describedby="mw-model-description"
-        >
-          {/* The fixed model is the box's one option, by its label: the
-              list never opens while it is fixed, and a locked entry's
-              "needs Pro" would be wrong of a model the preset answers with. */}
-          {fixed !== null && <option value={fixed.model}>{fixedEntry?.label ?? fixed.model}</option>}
-          {/* Names the model rather than saying only "Default": a user cannot
-              judge an answer, or a cost, against a model they cannot name. */}
-          {fixed === null && (
-            <option value="">
-              {defaultName === null ? "Default" : `Default (${defaultName})`}
-            </option>
-          )}
-          {fixed === null && models?.map(optionFor)}
-          {fixed === null && partners.length > 0 && (
-            // Another provider's models: offered for testing and usable only
-            // on a plan that names them, so never mixed into the list above.
-            <optgroup label={PARTNER_MODELS_HEADING}>{partners.map(optionFor)}</optgroup>
-          )}
-          {fixed === null && previews.length > 0 && (
-            // Research previews stay in their own group, never in the main
-            // list and never the default — the default option above is the
-            // server's, and a research preview is never the default.
-            <optgroup label="Research preview — not for real use">
-              {previews.map((model) =>
-                model.included ? (
-                  <option key={model.id} value={model.id}>
-                    {model.label} — research demo, grammatical not factual
-                  </option>
-                ) : (
-                  <option key={model.id} value={model.id} disabled>
-                    {lockedOptionText(model)}
-                  </option>
-                ),
-              )}
-            </optgroup>
-          )}
-        </select>
-      </label>
-      {/* The selected model's line, in full. A <select> option is one line of
-          plain text and truncates in most browsers, so the honest description
-          needs somewhere it can actually be read. */}
-      {/* Always drawn, beside the upgrade note and wrapping under it when
-          the two do not fit on one line: cut to one line each they read
-          "this deployme…" and "Pro Plus include…", which is no hint at all.
-          The row keeps its first line's height from before the list loads,
-          so the transcript does not jump when the list lands. On a phone the
-          text stays for the screen reader (the box points at it) and is not
-          drawn, leaving the header one row. */}
-      <div className="hidden min-h-4 min-w-0 flex-wrap items-baseline gap-x-2 sm:flex">
-        <p id="mw-model-description" className="min-w-0 text-xs text-mw-text-muted">
-          {selectedDescription}
-        </p>
-        {locked.length > 0 && (
-          <p data-model-upgrade className="min-w-0 text-xs text-mw-text-muted">
-            {locked
-              .map((group) =>
-                group.plan === null
-                  ? `${group.labels.join(", ")}: not on your plan.`
-                  : `${group.plan} includes ${group.labels.join(", ")}.`,
-              )
-              .join(" ")}{" "}
-            <Link to="/pricing" className="underline underline-offset-2">
-              See plans
-            </Link>
-          </p>
+    <Select
+      value={fixed !== null ? fixed.model : (value ?? DEFAULT_VALUE)}
+      onValueChange={(next) => {
+        if (next === null) return;
+        void select(next === DEFAULT_VALUE ? null : String(next));
+      }}
+      disabled={models === null || fixed !== null}
+    >
+      {/* One pill: the status dot, the model's name, the chevron. The
+          price, the window and a research preview's warning are each
+          option's second line in the list, where they can be read in full,
+          and the selected one's is the control's description, so a screen
+          reader hears which model "Default" really is. */}
+      <SelectPrimitive.Trigger
+        aria-label="Model"
+        aria-describedby="mw-model-description"
+        data-mw-model-picker=""
+        data-mw-model-fixed={fixed === null ? undefined : ""}
+        title={fixed === null ? undefined : `Set by the ${fixed.by} preset`}
+        className="inline-flex h-10 max-w-44 min-w-0 shrink items-center gap-2 rounded-full border border-mw-border-emphasis bg-mw-surface-raised pr-3 pl-3.5 text-sm text-mw-text transition-colors outline-none select-none hover:bg-mw-surface-hover focus-visible:ring-2 focus-visible:ring-mw-focus focus-visible:ring-offset-2 focus-visible:ring-offset-mw-surface disabled:cursor-progress data-popup-open:bg-mw-surface-hover sm:max-w-64 pointer-coarse:h-11"
+      >
+        <StatusDot tone={dotTone} />
+        <span className="min-w-0 truncate" data-mw-model-label="">
+          {pillLabel}
+        </span>
+        <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 text-mw-text-muted" />
+      </SelectPrimitive.Trigger>
+      <span id="mw-model-description" className="sr-only">
+        {selectedDescription}
+      </span>
+      <SelectContent
+        align="end"
+        alignItemWithTrigger={false}
+        sideOffset={6}
+        aria-label="Models"
+        className="w-[min(22rem,calc(100vw-2rem))] max-w-none p-1"
+        footer={upgradeNote}
+      >
+        {/* The fixed model is the list's one entry, by its label: the list
+            never opens while it is fixed, and a locked entry's "needs Pro"
+            would be wrong of a model the preset answers with. */}
+        {fixed !== null && (
+          <SelectItem value={fixed.model} data-mw-model="">
+            {fixedEntry?.label ?? fixed.model}
+          </SelectItem>
         )}
-      </div>
-    </div>
+        {fixed === null && (
+          <SelectItem
+            value={DEFAULT_VALUE}
+            data-mw-model=""
+            description={defaultEntry === undefined ? "This deployment's choice." : describeModel(defaultEntry)}
+          >
+            {defaultName === null ? "Default" : `Default (${defaultName})`}
+          </SelectItem>
+        )}
+        {fixed === null && models?.map(itemFor)}
+        {fixed === null && partners.length > 0 && (
+          // Another provider's models: offered for testing and usable only
+          // on a plan that names them, so never mixed into the list above.
+          <SelectGroup className="p-0">
+            <SelectSeparator />
+            <SelectLabel>{PARTNER_MODELS_HEADING}</SelectLabel>
+            {partners.map(itemFor)}
+          </SelectGroup>
+        )}
+        {fixed === null && previews.length > 0 && (
+          // Research previews stay in their own group, never in the main
+          // list and never the default -- the default above is the
+          // server's, and a research preview is never the default.
+          <SelectGroup className="p-0">
+            <SelectSeparator />
+            <SelectLabel className="text-mw-warning-foreground">
+              Research preview — not for real use
+            </SelectLabel>
+            {previews.map(itemFor)}
+          </SelectGroup>
+        )}
+      </SelectContent>
+    </Select>
   );
 }
 
-/** One ordinary entry: its label and price, or disabled with the plan that has it. */
-function optionFor(model: ModelInfo) {
+/** The "nothing picked" entry's value; the API's own is the absence of a model. */
+const DEFAULT_VALUE = "__default__";
+
+/**
+ * One entry: its label, with the price and window (or a research
+ * preview's warning) as its second line. A model the plan does not include
+ * is listed but disabled, naming the plan that has it.
+ */
+function itemFor(model: ModelInfo) {
   if (!model.included) {
     return (
-      <option key={model.id} value={model.id} disabled>
-        {lockedOptionText(model)}
-      </option>
+      <SelectItem
+        key={model.id}
+        value={model.id}
+        disabled
+        data-mw-model={model.id}
+        description={model.upgrade_to === null ? "Not on your plan" : `Needs ${model.upgrade_to}`}
+      >
+        {model.label}
+      </SelectItem>
     );
   }
-  // The label alone. The price and window are the description line's, in
-  // full: a <select> option is one line of plain text that most browsers
-  // truncate, and "$0.10 / $0.40 per 1M · counts 1×" there read as jargon.
   return (
-    <option key={model.id} value={model.id}>
+    <SelectItem
+      key={model.id}
+      value={model.id}
+      data-mw-model={model.id}
+      description={describeModel(model)}
+    >
       {model.label}
-    </option>
+    </SelectItem>
   );
 }

@@ -1,3 +1,6 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
+
 /*
  * Metadata only -- ids, titles, groups, descriptions -- and no pane
  * components. routes.ts and the command palette import this from the main
@@ -16,6 +19,13 @@ import { desktopDevEnabled } from "../../lib/desktopDev";
 export const SETTINGS_GROUPS = ["You", "Organisation", "Plan and usage"] as const;
 export type SettingsGroup = (typeof SETTINGS_GROUPS)[number];
 
+/** Each group's heading as the reader's language writes it; the group itself is an id. */
+export const SETTINGS_GROUP_LABELS: Record<SettingsGroup, MessageDescriptor> = {
+  You: msg`You`,
+  Organisation: msg`Organisation`,
+  "Plan and usage": msg`Plan and usage`,
+};
+
 /**
  * The platform's own settings panes. This is deliberately a flat list and
  * not a registry: a slot mechanism that lets an *app* contribute a pane is
@@ -31,32 +41,39 @@ export type SettingsGroup = (typeof SETTINGS_GROUPS)[number];
 export interface SettingsPane {
   /** URL segment: `/settings/<id>`. */
   id: string;
-  title: string;
+  /** A descriptor: render it with `i18n._(pane.title)`. */
+  title: MessageDescriptor;
   group: SettingsGroup;
   /** One line under the tab, naming what the pane is for. */
-  description: string;
+  description: MessageDescriptor;
 }
 
+/**
+ * Plain descriptors, not `msg`: a dev-only pane has no translations to
+ * extract, and a descriptor's own message is what renders without one.
+ */
 const DESKTOP_DEV_PANE: SettingsPane = {
   id: "desktop",
   group: "You",
-  title: "Desktop diagnostics",
-  description: "Dev only: capability flags, a test notification, and the updater's stages.",
+  title: { id: "settings.desktop.title", message: "Desktop diagnostics" },
+  description: {
+    id: "settings.desktop.description",
+    message: "Dev only: capability flags, a test notification, and the updater's stages.",
+  },
 };
 
 const basePanes: readonly SettingsPane[] = [
   {
     id: "account",
     group: "You",
-    title: "Account",
-    description: "Who you are, how you sign in, and where you are signed in.",
+    title: msg`Account`,
+    description: msg`Who you are, how you sign in, and where you are signed in.`,
   },
   {
     id: "preferences",
     group: "You",
-    title: "Preferences",
-    description:
-      "Theme, language and notifications; in the desktop app, read-aloud and the global hotkey.",
+    title: msg`Preferences`,
+    description: msg`Theme, language and notifications.`,
   },
   {
     // Its own pane rather than a section of Preferences. It is the
@@ -65,30 +82,30 @@ const basePanes: readonly SettingsPane[] = [
     // more than a Preferences section should hold.
     id: "instructions",
     group: "You",
-    title: "Custom instructions",
-    description: "What MatterWave should know about you, and how it should respond.",
+    title: msg`Custom instructions`,
+    description: msg`What MatterWave should know about you, and how it should respond.`,
   },
   {
     id: "data",
     group: "You",
-    title: "Data",
-    description: "Export or import your conversations, manage shared links, or delete the account.",
+    title: msg`Data`,
+    description: msg`Export or import your conversations, manage shared links, or delete the account.`,
   },
   {
     id: "organisation",
     group: "Organisation",
-    title: "Organisation",
+    title: msg`Organisation`,
     // Names its three tabs: General (name, domains, instructions, models),
     // Sign-in & security, and the audit log.
-    description: "Name, domains and models; sign-in and security; the audit log.",
+    description: msg`Name, domains and models; sign-in and security; the audit log.`,
   },
   {
     // The membership model: every member sees the list, the caller's
     // org role decides which actions the pane offers.
     id: "members",
     group: "Organisation",
-    title: "Members",
-    description: "People in your organisation and what they can do.",
+    title: msg`Members`,
+    description: msg`People in your organisation and what they can do.`,
   },
   {
     // Its own pane rather than a tab of Organisation: every member reads
@@ -96,8 +113,8 @@ const basePanes: readonly SettingsPane[] = [
     // an admin's, and a preset needs a form of its own.
     id: "presets",
     group: "Organisation",
-    title: "Presets",
-    description: "Ready-made assistants: a model, instructions and tools, picked in the composer.",
+    title: msg`Presets`,
+    description: msg`Ready-made assistants: a model, instructions and tools, picked in the composer.`,
   },
   {
     // Beside Members rather than inside Organisation: an endpoint is the
@@ -105,8 +122,8 @@ const basePanes: readonly SettingsPane[] = [
     // and the once-shown secret need a URL of their own to be sent to.
     id: "webhooks",
     group: "Organisation",
-    title: "Webhooks",
-    description: "Where this organisation's events are posted, and how each delivery went.",
+    title: msg`Webhooks`,
+    description: msg`Where this organisation's events are posted, and how each delivery went.`,
   },
   {
     // Beside Webhooks, its inbound counterpart: a workspace that asks
@@ -115,15 +132,14 @@ const basePanes: readonly SettingsPane[] = [
     // their own to be sent to.
     id: "connections",
     group: "Organisation",
-    title: "Connections",
-    description:
-      "Workspaces that can ask your presets a question, which channels are answered, and on whose budget.",
+    title: msg`Connections`,
+    description: msg`Workspaces that can ask your presets a question, which channels are answered, and on whose budget.`,
   },
   {
     id: "keys",
     group: "Organisation",
-    title: "API keys",
-    description: "Tokens for scripts and other clients. Shown once, revocable any time.",
+    title: msg`API keys`,
+    description: msg`Tokens for scripts and other clients. Shown once, revocable any time.`,
   },
   {
     // Beside API keys: a paired box is a key that can only add
@@ -131,20 +147,20 @@ const basePanes: readonly SettingsPane[] = [
     // On a box the same pane takes the pairing code instead.
     id: "devices",
     group: "Organisation",
-    title: "Devices",
-    description: "Edge boxes that mirror their conversations here, and pairing new ones.",
+    title: msg`Devices`,
+    description: msg`Edge boxes that mirror their conversations here, and pairing new ones.`,
   },
   {
     id: "usage",
     group: "Plan and usage",
-    title: "Usage",
-    description: "What you have spent against your plan this period.",
+    title: msg`Usage`,
+    description: msg`What you have spent against your plan this period.`,
   },
   {
     id: "budget",
     group: "Plan and usage",
-    title: "Budget",
-    description: "Included tokens this month, and the cap on what more may cost.",
+    title: msg`Budget`,
+    description: msg`Included tokens this month, and the cap on what more may cost.`,
   },
   {
     // The plan and the hand-off to Stripe's portal. Beside Budget
@@ -153,8 +169,8 @@ const basePanes: readonly SettingsPane[] = [
     // person who conflates the two goes looking for the cap in the wrong place.
     id: "billing",
     group: "Plan and usage",
-    title: "Billing",
-    description: "Your plan, when it renews, and where to change it.",
+    title: msg`Billing`,
+    description: msg`Your plan, when it renews, and where to change it.`,
   },
 ];
 

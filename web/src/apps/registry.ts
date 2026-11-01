@@ -1,4 +1,7 @@
 import { lazyRouteComponent, type RouteComponent } from "@tanstack/react-router";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
+import { i18n } from "../i18n/runtime";
 import type { FlagName } from "../types";
 import { ChatPage } from "./chat/ChatPage";
 
@@ -10,7 +13,12 @@ const StatesPage = lazyRouteComponent(() => import("../dev/StatesPage"), "States
 
 export interface AppDescriptor {
   id: string;
-  title: string;
+  /**
+   * A descriptor, not a string: the registry is read when its module loads,
+   * before any catalogue is active. Render it with `i18n._(app.title)`, or
+   * `appTitle(app)` outside a component (the route's `<title>`).
+   */
+  title: MessageDescriptor;
   path: string;
   component: RouteComponent;
   /** Set while the app ships behind a flag; hidden from the nav until it is on. */
@@ -31,18 +39,18 @@ export interface AppDescriptor {
  * feature, and nothing here assumes it.
  */
 export const apps: readonly AppDescriptor[] = [
-  { id: "chat", title: "Chat", path: "/apps/chat", component: ChatPage },
+  { id: "chat", title: msg`Chat`, path: "/apps/chat", component: ChatPage },
   // The operator's surface: platform admins only, by the `admin`
   // role the identity provider puts in the token, so access is revoked
   // centrally rather than in our database.
-  { id: "admin", title: "Admin", path: "/admin", component: AdminPage, role: "admin" },
+  { id: "admin", title: msg`Admin`, path: "/admin", component: AdminPage, role: "admin" },
   // Host-owned design-system page, not a user app: registered
   // so the route tree derives from this list like every other route, flagged
   // so it never shows in end-user nav. The API does not serve `dev_tokens`
   // yet — until it does the page is reachable by URL only.
   {
     id: "dev-tokens",
-    title: "Design tokens",
+    title: msg`Design tokens`,
     path: "/dev/tokens",
     component: TokensPage,
     flag: "dev_tokens",
@@ -52,9 +60,14 @@ export const apps: readonly AppDescriptor[] = [
   // pattern as /dev/tokens: host-owned, never in end-user nav.
   {
     id: "dev-states",
-    title: "UI states",
+    title: msg`UI states`,
     path: "/dev/states",
     component: StatesPage,
     flag: "dev_states",
   },
 ];
+
+/** An app's title in the active language, read when it is called. */
+export function appTitle(app: Pick<AppDescriptor, "title">): string {
+  return i18n._(app.title);
+}

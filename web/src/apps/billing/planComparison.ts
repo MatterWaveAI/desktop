@@ -1,3 +1,6 @@
+import { i18n, type MessageDescriptor } from "@lingui/core";
+import { msg, plural, t } from "@lingui/core/macro";
+import { formatNumber } from "../../i18n/format";
 import {
   formatPrice,
   overageSummary,
@@ -23,17 +26,17 @@ export interface ComparisonRow {
 }
 
 /** What the admin editors call each feature switch (plans.py FEATURES). */
-const FEATURE_LABELS: Record<string, string> = {
-  api_keys: "API keys",
-  custom_instructions: "Custom instructions",
-  org_sso: "Single sign-on",
+const FEATURE_LABELS: Record<string, MessageDescriptor> = {
+  api_keys: msg`API keys`,
+  custom_instructions: msg`Custom instructions`,
+  org_sso: msg`Single sign-on`,
 };
 
 /** The numeric limits worth a row, with how each reads. */
-const LIMIT_ROWS: readonly { key: string; label: string; format: (n: number) => string }[] = [
-  { key: "tpm_limit", label: "Tokens per minute", format: (n) => n.toLocaleString("en-US") },
-  { key: "rpm_limit", label: "Requests per minute", format: (n) => n.toLocaleString("en-US") },
-  { key: "max_parallel_requests", label: "Parallel requests", format: (n) => n.toLocaleString("en-US") },
+const LIMIT_ROWS: readonly { key: string; label: MessageDescriptor; format: (n: number) => string }[] = [
+  { key: "tpm_limit", label: msg`Tokens per minute`, format: (n) => formatNumber(n) },
+  { key: "rpm_limit", label: msg`Requests per minute`, format: (n) => formatNumber(n) },
+  { key: "max_parallel_requests", label: msg`Parallel requests`, format: (n) => formatNumber(n) },
 ];
 
 const FEATURE_ORDER = Object.keys(FEATURE_LABELS);
@@ -45,20 +48,21 @@ function humanise(key: string): string {
 }
 
 function seats(plan: PlanSummary): string {
-  if (plan.per_seat) return "One per member";
+  if (plan.per_seat) return t`One per member`;
   const n = plan.limits.max_seats;
-  return n == null ? "Unlimited" : `${n}`;
+  return n == null ? t`Unlimited` : formatNumber(n);
 }
 
 function conversations(plan: PlanSummary): string {
   const n = plan.limits.max_conversations;
-  return n == null ? "Unlimited" : n.toLocaleString("en-US");
+  return n == null ? t`Unlimited` : formatNumber(n);
 }
 
 function price(plan: PlanSummary, annual: boolean): string {
-  if (plan.price_cents_monthly === 0) return "Free";
-  const cents = annual ? plan.price_cents_annual : plan.price_cents_monthly;
-  return `${formatPrice(cents)}${plan.per_seat ? " per seat" : ""} / ${annual ? "year" : "month"}`;
+  if (plan.price_cents_monthly === 0) return t`Free`;
+  const amount = formatPrice(annual ? plan.price_cents_annual : plan.price_cents_monthly);
+  if (plan.per_seat) return annual ? t`${amount} per seat / year` : t`${amount} per seat / month`;
+  return annual ? t`${amount} / year` : t`${amount} / month`;
 }
 
 export function comparisonRows(
@@ -67,19 +71,19 @@ export function comparisonRows(
   annual: boolean,
 ): ComparisonRow[] {
   const rows: ComparisonRow[] = [
-    { key: "price", label: "Price", cells: plans.map((plan) => price(plan, annual)) },
-    { key: "allowance", label: "Monthly allowance", cells: plans.map(planAllowance) },
-    { key: "overage", label: "Past the allowance", cells: plans.map((plan) => overageSummary(plan, annual)) },
-    { key: "seats", label: "Seats", cells: plans.map(seats) },
-    { key: "conversations", label: "Conversations", cells: plans.map(conversations) },
-    { key: "models", label: "Models", cells: plans.map((plan) => planModelLabels(plan, models).join(", ")) },
+    { key: "price", label: t`Price`, cells: plans.map((plan) => price(plan, annual)) },
+    { key: "allowance", label: t`Monthly allowance`, cells: plans.map(planAllowance) },
+    { key: "overage", label: t`Past the allowance`, cells: plans.map((plan) => overageSummary(plan, annual)) },
+    { key: "seats", label: t`Seats`, cells: plans.map(seats) },
+    { key: "conversations", label: t`Conversations`, cells: plans.map(conversations) },
+    { key: "models", label: t`Models`, cells: plans.map((plan) => planModelLabels(plan, models).join(", ")) },
   ];
   for (const limit of LIMIT_ROWS) {
     const values = plans.map((plan) => plan.limits[limit.key]);
     if (!values.some((v) => typeof v === "number")) continue;
     rows.push({
       key: limit.key,
-      label: limit.label,
+      label: i18n._(limit.label),
       cells: values.map((v) => (typeof v === "number" ? limit.format(v) : "—")),
     });
   }
@@ -91,15 +95,15 @@ export function comparisonRows(
   for (const key of featureKeys) {
     rows.push({
       key: `feature:${key}`,
-      label: FEATURE_LABELS[key] ?? humanise(key),
-      cells: plans.map((plan) => (plan.limits.features?.[key] ? "Included" : "—")),
+      label: key in FEATURE_LABELS ? i18n._(FEATURE_LABELS[key]) : humanise(key),
+      cells: plans.map((plan) => (plan.limits.features?.[key] ? t`Included` : "—")),
     });
   }
   return rows;
 }
 
 /** Why the recommended card is recommended: one line under its badge. */
-export const RECOMMENDED_REASON = "Most teams start here";
+export const RECOMMENDED_REASON = msg`Most teams start here`;
 
 /**
  * Which card wears "Recommended": for a stranger, or an organisation on
@@ -132,5 +136,5 @@ export function annualSaving(plan: Pick<PlanSummary, "price_cents_monthly" | "pr
   const monthly = plan.price_cents_monthly;
   if (monthly <= 0 || plan.price_cents_annual <= 0) return null;
   const months = Math.floor((12 * monthly - plan.price_cents_annual) / monthly + 1e-9);
-  return months >= 1 ? `${months} month${months === 1 ? "" : "s"} free` : null;
+  return months >= 1 ? plural(months, { one: "# month free", other: "# months free" }) : null;
 }

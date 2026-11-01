@@ -246,7 +246,7 @@ describe("a connector's conversation", () => {
       box.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
-      [...container!.querySelectorAll("button")].find((b) => b.textContent === "Send")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      [...container!.querySelectorAll("button")].find((b) => b.getAttribute("aria-label") === "Send")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     await flush();
 

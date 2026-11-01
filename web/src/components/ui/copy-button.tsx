@@ -1,6 +1,7 @@
 import * as React from "react"
 import { CheckIcon, CopyIcon } from "lucide-react"
 import { cn } from "cn"
+import { useLingui } from "@lingui/react/macro"
 
 // The guard lives with chat, which had the first Copy control; every copy
 // in the product goes through it so an insecure origin (plain http on the
@@ -25,8 +26,8 @@ import { Button } from "@/components/ui/button"
  */
 function CopyButton({
   text,
-  label = "Copy",
-  copiedLabel = "Copied",
+  label,
+  copiedLabel,
   iconOnly = false,
   variant = "outline",
   size,
@@ -43,9 +44,10 @@ function CopyButton({
   className?: string
   disabled?: boolean
 }) {
+  const { t } = useLingui()
   const { copied, copy } = useCopy()
   if (!clipboardAvailable()) return null
-  const current = copied ? copiedLabel : label
+  const current = copied ? (copiedLabel ?? t`Copied`) : (label ?? t`Copy`)
   return (
     <span data-slot="copy-button" aria-live="polite" className="inline-flex">
       <Button

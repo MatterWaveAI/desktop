@@ -1,4 +1,5 @@
 import { LegalPage, type LegalDocument } from "./LegalPage";
+import { msg } from "@lingui/core/macro";
 import { POLICY_PATH } from "./frontDoor";
 
 /**
@@ -10,7 +11,8 @@ import { POLICY_PATH } from "./frontDoor";
  * here; what each version changed is `termsChanges.ts`.
  */
 const TERMS: LegalDocument = {
-  title: "Terms of Service",
+  title: msg`Terms of Service`,
+
   lastUpdated: "2026-10-22",
   intro: (
     <p>

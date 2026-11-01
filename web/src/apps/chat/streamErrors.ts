@@ -83,10 +83,12 @@ export const STREAM_ERROR_COPY: Record<StreamErrorKind, StreamErrorCopy> = {
       "This workspace has used its monthly token budget: the plan's included tokens and any overage its cap allows. Nothing is broken — see Usage for when it resets; an admin can raise the overage cap or upgrade the plan.",
     retryable: false,
   },
+  // The window is full. Compacting is the way on that keeps the thread, so
+  // the inline action offers it; a new chat and a bigger model are the rest.
   context: {
     title: "This conversation is too long for the model",
     guidance:
-      "The conversation plus your message exceeds the model's context window. Start a new chat, or pick a model with a larger context window above.",
+      "The conversation plus your message no longer fits the model's context window. Compact it to summarise the older messages and keep going, start a new chat, or pick a model with a larger context window above.",
     retryable: false,
   },
   session: {
@@ -162,6 +164,13 @@ export const TRUNCATED_CODE = "truncated";
 export const REFUSAL_CODE = "refusal";
 
 /**
+ * The `code` on an `error` frame for a conversation past the model's
+ * window: the API's own sentence, never the gateway's, and the client
+ * answers it with Compact.
+ */
+export const CONTEXT_CODE = "context";
+
+/**
  * Whether loading a conversation failed because it is not there (deleted,
  * or never the caller's): a state, not a failed stream, and retrying it
  * cannot succeed.
@@ -193,6 +202,7 @@ export function classifyStreamError(
   if (code === "moderation") return "moderation";
   if (code === REFUSAL_CODE) return "refusal";
   if (code === TRUNCATED_CODE) return "truncated";
+  if (code === CONTEXT_CODE) return "context";
   const text = detail.toLowerCase();
   if (status === 401 || status === 403 || text.includes("expired") || text.includes("unauthor")) {
     return "session";

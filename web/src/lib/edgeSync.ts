@@ -1,3 +1,5 @@
+import { plural, t } from "@lingui/core/macro";
+import { formatRelativeTime } from "../i18n/format";
 import { apiFetch } from "./api";
 
 /**
@@ -59,13 +61,9 @@ export function fetchSyncStatus(): Promise<SyncStatus> {
 export function ago(iso: string, now: number): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return iso;
-  const minutes = Math.floor(Math.max(0, now - then) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  // A clock a little ahead of the box's still reads as the past.
+  if (now - then < 60_000) return t`just now`;
+  return formatRelativeTime(then, new Date(now));
 }
 
 export type SyncTone = "ok" | "busy" | "warn" | "error";
@@ -80,16 +78,29 @@ export interface SyncLine {
 function pendingText(status: SyncStatus): string | null {
   const n = status.pending_messages;
   if (n === null || n === undefined || n === 0) return null;
-  const count = status.pending_capped ? `${n}+` : String(n);
-  return `${count} message${n === 1 ? "" : "s"} waiting to sync`;
+  // Capped means "at least this many", always more than one.
+  if (status.pending_capped) {
+    const count = `${n}+`;
+    return t`${count} messages waiting to sync`;
+  }
+  return plural(n, { one: "# message waiting to sync", other: "# messages waiting to sync" });
 }
 
 function skippedText(status: SyncStatus): string | null {
   const n = status.skipped ?? 0;
   if (n === 0) return null;
   const latest = status.skipped_recent?.at(-1);
-  const last = latest ? ` (last: HTTP ${latest.status})` : "";
-  return `The platform refused ${n} message${n === 1 ? "" : "s"}; they were skipped${last}.`;
+  if (!latest) {
+    return plural(n, {
+      one: "The platform refused # message; they were skipped.",
+      other: "The platform refused # messages; they were skipped.",
+    });
+  }
+  const lastStatus = latest.status;
+  return plural(n, {
+    one: `The platform refused # message; they were skipped (last: HTTP ${lastStatus}).`,
+    other: `The platform refused # messages; they were skipped (last: HTTP ${lastStatus}).`,
+  });
 }
 
 /**
@@ -102,33 +113,30 @@ export function syncLine(
 ): SyncLine | null {
   if (!status || !status.box || !status.paired) return null;
   const pending = pendingText(status);
-  const error = status.last_error ? `Last error: ${status.last_error}.` : null;
+  const lastError = status.last_error;
+  const platformUrl = status.platform_url;
+  const error = lastError ? t`Last error: ${lastError}.` : null;
   const skipped = skippedText(status);
-  const detail = [
-    pending,
-    error,
-    skipped,
-    status.platform_url ? `Platform: ${status.platform_url}` : null,
-  ]
+  const detail = [pending, error, skipped, platformUrl ? t`Platform: ${platformUrl}` : null]
     .filter(Boolean)
     .join(" ");
   const last = status.last_synced_at ? ago(status.last_synced_at, now) : null;
   if (status.stopped === "key_rejected") {
-    return { text: "Sync key rejected: pair again", tone: "error", detail };
+    return { text: t`Sync key rejected: pair again`, tone: "error", detail };
   }
   if (status.stopped === "platform_newer") {
-    return { text: "Box out of date for this platform", tone: "error", detail };
+    return { text: t`Box out of date for this platform`, tone: "error", detail };
   }
   if (status.offline) {
     return {
-      text: last ? `Offline, last synced ${last}` : "Offline, not synced yet",
+      text: last ? t`Offline, last synced ${last}` : t`Offline, not synced yet`,
       tone: "warn",
       detail,
     };
   }
   if (status.last_error) {
     return {
-      text: last ? `Sync failing, last synced ${last}` : "Sync failing",
+      text: last ? t`Sync failing, last synced ${last}` : t`Sync failing`,
       tone: "warn",
       detail,
     };
@@ -136,20 +144,19 @@ export function syncLine(
   if ((status.pending ?? 0) > 0) {
     const n = status.pending ?? 0;
     return {
-      text: `Syncing ${n} conversation${n === 1 ? "" : "s"}…`,
+      text: plural(n, { one: "Syncing # conversation…", other: "Syncing # conversations…" }),
       tone: "busy",
       detail,
     };
   }
   const refused = status.skipped ?? 0;
   if (last && refused > 0) {
-    const noun = `message${refused === 1 ? "" : "s"}`;
     return {
-      text: `Synced ${last}, ${refused} ${noun} not mirrored`,
+      text: t`Synced ${last}, ${plural(refused, { one: "# message not mirrored", other: "# messages not mirrored" })}`,
       tone: "warn",
       detail,
     };
   }
-  if (last) return { text: `Synced ${last}`, tone: "ok", detail };
-  return { text: "Waiting for the first sync", tone: "busy", detail };
+  if (last) return { text: t`Synced ${last}`, tone: "ok", detail };
+  return { text: t`Waiting for the first sync`, tone: "busy", detail };
 }

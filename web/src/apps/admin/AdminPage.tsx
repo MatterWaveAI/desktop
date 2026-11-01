@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useId, useState, type FormEvent, type MouseEvent } from "react";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
+import { formatNumber } from "../../i18n/format";
 import { Alert } from "../../components/ui/alert";
 import { Badge, StatusDot } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -12,6 +16,7 @@ import { useShell } from "../../shell/shellContext";
 import { AnnouncementsTab } from "./AnnouncementsTab";
 import { BillingTab } from "./BillingTab";
 import { DeletionsTab } from "./DeletionsTab";
+import { DisputesTab } from "./DisputesTab";
 import { EnforcementTab } from "./EnforcementTab";
 import { FlagsTab } from "./FlagsTab";
 import { HealthTab } from "./HealthTab";
@@ -53,14 +58,15 @@ import {
  */
 export function AdminPage() {
   const { principal } = useShell();
+  const { t } = useLingui();
   if (!principal.roles.includes("admin")) {
     return (
       <div className="h-full overflow-y-auto">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pt-6 pb-16 md:px-12 md:pt-11">
           <AdminHeader />
           <EmptyState
-            title="Admin is for platform operators"
-            description="This surface needs the admin role from the identity provider. Your organisation's own settings are under Settings."
+            title={t`Admin is for platform operators`}
+            description={t`This surface needs the admin role from the identity provider. Your organisation's own settings are under Settings.`}
           />
         </div>
       </div>
@@ -78,38 +84,98 @@ export function AdminPage() {
 const GROUPS = ["People", "Billing", "Platform", "Operations"] as const;
 type Group = (typeof GROUPS)[number];
 
-const TABS: readonly { id: string; title: string; group: Group; failure?: string }[] = [
-  { id: "orgs", title: "Organisations", group: "People" },
-  { id: "users", title: "Users", group: "People" },
-  { id: "spend", title: "Spend", group: "Billing" },
+const GROUP_LABEL: Record<Group, MessageDescriptor> = {
+  People: msg`People`,
+  Billing: msg`Billing`,
+  Platform: msg`Platform`,
+  Operations: msg`Operations`,
+};
+
+// `failure` is the app copy for a tab that crashed; the boundary logs the raw error.
+const TABS: readonly { id: string; title: MessageDescriptor; group: Group; failure: MessageDescriptor }[] = [
+  {
+    id: "orgs",
+    title: msg`Organisations`,
+    group: "People",
+    failure: msg`The organisations data could not be read. Retry.`,
+  },
+  { id: "users", title: msg`Users`, group: "People", failure: msg`The users data could not be read. Retry.` },
+  { id: "spend", title: msg`Spend`, group: "Billing", failure: msg`The spend data could not be read. Retry.` },
   // Whether billing is wired up, what Stripe has sent, and
   // whether the gateway's limits still match the plans.
-  { id: "billing", title: "Billing", group: "Billing" },
+  {
+    id: "billing",
+    title: msg`Billing`,
+    group: "Billing",
+    failure: msg`The billing data could not be read. Retry.`,
+  },
   // Every org whose payment is late: stage, amount, next step, policy.
-  { id: "overdue", title: "Overdue", group: "Billing" },
+  {
+    id: "overdue",
+    title: msg`Overdue`,
+    group: "Billing",
+    failure: msg`The overdue data could not be read. Retry.`,
+  },
+  // Every chargeback and fraud warning, by evidence deadline.
+  {
+    id: "disputes",
+    title: msg`Disputes`,
+    group: "Billing",
+    failure: msg`The disputes data could not be read. Retry.`,
+  },
   // What each plan entitles: limits, name, listing. Prices stay Stripe's.
-  { id: "plans", title: "Plans", group: "Billing" },
+  { id: "plans", title: msg`Plans`, group: "Billing", failure: msg`The plans data could not be read. Retry.` },
   // Feature flags: the defaults and the rows that override them, per org.
-  { id: "flags", title: "Flags", group: "Platform" },
+  { id: "flags", title: msg`Flags`, group: "Platform", failure: msg`The flags data could not be read. Retry.` },
   // The banner every signed-in user sees: incidents, maintenance, news.
-  { id: "announcements", title: "Announcements", group: "Platform" },
+  {
+    id: "announcements",
+    title: msg`Announcements`,
+    group: "Platform",
+    failure: msg`The announcements data could not be read. Retry.`,
+  },
   // The CRM: connection, last sync, the outbox and its dead letters, contract events.
   {
     id: "integrations",
-    title: "Integrations",
+    title: msg`Integrations`,
     group: "Platform",
-    failure: "The Salesforce status could not be read.",
+    failure: msg`The Salesforce status could not be read. Retry.`,
   },
   // What is deployed, the migration level, and which dependencies answer.
-  { id: "health", title: "Health", group: "Platform" },
+  {
+    id: "health",
+    title: msg`Health`,
+    group: "Platform",
+    failure: msg`The health data could not be read. Retry.`,
+  },
   // What tonight's retention run would delete, per organisation.
-  { id: "retention", title: "Retention", group: "Operations" },
+  {
+    id: "retention",
+    title: msg`Retention`,
+    group: "Operations",
+    failure: msg`The retention data could not be read. Retry.`,
+  },
   // The review queue (with the one reported message), recent flags and one account's violation count.
-  { id: "moderation", title: "Moderation", group: "Operations" },
+  {
+    id: "moderation",
+    title: msg`Moderation`,
+    group: "Operations",
+    failure: msg`The moderation data could not be read. Retry.`,
+  },
   // The ladder: who is warned, rate limited or suspended, and the two actions on it.
-  { id: "enforcement", title: "Enforcement", group: "Operations" },
+  {
+    id: "enforcement",
+    title: msg`Enforcement`,
+    group: "Operations",
+    failure: msg`The enforcement data could not be read. Retry.`,
+  },
   // Every account deletion and whether the login was removed with it.
-  { id: "deletions", title: "Deletions", group: "Operations" },
+  {
+    id: "deletions",
+    title: msg`Deletions`,
+    group: "Operations",
+    failure: msg`The deletions data could not be read. Retry.`,
+  },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -154,10 +220,10 @@ function AdminTabs() {
   const [tab, setTab] = useTabInUrl();
   // Bumped by a crashed tab's retry, so the tab mounts afresh and refetches.
   const [remount, setRemount] = useState(0);
-  const current = TABS.find((t) => t.id === tab)!;
-  const title = current.title;
-  // App copy for a tab that crashed; the boundary logs the raw error.
-  const failure = `${current.failure ?? `The ${title.toLowerCase()} data could not be read.`} Retry.`;
+  const { t, i18n } = useLingui();
+  const current = TABS.find((entry) => entry.id === tab)!;
+  const title = i18n._(current.title);
+  const failure = i18n._(current.failure);
 
   // Each tab is a link to its own ?tab= URL, so it opens in a new browser
   // tab too; a plain click switches in place.
@@ -174,19 +240,19 @@ function AdminTabs() {
   return (
     <div className="flex h-full min-h-0 flex-col md:flex-row">
       <nav
-        aria-label="Admin sections"
+        aria-label={t`Admin sections`}
         data-layout="side"
         className="hidden w-56 shrink-0 overflow-y-auto border-r border-border bg-mw-surface-raised px-3.5 py-5 md:block"
       >
         <div className="flex flex-col gap-5">
           {GROUPS.map((group) => (
-            <div key={group} role="group" aria-label={group} className="flex flex-col gap-0.5">
+            <div key={group} role="group" aria-label={i18n._(GROUP_LABEL[group])} className="flex flex-col gap-0.5">
               <p aria-hidden="true" className="px-2.5 pb-1.5 text-xs font-medium text-mw-text-muted">
-                {group}
+                {i18n._(GROUP_LABEL[group])}
               </p>
-              {TABS.filter((t) => t.group === group).map((t) => (
-                <NavItem key={t.id} href={tabHref(t.id)} onClick={follow(t.id)} active={tab === t.id}>
-                  {t.title}
+              {TABS.filter((entry) => entry.group === group).map((entry) => (
+                <NavItem key={entry.id} href={tabHref(entry.id)} onClick={follow(entry.id)} active={tab === entry.id}>
+                  {i18n._(entry.title)}
                 </NavItem>
               ))}
             </div>
@@ -196,12 +262,14 @@ function AdminTabs() {
 
       <main className="min-w-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pt-6 pb-16 md:px-12 md:pt-11">
-          <AdminHeader description="Every organisation and user on this deployment, what they spend this month, and the switch that stops one." />
+          <AdminHeader
+            description={t`Every organisation and user on this deployment, what they spend this month, and the switch that stops one.`}
+          />
 
-          <TabStrip aria-label="Admin sections" className="md:hidden">
-            {TABS.map((t) => (
-              <TabStripItem key={t.id} active={tab === t.id} href={tabHref(t.id)} onClick={follow(t.id)}>
-                {t.title}
+          <TabStrip aria-label={t`Admin sections`} className="md:hidden">
+            {TABS.map((entry) => (
+              <TabStripItem key={entry.id} active={tab === entry.id} href={tabHref(entry.id)} onClick={follow(entry.id)}>
+                {i18n._(entry.title)}
               </TabStripItem>
             ))}
           </TabStrip>
@@ -227,7 +295,9 @@ function AdminTabs() {
 function AdminHeader(props: { description?: string }) {
   return (
     <header className="flex flex-col gap-1.5">
-      <h1 className="font-display text-display-lg text-mw-text">Admin</h1>
+      <h1 className="font-display text-display-lg text-mw-text">
+        <Trans>Admin</Trans>
+      </h1>
       {props.description && <p className="max-w-2xl text-mw-text-subtle">{props.description}</p>}
     </header>
   );
@@ -241,6 +311,7 @@ function TabPanel({ tab }: { tab: TabId }) {
       {tab === "spend" && <SpendTable />}
       {tab === "billing" && <BillingTab />}
       {tab === "overdue" && <OverdueTab />}
+      {tab === "disputes" && <DisputesTab />}
       {tab === "plans" && <PlansTab />}
       {tab === "flags" && <FlagsTab />}
       {tab === "announcements" && <AnnouncementsTab />}
@@ -275,6 +346,7 @@ function OrgsTable() {
     | { key: string; error: string }
     | null
   >(null);
+  const { t } = useLingui();
   const [moreBusy, setMoreBusy] = useState(false);
   const [moreError, setMoreError] = useState<string | null>(null);
   // The org whose details (budget, keys, invites) are open beneath its row.
@@ -324,47 +396,63 @@ function OrgsTable() {
     <div className="flex flex-col gap-3">
       <form onSubmit={handleSearch} className="flex flex-wrap items-end gap-2" role="search">
         <label htmlFor={searchId} className="sr-only">
-          Search organisations
+          <Trans>Search organisations</Trans>
         </label>
         <Input
           id={searchId}
           name="q"
-          placeholder="Name, identity org, id or owner email"
+          placeholder={t`Name, identity org, id or owner email`}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="max-w-sm"
         />
         <Button type="submit" variant="outline">
-          Search
+          <Trans>Search</Trans>
         </Button>
       </form>
       {current === null ? (
         <LoadingSkeleton rows={4} />
       ) : "error" in current ? (
-        <ErrorState title="Could not load organisations" message={current.error} onRetry={reload} />
+        <ErrorState title={t`Could not load organisations`} message={current.error} onRetry={reload} />
       ) : current.rows.length === 0 ? (
         <EmptyState
-          title={submitted ? `No organisations match "${submitted}"` : "No organisations yet"}
+          title={submitted ? t`No organisations match "${submitted}"` : t`No organisations yet`}
           description={
-            submitted ? "Try part of the name, the id, or an owner's email." : "The first signup creates one."
+            submitted ? t`Try part of the name, the id, or an owner's email.` : t`The first signup creates one.`
           }
         />
       ) : (
         <>
-          <Table className="bg-card" aria-label="Organisations">
+          <Table className="bg-card" aria-label={t`Organisations`}>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Members</TableHead>
-                <TableHead>Overage cap</TableHead>
-                <TableHead>Tokens used</TableHead>
-                <TableHead>Overage</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Identity org</TableHead>
+                <TableHead>
+                  <Trans>Name</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Members</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Overage cap</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Tokens used</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Overage</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Created</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Identity org</Trans>
+                </TableHead>
                 {/* Pinned to the right edge from md up, so Open and Manage stay
                     in view however far the wide table has to scroll. */}
                 <TableHead className="md:sticky md:right-0 md:bg-mw-surface">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">
+                    <Trans>Actions</Trans>
+                  </span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -383,7 +471,7 @@ function OrgsTable() {
           {cursor !== null && (
             <div>
               <Button variant="outline" size="sm" disabled={moreBusy} onClick={() => void loadMore()}>
-                {moreBusy ? "Loading…" : "Load more organisations"}
+                {moreBusy ? <Trans>Loading…</Trans> : <Trans>Load more organisations</Trans>}
               </Button>
             </div>
           )}
@@ -417,6 +505,8 @@ function OrgRow({
   const [reason, setReason] = useState("");
   const [opening, setOpening] = useState(false);
   const [supportError, setSupportError] = useState<string | null>(null);
+  const { t } = useLingui();
+  const orgName = org.name;
   async function openAsSupport() {
     if (!reason.trim()) return;
     setOpening(true);
@@ -440,16 +530,18 @@ function OrgRow({
         <TableCell>{org.members}</TableCell>
         <TableCell>
           {org.overage_cap_micros === 0 ? (
-            <Badge variant="outline">plan default</Badge>
+            <Badge variant="outline">
+              <Trans>plan default</Trans>
+            </Badge>
           ) : (
             formatMicros(org.overage_cap_micros)
           )}
         </TableCell>
-        <TableCell>{org.tokens_used.toLocaleString()}</TableCell>
+        <TableCell>{formatNumber(org.tokens_used)}</TableCell>
         <TableCell>{formatMicros(org.overage_micros)}</TableCell>
         <TableCell>{formatDate(org.created_at)}</TableCell>
         <TableCell>
-          <IdentityId id={org.zitadel_org_id} label="Copy identity org id" />
+          <IdentityId id={org.zitadel_org_id} label={t`Copy identity org id`} />
         </TableCell>
         <TableCell data-org-actions className="text-right md:sticky md:right-0 md:bg-card">
           <span className="inline-flex flex-col items-end gap-1">
@@ -462,10 +554,10 @@ function OrgRow({
                 setConfirming(true);
               }}
             >
-              Open {org.name} as support
+              <Trans>Open {orgName} as support</Trans>
             </Button>
             <Button size="sm" variant="outline" aria-expanded={open} onClick={onToggle}>
-              {open ? `Close ${org.name}` : `Manage ${org.name}`}
+              {open ? <Trans>Close {orgName}</Trans> : <Trans>Manage {orgName}</Trans>}
             </Button>
           </span>
           {supportError && (
@@ -507,6 +599,8 @@ function UsersTable() {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const { t } = useLingui();
+  const pendingEmail = pending?.email ?? "";
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -532,18 +626,18 @@ function UsersTable() {
     <div className="flex flex-col gap-3">
       <form onSubmit={handleSearch} className="flex flex-wrap items-end gap-2" role="search">
         <label htmlFor={searchId} className="sr-only">
-          Search users
+          <Trans>Search users</Trans>
         </label>
         <Input
           id={searchId}
           name="q"
-          placeholder="Email, name or subject"
+          placeholder={t`Email, name or subject`}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           className="max-w-sm"
         />
         <Button type="submit" variant="outline">
-          Search
+          <Trans>Search</Trans>
         </Button>
       </form>
       {actionError && (
@@ -554,22 +648,32 @@ function UsersTable() {
       {state.phase === "loading" ? (
         <LoadingSkeleton rows={4} />
       ) : state.phase === "error" ? (
-        <ErrorState title="Could not load users" message={state.message} onRetry={reload} />
+        <ErrorState title={t`Could not load users`} message={state.message} onRetry={reload} />
       ) : state.data.length === 0 ? (
         <EmptyState
-          title={submitted ? `No users match "${submitted}"` : "No users yet"}
-          description={submitted ? "Try part of an email or a name." : "The first signup appears here."}
+          title={submitted ? t`No users match "${submitted}"` : t`No users yet`}
+          description={submitted ? t`Try part of an email or a name.` : t`The first signup appears here.`}
         />
       ) : (
-        <Table className="bg-card" aria-label="Users">
+        <Table className="bg-card" aria-label={t`Users`}>
           <TableHeader>
             <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Organisation</TableHead>
-              <TableHead>State</TableHead>
-              <TableHead>Last seen</TableHead>
               <TableHead>
-                <span className="sr-only">Actions</span>
+                <Trans>User</Trans>
+              </TableHead>
+              <TableHead>
+                <Trans>Organisation</Trans>
+              </TableHead>
+              <TableHead>
+                <Trans>State</Trans>
+              </TableHead>
+              <TableHead>
+                <Trans>Last seen</Trans>
+              </TableHead>
+              <TableHead>
+                <span className="sr-only">
+                  <Trans>Actions</Trans>
+                </span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -580,7 +684,7 @@ function UsersTable() {
                   <span className="font-medium">{user.email}</span>
                   {user.name && <span className="ml-2 text-mw-text-muted">{user.name}</span>}
                   <div>
-                    <IdentityId id={user.subject} label="Copy identity id" />
+                    <IdentityId id={user.subject} label={t`Copy identity id`} />
                   </div>
                 </TableCell>
                 <TableCell>
@@ -602,7 +706,7 @@ function UsersTable() {
                       disabled={busy}
                       onClick={() => void run(() => unsuspendUser(user.subject))}
                     >
-                      Unsuspend {user.email}
+                      <UserAction email={user.email} suspend={false} />
                     </Button>
                   ) : (
                     <Button
@@ -615,7 +719,7 @@ function UsersTable() {
                         setPending(user);
                       }}
                     >
-                      Suspend {user.email}
+                      <UserAction email={user.email} suspend />
                     </Button>
                   )}
                 </TableCell>
@@ -629,16 +733,18 @@ function UsersTable() {
         onOpenChange={(open) => {
           if (!open && !busy) setPending(null);
         }}
-        title={pending ? `Suspend ${pending.email}?` : "Suspend this user?"}
+        title={pending ? t`Suspend ${pendingEmail}?` : t`Suspend this user?`}
         description={
           <span className="flex flex-col gap-2">
             <span>
-              Their next request, login or verification is refused until an operator lifts it.
-              The reason is kept for the audit trail and never shown to them.
+              <Trans>
+                Their next request, login or verification is refused until an operator lifts it. The reason is
+                kept for the audit trail and never shown to them.
+              </Trans>
             </span>
             <Input
-              aria-label="Reason"
-              placeholder="Reason (optional)"
+              aria-label={t`Reason`}
+              placeholder={t`Reason (optional)`}
               value={reason}
               maxLength={500}
               disabled={busy}
@@ -646,7 +752,7 @@ function UsersTable() {
             />
           </span>
         }
-        confirmLabel="Suspend"
+        confirmLabel={t`Suspend`}
         inFlight={busy}
         onConfirm={() => {
           if (pending) void run(() => suspendUser(pending.subject, reason));
@@ -656,20 +762,30 @@ function UsersTable() {
   );
 }
 
+function UserAction({ email, suspend }: { email: string; suspend: boolean }) {
+  return suspend ? <Trans>Suspend {email}</Trans> : <Trans>Unsuspend {email}</Trans>;
+}
+
 function StateBadge(props: { state: AdminUser["state"] }) {
   if (props.state === "suspended") {
     return (
       <Badge variant="destructive">
         <StatusDot tone="danger" />
-        suspended
+        <Trans>suspended</Trans>
       </Badge>
     );
   }
-  if (props.state === "pending_verification") return <Badge variant="warning">unverified</Badge>;
+  if (props.state === "pending_verification") {
+    return (
+      <Badge variant="warning">
+        <Trans>unverified</Trans>
+      </Badge>
+    );
+  }
   return (
     <Badge variant="positive">
       <StatusDot tone="positive" />
-      active
+      <Trans>active</Trans>
     </Badge>
   );
 }
@@ -678,33 +794,56 @@ function StateBadge(props: { state: AdminUser["state"] }) {
 
 function SpendTable() {
   const [state, reload] = useLoad(fetchSpend, "spend");
+  const { t } = useLingui();
   if (state.phase === "loading") return <LoadingSkeleton rows={4} />;
   if (state.phase === "error") {
-    return <ErrorState title="Could not load spend" message={state.message} onRetry={reload} />;
+    return <ErrorState title={t`Could not load spend`} message={state.message} onRetry={reload} />;
   }
-  const { rows, periodStart } = state.data;
+  const { rows } = state.data;
+  // A period start is a day, not an instant: read in UTC so no timezone moves it.
+  const periodStart = formatDate(state.data.periodStart, { dateStyle: "long", timeZone: "UTC" });
   if (rows.length === 0) {
-    return <EmptyState title="Nothing spent this month" description={`Usage since ${periodStart} appears here.`} />;
+    return <EmptyState title={t`Nothing spent this month`} description={t`Usage since ${periodStart} appears here.`} />;
   }
-  const total = rows.reduce((sum, row) => sum + row.cost_micros, 0);
-  const overage = rows.reduce((sum, row) => sum + row.overage_micros, 0);
+  const total = formatMicros(rows.reduce((sum, row) => sum + row.cost_micros, 0));
+  const overage = formatMicros(rows.reduce((sum, row) => sum + row.overage_micros, 0));
+  const pairs = rows.length;
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm text-mw-text-muted">
-        Since {periodStart}: {formatMicros(total)} at list price, {formatMicros(overage)} of it billed as
-        overage, across {rows.length} org/model pairs, from the app's own usage ledger.
+        <Plural
+          value={pairs}
+          one={`Since ${periodStart}: ${total} at list price, ${overage} of it billed as overage, across # org/model pair, from the app's own usage ledger.`}
+          other={`Since ${periodStart}: ${total} at list price, ${overage} of it billed as overage, across # org/model pairs, from the app's own usage ledger.`}
+        />
       </p>
-      <Table className="bg-card" aria-label="Spend">
+      <Table className="bg-card" aria-label={t`Spend`}>
         <TableHeader>
           <TableRow>
-            <TableHead>Organisation</TableHead>
-            <TableHead>Model</TableHead>
-            <TableHead>Turns</TableHead>
-            <TableHead>Prompt tokens</TableHead>
-            <TableHead>Completion tokens</TableHead>
-            <TableHead>Weighted tokens</TableHead>
-            <TableHead>At list price</TableHead>
-            <TableHead>Overage</TableHead>
+            <TableHead>
+              <Trans>Organisation</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Model</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Turns</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Prompt tokens</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Completion tokens</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Weighted tokens</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>At list price</Trans>
+            </TableHead>
+            <TableHead>
+              <Trans>Overage</Trans>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -712,10 +851,10 @@ function SpendTable() {
             <TableRow key={`${row.org_id}:${row.model}`} className="border-b border-mw-border">
               <TableCell>{row.org_name}</TableCell>
               <TableCell className="font-mono text-xs">{row.model}</TableCell>
-              <TableCell>{row.events}</TableCell>
-              <TableCell>{row.prompt_tokens.toLocaleString()}</TableCell>
-              <TableCell>{row.completion_tokens.toLocaleString()}</TableCell>
-              <TableCell>{row.weighted_tokens.toLocaleString()}</TableCell>
+              <TableCell>{formatNumber(row.events)}</TableCell>
+              <TableCell>{formatNumber(row.prompt_tokens)}</TableCell>
+              <TableCell>{formatNumber(row.completion_tokens)}</TableCell>
+              <TableCell>{formatNumber(row.weighted_tokens)}</TableCell>
               <TableCell>{formatMicros(row.cost_micros)}</TableCell>
               <TableCell>{formatMicros(row.overage_micros)}</TableCell>
             </TableRow>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { FileJsonIcon } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Meter } from "../../../components/ui/alert";
 import { StatusDot } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -42,6 +43,7 @@ type Phase =
   | { kind: "failed"; message: string };
 
 export function ImportSection() {
+  const { t } = useLingui();
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [history, setHistory] = useState<ImportRecord[] | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -81,7 +83,7 @@ export function ImportSection() {
             setPhase(
               record.status === "done"
                 ? { kind: "done", record }
-                : { kind: "failed", message: record.error ?? "The import failed." },
+                : { kind: "failed", message: record.error ?? t`The import failed.` },
             );
             setHistory((rows) => [record, ...(rows ?? []).filter((r) => r.id !== record.id)]);
           }
@@ -95,11 +97,11 @@ export function ImportSection() {
       alive = false;
       clearTimeout(timer);
     };
-  }, [phase]);
+  }, [phase, t]);
 
   const upload = useCallback(async (file: File) => {
     if (file.size > IMPORT_MAX_BYTES) {
-      setPhase({ kind: "failed", message: "That file is larger than the 100 MB limit." });
+      setPhase({ kind: "failed", message: t`That file is larger than the 100 MB limit.` });
       return;
     }
     setPhase({ kind: "uploading", filename: file.name });
@@ -108,11 +110,11 @@ export function ImportSection() {
       setHistory((rows) => [record, ...(rows ?? [])]);
       if (isActive(record)) setPhase({ kind: "following", record });
       else if (record.status === "done") setPhase({ kind: "done", record });
-      else setPhase({ kind: "failed", message: record.error ?? "The import failed." });
+      else setPhase({ kind: "failed", message: record.error ?? t`The import failed.` });
     } catch (err) {
       setPhase({ kind: "failed", message: importFailureMessage(err) });
     }
-  }, []);
+  }, [t]);
 
   function onDrop(event: DragEvent<HTMLElement>) {
     event.preventDefault();
@@ -122,24 +124,29 @@ export function ImportSection() {
   }
 
   const busy = phase.kind === "uploading" || phase.kind === "following";
+  const maxSize = formatBytes(IMPORT_MAX_BYTES);
 
   return (
     <PaneSection
-      title="Import conversations"
-      description="Bring your conversations here from ChatGPT or Claude."
+      title={t`Import conversations`}
+      description={t`Bring your conversations here from ChatGPT or Claude.`}
       flush
     >
       <div className="flex flex-col gap-3 px-5 py-4">
         <LearnMore>
           <p>
-            Upload the conversations.json (or the whole zip) from ChatGPT's data export, or the
-            JSON file from Claude's.
+            <Trans>
+              Upload the conversations.json (or the whole zip) from ChatGPT's data export, or the
+              JSON file from Claude's.
+            </Trans>
           </p>
           <p>
-            Titles, timestamps and who said what are kept; a conversation with edits or
-            regenerations comes in as the thread it last showed, with a note saying so;
-            attachments are not in the exports and are counted, not copied. Importing the same
-            file again adds nothing twice.
+            <Trans>
+              Titles, timestamps and who said what are kept; a conversation with edits or
+              regenerations comes in as the thread it last showed, with a note saying so;
+              attachments are not in the exports and are counted, not copied. Importing the same
+              file again adds nothing twice.
+            </Trans>
           </p>
         </LearnMore>
         <div
@@ -172,16 +179,16 @@ export function ImportSection() {
           />
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" disabled={busy} onClick={() => inputRef.current?.click()}>
-              {phase.kind === "uploading" ? "Uploading…" : "Choose export file"}
+              {phase.kind === "uploading" ? t`Uploading…` : t`Choose export file`}
             </Button>
             <label htmlFor={inputId} className="text-sm text-mw-text-muted">
-              or drop it here. JSON or zip, up to {formatBytes(IMPORT_MAX_BYTES)}.
+              <Trans>or drop it here. JSON or zip, up to {maxSize}.</Trans>
             </label>
           </div>
 
           {/* One polite live region for every state the import moves through. */}
           <div id={statusId} role="status" aria-live="polite" className="w-full text-sm">
-            {phase.kind === "uploading" && <span>Uploading {phase.filename}…</span>}
+            {phase.kind === "uploading" && <UploadingLine filename={phase.filename} />}
             {phase.kind === "following" && <Progress record={phase.record} />}
             {phase.kind === "done" && <Result record={phase.record} />}
           </div>
@@ -194,7 +201,7 @@ export function ImportSection() {
       </div>
 
       {history !== null && history.length > 0 && (
-        <RowList aria-label="Previous imports" className="border-t border-border">
+        <RowList aria-label={t`Previous imports`} className="border-t border-border">
           {history.slice(0, 5).map((record) => (
             <Row
               key={record.id}
@@ -208,9 +215,9 @@ export function ImportSection() {
                   className="inline-flex items-center gap-2 text-sm text-mw-text-secondary"
                 >
                   <StatusDot tone={record.status === "failed" ? "danger" : isActive(record) ? "info" : "positive"} />
-                  {record.status === "done" && `${record.conversations_created} imported`}
-                  {record.status === "failed" && "Failed"}
-                  {isActive(record) && "Running"}
+                  {record.status === "done" && <ImportedCount count={record.conversations_created} />}
+                  {record.status === "failed" && t`Failed`}
+                  {isActive(record) && t`Running`}
                 </span>
               }
             />
@@ -221,20 +228,38 @@ export function ImportSection() {
   );
 }
 
+function UploadingLine(props: { filename: string }) {
+  const filename = props.filename;
+  return (
+    <span>
+      <Trans>Uploading {filename}…</Trans>
+    </span>
+  );
+}
+
+function ImportedCount(props: { count: number }) {
+  const count = props.count;
+  return <Trans>{count} imported</Trans>;
+}
+
 function Progress(props: { record: ImportRecord }) {
+  const { t } = useLingui();
   const { record } = props;
   const percent = percentDone(record);
+  const total = record.conversations_total;
+  const done = record.conversations_done;
+  const source = SOURCE_NAMES[record.source] ?? record.source;
   const label =
     record.status === "pending"
-      ? `Found ${record.conversations_total} conversations in ${SOURCE_NAMES[record.source] ?? record.source}'s export. Waiting to start…`
-      : `Importing ${record.conversations_done} of ${record.conversations_total} conversations…`;
+      ? t`Found ${total} conversations in ${source}'s export. Waiting to start…`
+      : t`Importing ${done} of ${total} conversations…`;
   return (
     <div data-mw-import-progress={record.status} className="flex flex-col gap-1">
       <span>{label}</span>
       {/* The meter is drawn, the progressbar role carries the number. */}
       <div
         role="progressbar"
-        aria-label="Import progress"
+        aria-label={t`Import progress`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
@@ -259,7 +284,7 @@ function Result(props: { record: ImportRecord }) {
         </span>
       )}
       <span className="text-mw-text-muted">
-        The conversations are in your list, each carrying a note of where it came from.
+        <Trans>The conversations are in your list, each carrying a note of where it came from.</Trans>
       </span>
     </div>
   );

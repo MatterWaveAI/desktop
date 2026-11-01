@@ -13,6 +13,7 @@ import { ShikiCode } from "./CodeBlock";
 
 vi.mock("shiki", () => ({
   codeToHtml: async (code: string) => `<pre class="shiki"><code>${code}</code></pre>`,
+  createCssVariablesTheme: () => ({ name: "mw-code" }),
 }));
 
 // React 19: silence act warnings for renders driven outside React's test renderer.

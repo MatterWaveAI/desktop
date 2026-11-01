@@ -18,8 +18,6 @@ export function passwordRule(): string {
   const min = PASSWORD_MIN_LENGTH;
   return t`At least ${min} characters.`;
 }
-/** The same rule for the pages not yet in the catalogue. */
-export const PASSWORD_RULE = `At least ${PASSWORD_MIN_LENGTH} characters.`;
 
 /** The emailed codes are six characters. */
 // Zitadel mints six characters, letters and digits (e.g. 8UK58K) - not
@@ -34,12 +32,23 @@ export function validateEmail(email: string): string | undefined {
 }
 
 /**
- * `what` names the field for a page that asks for something other than "a
- * password" ("a new password" on the reset and account pages); those pages
- * are not in the catalogue yet, so the phrase they pass is used as given.
+ * `what` is the legacy way of naming the field ("a new password" on the
+ * account page); a free phrase cannot be translated, so the one phrase in
+ * use maps to `validateNewPassword` and anything else is said as given.
  */
 export function validatePassword(password: string, what?: string): string | undefined {
+  if (what === "a new password") return validateNewPassword(password);
   if (password === "") return what ? `Enter ${what}.` : t`Enter a password.`;
+  return passwordLength(password);
+}
+
+/** The rule for a page that asks for a new password (reset, account). */
+export function validateNewPassword(password: string): string | undefined {
+  if (password === "") return t`Enter a new password.`;
+  return passwordLength(password);
+}
+
+function passwordLength(password: string): string | undefined {
   if (password.length < PASSWORD_MIN_LENGTH) {
     const min = PASSWORD_MIN_LENGTH;
     return t`Use ${min} characters or more for your password.`;
@@ -88,13 +97,9 @@ export function withEmail(path: string, email: string | undefined): string {
   return email ? `${path}?email=${encodeURIComponent(email)}` : path;
 }
 
-/**
- * The line for a request that never got an answer. The string constant is
- * for the pages not yet in the catalogue; `failureMessage` says the same
- * thing in the reader's language.
- */
-export const NETWORK_MESSAGE = "Could not reach MatterWave. Check your connection and try again.";
-function networkMessage(): string {
+/** The line for a request that never got an answer; `failureMessage` says it too. */
+export function networkMessage(): string {
+
   return t`Could not reach MatterWave. Check your connection and try again.`;
 }
 

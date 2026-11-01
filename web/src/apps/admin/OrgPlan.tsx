@@ -1,4 +1,6 @@
 import { useId, useState } from "react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Alert } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -45,12 +47,41 @@ export function PlanSelect(props: {
   );
 }
 
+/** A subscription status as Stripe names it, in the reader's language where it is one we know. */
+function subscriptionStatus(status: string): string {
+  switch (status) {
+    case "active":
+      return t`active`;
+    case "trialing":
+      return t`trialing`;
+    case "past_due":
+      return t`past due`;
+    case "canceled":
+      return t`cancelled`;
+    case "unpaid":
+      return t`unpaid`;
+    case "incomplete":
+      return t`incomplete`;
+    case "incomplete_expired":
+      return t`incomplete, expired`;
+    case "paused":
+      return t`paused`;
+    default:
+      return status.replaceAll("_", " ");
+  }
+}
+
 function statusText(plan: OrgPlan): string {
-  if (plan.implicit) return "no subscription (the default)";
-  const parts = [String(plan.status ?? "").replaceAll("_", " ")];
-  if (plan.trial_end) parts.push(`trial ends ${formatDate(plan.trial_end)}`);
-  if (plan.cancel_at_period_end && plan.current_period_end) parts.push(`cancels ${formatDate(plan.current_period_end)}`);
-  else if (plan.current_period_end) parts.push(`renews ${formatDate(plan.current_period_end)}`);
+  if (plan.implicit) return t`no subscription (the default)`;
+  const parts = [subscriptionStatus(String(plan.status ?? ""))];
+  if (plan.trial_end) {
+    const trialEnd = formatDate(plan.trial_end);
+    parts.push(t`trial ends ${trialEnd}`);
+  }
+  if (plan.current_period_end) {
+    const periodEnd = formatDate(plan.current_period_end);
+    parts.push(plan.cancel_at_period_end ? t`cancels ${periodEnd}` : t`renews ${periodEnd}`);
+  }
   return parts.filter(Boolean).join(", ");
 }
 
@@ -71,6 +102,8 @@ export function OrgPlanHeader({ org }: { org: AdminOrg }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const catalog = usePlanCatalog();
+  const { t } = useLingui();
+  const orgName = org.name;
 
   const loaded = state.phase === "ready" && typeof state.data?.plan === "string" ? state.data : null;
   const plan = latest ?? loaded;
@@ -86,7 +119,8 @@ export function OrgPlanHeader({ org }: { org: AdminOrg }) {
       setLatest(next);
       setChoice(null);
       setReason("");
-      setSaved(`${org.name} is on ${next.plan_name}.`);
+      const planName = next.plan_name;
+      setSaved(t`${orgName} is on ${planName}.`);
     } catch (err: unknown) {
       setError(failureMessage(err));
     } finally {
@@ -96,21 +130,25 @@ export function OrgPlanHeader({ org }: { org: AdminOrg }) {
   }
 
   return (
-    <section aria-label={`${org.name} plan`} className="border-b border-mw-border pb-4">
+    <section aria-label={t`${orgName} plan`} className="border-b border-mw-border pb-4">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <h4 className="font-medium text-mw-text">Plan</h4>
+        <h4 className="font-medium text-mw-text">
+          <Trans>Plan</Trans>
+        </h4>
         {plan ? (
           <>
             <Badge variant="secondary">{plan.plan_name}</Badge>
             <span className="text-mw-text-muted">{statusText(plan)}</span>
           </>
         ) : state.phase === "loading" ? (
-          <span className="text-mw-text-muted">Loading…</span>
+          <span className="text-mw-text-muted">
+            <Trans>Loading…</Trans>
+          </span>
         ) : (
           <span className="text-mw-danger">
-            Could not load the plan.{" "}
+            <Trans>Could not load the plan.</Trans>{" "}
             <button type="button" className="underline" onClick={reload}>
-              Retry
+              <Trans>Retry</Trans>
             </button>
           </span>
         )}
@@ -124,11 +162,11 @@ export function OrgPlanHeader({ org }: { org: AdminOrg }) {
           }}
         >
           <label htmlFor={`${id}-plan`} className="sr-only">
-            Plan for {org.name}
+            <Trans>Plan for {orgName}</Trans>
           </label>
           <PlanSelect
             id={`${id}-plan`}
-            aria-label={`Plan for ${org.name}`}
+            aria-label={t`Plan for ${orgName}`}
             plans={catalog}
             value={chosen}
             current={{ code: plan.plan, name: plan.plan_name }}
@@ -139,8 +177,8 @@ export function OrgPlanHeader({ org }: { org: AdminOrg }) {
             }}
           />
           <Input
-            aria-label="Reason for the plan change"
-            placeholder="Reason (kept in the plan history)"
+            aria-label={t`Reason for the plan change`}
+            placeholder={t`Reason (kept in the plan history)`}
             value={reason}
             maxLength={500}
             disabled={busy}
@@ -148,7 +186,7 @@ export function OrgPlanHeader({ org }: { org: AdminOrg }) {
             className="max-w-sm"
           />
           <Button type="submit" size="sm" variant="outline" disabled={busy || !chosen || chosen === plan.plan}>
-            Set {org.name}'s plan
+            <Trans>Set {orgName}'s plan</Trans>
           </Button>
         </form>
       )}
@@ -167,9 +205,13 @@ export function OrgPlanHeader({ org }: { org: AdminOrg }) {
         onOpenChange={(open) => {
           if (!open && !busy) setConfirming(false);
         }}
-        title={`Put ${org.name} on ${chosenName}?`}
-        description={`Its limits change on its next request. Nothing is created or changed in Stripe: this is for an invoiced deal or a comp. Recorded in the plan history and audit trail under your name${reason.trim() ? ", with the reason" : ""}.`}
-        confirmLabel="Set plan"
+        title={t`Put ${orgName} on ${chosenName}?`}
+        description={
+          reason.trim()
+            ? t`Its limits change on its next request. Nothing is created or changed in Stripe: this is for an invoiced deal or a comp. Recorded in the plan history and audit trail under your name, with the reason.`
+            : t`Its limits change on its next request. Nothing is created or changed in Stripe: this is for an invoiced deal or a comp. Recorded in the plan history and audit trail under your name.`
+        }
+        confirmLabel={t`Set plan`}
         inFlight={busy}
         onConfirm={() => void apply()}
       />

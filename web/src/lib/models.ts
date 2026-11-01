@@ -1,4 +1,5 @@
 import type { ModelInfo, ModelsResponse } from "../types";
+import { t } from "@lingui/core/macro";
 import { apiFetch } from "./api";
 import { formatMultiplier, formatUsd } from "./billing";
 
@@ -74,15 +75,18 @@ export function formatContextWindow(window: number | null | undefined): string |
  */
 export function describeModel(model: ModelInfo): string {
   if (model.research_preview) {
-    return "Research demo — grammatical, not factual. Expect fluent nonsense; not for real use.";
+    return t`Research demo — grammatical, not factual. Expect fluent nonsense; not for real use.`;
   }
   const window = formatContextWindow(model.context_window);
-  return [priceOf(model), window === null ? null : `${window} context`].filter((part) => part !== null).join(" · ");
+  return [priceOf(model), window === null ? null : t`${window} context`].filter((part) => part !== null).join(" · ");
 }
 
 /** "$0.50 / $2.00 per 1M · counts 5×": the list price in and out, and how fast it spends an allowance. */
 export function priceOf(model: ModelInfo): string {
-  return `${formatUsd(model.input_usd_per_m)} / ${formatUsd(model.output_usd_per_m)} per 1M · counts ${formatMultiplier(model.multiplier)}`;
+  const inputPrice = formatUsd(model.input_usd_per_m);
+  const outputPrice = formatUsd(model.output_usd_per_m);
+  const multiplier = formatMultiplier(model.multiplier);
+  return t`${inputPrice} / ${outputPrice} per 1M · counts ${multiplier}`;
 }
 
 /**
@@ -105,7 +109,7 @@ export function upgradeGroups(models: readonly ModelInfo[]): { plan: string | nu
 
 /** A not-included model's option text: its name and the plan that has it. */
 export function lockedOptionText(model: ModelInfo): string {
-  return model.upgrade_to === null
-    ? `${model.label} — not on your plan`
-    : `${model.label} — needs ${model.upgrade_to}`;
+  const label = model.label;
+  const planName = model.upgrade_to;
+  return planName === null ? t`${label} — not on your plan` : t`${label} — needs ${planName}`;
 }

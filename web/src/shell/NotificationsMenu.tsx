@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BellIcon } from "lucide-react";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { formatDate, formatTime } from "../i18n/format";
 import type { Notification, NotificationsPage } from "../types";
 import { apiFetch } from "../lib/api";
 
@@ -23,6 +26,7 @@ const NOTIFICATIONS_REFRESH_MS = 60_000;
 const PAGE_SIZE = 20;
 
 export function NotificationsMenu() {
+  const { t } = useLingui();
   const [rows, setRows] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [failed, setFailed] = useState(false);
@@ -91,8 +95,8 @@ export function NotificationsMenu() {
       <summary
         ref={summaryRef}
         className="relative flex cursor-pointer list-none items-center justify-center rounded p-1.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11 text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text"
-        aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
-        title="Notifications"
+        aria-label={unread > 0 ? t`Notifications, ${unread} unread` : t`Notifications`}
+        title={t`Notifications`}
       >
         <BellIcon className="size-4" aria-hidden />
         {unread > 0 && (
@@ -110,18 +114,20 @@ export function NotificationsMenu() {
           edge of a 360px screen. From `sm` up it hangs from the bell. */}
       <div
         className="fixed inset-x-2 top-12 z-(--mw-z-menu) rounded-md border border-mw-border bg-mw-surface-raised p-1 shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80"
-        aria-label="Notifications"
+        aria-label={t`Notifications`}
       >
         <p className="px-2 pb-1 pt-1.5 text-xs font-medium uppercase tracking-wide text-mw-text-muted">
-          Notifications
+          <Trans>Notifications</Trans>
         </p>
         {failed && (
           <p role="alert" className="px-2 py-1 text-xs text-mw-danger">
-            Notifications could not be loaded.
+            <Trans>Notifications could not be loaded.</Trans>
           </p>
         )}
         {!failed && rows.length === 0 && (
-          <p className="px-2 py-2 text-sm text-mw-text-muted">Nothing to see yet.</p>
+          <p className="px-2 py-2 text-sm text-mw-text-muted">
+            <Trans>Nothing to see yet.</Trans>
+          </p>
         )}
         <ul className="max-h-96 overflow-y-auto">
           {rows.map((row) => (
@@ -175,10 +181,11 @@ function formatWhen(iso: string): string {
   const now = new Date();
   const sameDay = at.toDateString() === now.toDateString();
   if (sameDay) {
-    return `Today ${at.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
+    const time = formatTime(at);
+    return t`Today ${time}`;
   }
   const sameYear = at.getFullYear() === now.getFullYear();
-  return at.toLocaleDateString(undefined, {
+  return formatDate(at, {
     day: "numeric",
     month: "short",
     ...(sameYear ? {} : { year: "numeric" }),

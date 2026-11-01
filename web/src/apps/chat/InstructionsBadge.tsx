@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/pop
 export const CONVERSATION_INSTRUCTIONS_MAX_LEN = 2000;
 
 const BADGE_CLASS =
-  "flex h-8 shrink-0 items-center gap-1.5 rounded border border-mw-border px-2 text-xs text-mw-text-muted hover:bg-mw-surface-hover pointer-coarse:h-11";
+  "flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs text-mw-text-muted outline-none hover:bg-mw-surface-hover hover:text-mw-text focus-visible:ring-2 focus-visible:ring-mw-focus data-popup-open:bg-mw-surface-hover pointer-coarse:h-11";
 const PANEL_CLASS =
   "w-[min(32rem,calc(100vw-2rem))] gap-0 rounded-lg border border-mw-border bg-mw-surface-raised p-3 text-mw-text shadow-lg ring-0";
 

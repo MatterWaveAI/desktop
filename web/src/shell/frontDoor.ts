@@ -54,20 +54,14 @@ export const PRICING_PATH = "/pricing";
  */
 export const BILLING_SUCCESS_PATH = "/billing/success";
 /**
- * The developer portal: quickstart, the API reference, pricing and the API
- * changelog. Anonymous for the same reason /pricing is: a developer
- * deciding whether to build on this needs the reference before there is an
- * account, and a key is only one of the ways in -- any OpenAI client works.
- */
-/**
  * The developer docs live on their own host (docs.matterwave.ai), outside
  * the app entirely: the app links there externally and carries no routes
  * for them. The paths must match the docs site's own structure.
  */
 export const DEVELOPERS_PATH = "https://docs.matterwave.ai";
-export const DEVELOPERS_REFERENCE_PATH = "https://docs.matterwave.ai/reference";
-export const DEVELOPERS_PRICING_PATH = "https://docs.matterwave.ai/pricing";
-export const DEVELOPERS_CHANGELOG_PATH = "https://docs.matterwave.ai/changelog";
+export const DEVELOPERS_REFERENCE_PATH = "https://docs.matterwave.ai/docs/reference/api";
+export const DEVELOPERS_CHANGELOG_PATH = "https://docs.matterwave.ai/docs/reference/changelog";
+export const DEVELOPERS_WEBHOOKS_PATH = "https://docs.matterwave.ai/docs/reference/webhooks";
 
 /**
  * Device login: `?user_code=` from the terminal or editor that printed it.

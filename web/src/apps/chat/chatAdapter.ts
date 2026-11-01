@@ -181,6 +181,12 @@ export interface ChatAdapterHooks {
    * raised before the API answered has neither.
    */
   onError: (message: string, meta?: { requestId?: string | null; code?: string }) => void;
+  /**
+   * The server is folding older turns before this one starts: a long wait
+   * with no token that is not a stall, so the first-token clock restarts.
+   * Again on the fold's own frame or its notice, when the turn itself begins.
+   */
+  onCompacting?: (folding: boolean) => void;
   /** The server folded older turns into a summary before this one. */
   onCompaction?: (frame: CompactionFrame) => void;
   /** The real token count for the turn just finished, beside `done`. */
@@ -199,6 +205,8 @@ export interface ChatAdapterHooks {
    * pointing there, so `onError` is not called for it.
    */
   onConnectorConversation?: (source: ConversationSource) => void;
+  /** The stream reached `done`: an answer is ready to read. */
+  onDone?: (conversationId: string) => void;
 }
 
 /** The prompt we send: the user's text, which is all a user turn carries. */
@@ -430,13 +438,17 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
             });
             settle();
             return;
+          } else if (event.event === "compacting") {
+            hooks.onCompacting?.(true);
           } else if (event.event === "compaction") {
             // Before the user turn's `message` frame. Not terminal: the
             // answer has not started, so a body that ends here is still cut.
+            hooks.onCompacting?.(false);
             hooks.onCompaction?.(JSON.parse(event.data) as CompactionFrame);
           } else if (event.event === "context") {
             hooks.onContext?.(JSON.parse(event.data) as ContextFrame);
           } else if (event.event === "notice") {
+            hooks.onCompacting?.(false);
             hooks.onNotice?.(noticeText(event.data));
           } else if (event.event === "done") {
             sawTerminal = true;
@@ -461,10 +473,12 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
               hooks.onLengthTruncated?.(done.id);
             }
             yield emit();
+            hooks.onDone?.(conversationId);
             settle();
             // The answer is complete; whether anyone saw it land is the
-            // native side's call -- it notifies only an unfocused window.
-            notifyGenerationComplete();
+            // native side's call -- it notifies only an unfocused window,
+            // and a click on the notification opens this conversation.
+            notifyGenerationComplete(conversationId);
           }
         }
 

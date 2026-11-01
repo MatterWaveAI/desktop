@@ -154,8 +154,9 @@ function presetBox(): HTMLSelectElement | null {
   return container!.querySelector<HTMLSelectElement>("[data-mw-preset-picker]");
 }
 
-function modelBox(): HTMLSelectElement {
-  return container!.querySelector<HTMLSelectElement>("select[aria-label='Model']")!;
+/** The model pill: its text is the model in force, by its label. */
+function modelBox(): HTMLElement {
+  return container!.querySelector<HTMLElement>("[data-mw-model-picker]")!;
 }
 
 function shown(select: HTMLSelectElement): string | undefined {
@@ -171,7 +172,7 @@ describe("a preset in the composer", () => {
     await flush();
     expect(container!.textContent).toContain("Two invoices overlapped.");
     expect(shown(presetBox()!)).toBe("Support desk");
-    expect(shown(modelBox())).toBe("GRT Nano Pro");
+    expect(modelBox().textContent).toBe("GRT Nano Pro");
     expect(modelBox().hasAttribute("data-mw-model-fixed")).toBe(true);
   });
 
@@ -195,7 +196,7 @@ describe("a preset in the composer", () => {
     expect(shown(presetBox()!)).toBe("Support desk");
     expect(container!.querySelector("[data-mw-preset-welcome]")!.textContent).toBe("Hello! Ask me about your account.");
     expect(container!.textContent).not.toContain("MatterWave is a chat workspace");
-    expect(shown(modelBox())).toBe("GRT Nano Pro");
+    expect(modelBox().textContent).toBe("GRT Nano Pro");
     expect(modelBox().hasAttribute("data-mw-model-fixed")).toBe(true);
   });
 });

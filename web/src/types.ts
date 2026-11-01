@@ -92,6 +92,11 @@ export interface Principal {
    */
   terms_current?: boolean;
   /**
+   * Only minor revisions since the accepted version: the shell shows a
+   * dismissible notice and the app keeps working. Absent reads as false.
+   */
+  terms_notice?: boolean;
+  /**
    * Whether the first-run walkthrough was finished or skipped. False is the
    * onboarding gate; optional because an API that predates it sends none,
    * and absent reads as done so an older API never shows the gate.

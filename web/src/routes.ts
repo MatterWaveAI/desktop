@@ -8,9 +8,11 @@ import {
 } from "@tanstack/react-router";
 import { useContext, useEffect } from "react";
 import { Boot } from "./boot";
-import { apps } from "./apps/registry";
+import { apps, appTitle } from "./apps/registry";
 import { withAppBoundary } from "./apps/withAppBoundary";
 import { DEFAULT_PANE_ID, findPane } from "./apps/settings/panes";
+import { t } from "@lingui/core/macro";
+import { i18n } from "./i18n/runtime";
 import { ShellContext } from "./shell/shellContext";
 import { CallbackPage } from "./shell/CallbackPage";
 import { ForgotPage } from "./shell/ForgotPage";
@@ -269,7 +271,7 @@ const settingsPaneRoute = createRoute({
   // settings is navigation, and a stale link to a renamed pane
   // should land somewhere usable.
   head: ({ params }) => ({
-    meta: [{ title: `${findPane(params.paneId).title} · Settings · MatterWave` }],
+    meta: [{ title: `${i18n._(findPane(params.paneId).title)} · ${t`Settings`} · MatterWave` }],
   }),
 });
 
@@ -330,7 +332,7 @@ const appRoutes = apps.map((app) =>
     // Each app mounts inside its own boundary: one app
     // throwing loses that app, never the shell around it.
     component: mountApp(app),
-    head: () => ({ meta: [{ title: `${app.title} · MatterWave` }] }),
+    head: () => ({ meta: [{ title: `${appTitle(app)} · MatterWave` }] }),
   }),
 );
 

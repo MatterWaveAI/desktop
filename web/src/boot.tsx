@@ -3,8 +3,10 @@ import { HeadContent, Outlet, useLocation, useMatches, useNavigate, useRouter, t
 import { Trans } from "@lingui/react/macro";
 import type { AuthConfig, Preferences, Principal } from "./types";
 import { ApiError, apiFetch, isSuspended, setActingSubject, SUSPENDED_EVENT } from "./lib/api";
-import { adoptServerLocale } from "./i18n/locale";
+import { followAccountLocale } from "./i18n/locale";
 import { fetchAuthConfig, fetchMe } from "./lib/auth";
+import { setDiagnosticsIdentity } from "./lib/diagnostics";
+import { GetHelp } from "./components/GetHelp";
 import { Shell } from "./shell/Shell";
 import { LandingPage } from "./shell/LandingPage";
 import { SuspendedNotice } from "./shell/SuspendedNotice";
@@ -15,6 +17,7 @@ import { isAnonymousPath, LOGIN_PATH, onboardingWaits } from "./shell/frontDoor"
 import { rememberDeepLink } from "./shell/deepLink";
 import { NotFoundPage } from "./shell/NotFoundPage";
 import { SessionContext, type SessionContextValue } from "./shell/sessionContext";
+import { useOnline } from "./shell/useOnline";
 
 type BootState =
   | { phase: "loading" }
@@ -52,6 +55,7 @@ function phaseFor(config: AuthConfig, principal: Principal): BootState {
 export function Boot() {
   const [state, setState] = useState<BootState>({ phase: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const online = useOnline();
 
   useEffect(() => {
     let alive = true;
@@ -67,6 +71,12 @@ export function Boot() {
           // Every later call names this account, so a switch made in another
           // tab is refused rather than acted on (lib/api.ts).
           setActingSubject(principal.subject);
+          setDiagnosticsIdentity({
+            subject: principal.subject,
+            email: principal.email ?? null,
+            orgId: principal.org_id,
+            orgName: principal.org_name,
+          });
         } catch (err) {
           setActingSubject(null);
           // No session in OIDC mode is not an error: a stranger at the front
@@ -115,6 +125,21 @@ export function Boot() {
     };
   }, [attempt]);
 
+  // An API that could not be reached is tried again the moment the device
+  // says it has a network back: the desktop app opens with no connection
+  // more often than a browser tab does, and a person should not have to find
+  // the Retry button for something the app can see for itself.
+  const unreachable = state.phase === "error" && state.reason === "unreachable";
+  useEffect(() => {
+    if (!unreachable) return;
+    const onOnline = () => {
+      setState({ phase: "loading" });
+      setAttempt((n) => n + 1);
+    };
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [unreachable]);
+
   useEffect(() => {
     // Suspended while the shell is open: whichever request noticed fired
     // the event (lib/api.ts). Only a mounted shell moves to the notice - the
@@ -145,15 +170,21 @@ export function Boot() {
       <>
         <HeadContent />
         <div className="flex h-full flex-col items-center justify-center gap-3 bg-mw-surface text-mw-text">
-          <p className="text-lg font-medium">
+          <p className="text-lg font-medium" role="status" aria-live="polite">
             {state.reason === "expired" ? (
               <Trans>Your session has expired.</Trans>
+            ) : !online ? (
+              <Trans>You are offline.</Trans>
             ) : (
               <Trans>Could not reach the MatterWave API.</Trans>
             )}
           </p>
           <p className="text-sm text-mw-text-muted">
-            <Trans>The API may be down, or this origin may not be allowed by CORS.</Trans>
+            {state.reason === "unreachable" && !online ? (
+              <Trans>MatterWave connects again by itself as soon as the network is back.</Trans>
+            ) : (
+              <Trans>The API may be down, or this origin may not be allowed by CORS.</Trans>
+            )}
           </p>
           <button
             type="button"
@@ -168,6 +199,8 @@ export function Boot() {
           >
             <Trans>Retry</Trans>
           </button>
+          {/* No shell to reach Help from: the route to a person is here. */}
+          <GetHelp variant="link" className="text-sm text-mw-text-muted underline hover:text-mw-text" />
         </div>
       </>
     );
@@ -239,14 +272,12 @@ function Session(props: SessionContextValue & { children: ReactNode }) {
   const { children, ...value } = props;
   // The account's language, once there is an account to ask: a preference
   // saved on another device is adopted here, and the catalogue switches
-  // before most of the shell has painted. Best effort -- the device's own
-  // setting stands if the request fails.
+  // before most of the shell has painted. A language picked while the
+  // request is out wins over its answer; a failed request changes nothing.
   const ready = value.gate === null;
   useEffect(() => {
     if (!ready) return;
-    apiFetch<Preferences>("/api/me/preferences")
-      .then((preferences) => adoptServerLocale(preferences.locale))
-      .catch(() => undefined);
+    void followAccountLocale(() => apiFetch<Preferences>("/api/me/preferences"));
   }, [ready]);
   return (
     <SessionContext.Provider value={value}>

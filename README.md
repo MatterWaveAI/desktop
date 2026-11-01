@@ -4,7 +4,8 @@ The web app (`web/`, bundled in this repo) in a native window, built with Tauri 
 bundled, not loaded from the server; the native side adds what a browser tab cannot: a sign-in
 that survives restarts with the tokens in the OS keychain (or an API key in its place, for
 machines nobody sits at), deep links (`matterwave://`), an OS notification when a reply lands
-while the window is unfocused, a tray with Show/Hide and Quit, an update check and install the
+while the window is unfocused, an app menu and a tray with New Chat and the recent chats, a
+switch to start at login, an update check and install the
 SPA can run, and a window whose size and position survive a restart. Tauri rather than
 Electron: the installer is about 10 MB because it uses the OS webview instead of shipping
 Chromium, the renderer has no Node and its IPC is allow-listed per command, and the native
@@ -29,6 +30,9 @@ pnpm --dir web install  # the SPA's dependencies
 MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri dev   # the API to sign in against
 ```
 
+Once per clone, `pre-commit install` (with [pre-commit](https://pre-commit.com)): gitleaks then
+checks each commit's staged changes, with the rules CI runs (`.gitleaks.toml`).
+
 `tauri dev` starts the web dev server (`pnpm --dir web dev`) and points the window at it, so
 `/api` goes through Vite's proxy exactly as in a browser (`API_PROXY_TARGET` picks the API). The
 native side still signs in against the API named by `MW_DESKTOP_BASE_URL`, which is read **at
@@ -40,14 +44,15 @@ decision, loopback parsing, the keychain's save/load rules against an in-memory 
 key's shape checks, the device pairing's code normalization, redeem and unpair against a fake
 platform on loopback, the updater's build flag, the whole sign-in flow -- discovery,
 authorize URL, loopback callback, PKCE exchange, refresh, revoke -- against a fake issuer on
-127.0.0.1 with a closure standing in for the browser, and the updater's check and download against
-a local feed whose artifact is signed with a test key, `src-tauri/tests/updater_local.rs`). The SPA
-side, inside `web/`:
-`pnpm vitest run src/lib/desktopAuth.test.ts src/lib/desktopAuth.notify.test.ts
-src/apps/chat/chatAdapter.test.ts` (the desktop bearer path, the reply-ready notification, the
-streaming adapter), plus the settings pane and update banner tests
-(`pnpm vitest run src/apps/settings/panes/AccountPane.test.ts src/apps/settings/panes/DevicesPane.test.ts
-src/shell/UpdateBanner.test.tsx`).
+127.0.0.1 with a closure standing in for the browser, the hotkey's toggle decision, the
+`matterwave://` allow-list, the committed bundle config -- `src-tauri/tests/bundle_config.rs` --
+and the updater's check and download against a local feed whose artifact is signed with a test
+key, `src-tauri/tests/updater_local.rs`). The SPA side, `pnpm --dir web vitest run`: the platform's
+suite plus the desktop's own -- the bearer path, the bridge calls against the capability file, links
+in and out of the app, Stripe in the browser (`src/lib/desktop*.test.ts*`), the update banner
+(`src/shell/UpdateBanner.test.tsx`) and the desktop sections of the settings panes. The repository
+scripts, `pnpm test:scripts`: the SPA sync, the release config and gate, the workflow files, and
+the scan for ticket ids.
 
 What the tests do not cover: the real OS keychain (the `Store` seam in `keychain.rs` is what the
 tests drive; the keyring-backed one needs a desktop session), the deep-link delivery (a Tauri
@@ -72,8 +77,51 @@ MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri build --debug
 
 `build:web` runs first (`pnpm --dir web build`: `tsc --noEmit` then the Vite build) and the bundle
 takes `web/dist`. Output: `src-tauri/target/{release,debug}/bundle/` (MSI and NSIS on Windows,
-`.app`/DMG on macOS, AppImage and `.deb` on Linux). Signing and notarisation belong to the
-release job.
+`.app`/DMG on macOS, AppImage and `.deb` on Linux; no rpm). The macOS bundle merges
+`src-tauri/Info.plist` (the microphone usage description WKWebView requires before dictation may
+ask) and signs with `src-tauri/Entitlements.plist` (audio input under the hardened runtime).
+`node scripts/smoke-packaged-app.mjs --bundle-dir <bundle dir>` installs (Windows, silently, into a
+temporary directory) or opens the packaged app and fails unless it is still running after 20 s;
+CI runs it on every OS.
+
+The release job (`.github/workflows/release.yml`, on a `v*` tag) first refuses a tag that
+`package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` do not all carry, or that
+`CHANGELOG.md` has no section for (`node scripts/release-check.mjs --tag vX.Y.Z` runs the same check
+locally); that section is the release's notes, and a CycloneDX SBOM of the crates and packages
+the app is built from is attached beside the installers. It builds Windows x64 (MSI, NSIS)
+and arm64 (NSIS), macOS universal (app bundle, DMG) and Linux x64 and arm64 (AppImage, `.deb`),
+each into a draft release; every packaged app is started once, and only then is the release
+published and the updater feed laid out. Signing follows the secrets, each group all or nothing:
+the updater key signs the update artifacts, a Windows code-signing certificate
+(`WINDOWS_CERTIFICATE`, its password and the `MW_WINDOWS_TIMESTAMP_URL` variable) signs the
+Windows binaries and installers with Authenticode, and an Apple Developer ID certificate
+(`APPLE_CERTIFICATE`, its password, `APPLE_SIGNING_IDENTITY`) signs the macOS app under the
+hardened runtime, notarized and stapled when `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` are
+set too. A group left out builds unsigned for that platform, with a warning in the run; the full
+table is at the top of the workflow.
+
+### The bundled SPA
+
+`web/` is the platform's SPA at one named commit plus this app's own changes to it, and nothing
+else. `spa/upstream.json` names the commit (and a digest of its SPA as copied: the platform's
+`web/` without its Playwright suites, its build cache and `index.html`); `spa/patches/` holds one
+patch per file the desktop changes or adds, at the file's own path. `web/index.html` is the
+desktop's own: the CSP allows its inline theme script by hash, so the two change together (a test
+in `src-tauri/tests/bundle_config.rs` holds them to each other). `pnpm spa:check` proves the two agree --
+`web/` minus the patches is exactly that commit, and the patches give `web/` back -- and CI runs
+it, so an edit to `web/` that skipped the patches fails the build.
+
+```
+pnpm spa:pull --source ../matterwave-app --ref origin/develop   # re-sync to the platform
+pnpm spa:refresh                                                 # after editing web/ here
+```
+
+`spa:pull` copies the platform's `web/` at the ref, replays the desktop's changes onto it with a
+three-way merge, and rewrites the pin and the patches. A change that collides with the
+platform's stays in `web/` with conflict markers and the command fails, naming the files:
+resolve them, then `pnpm spa:refresh --source ../matterwave-app`. Strings the desktop adds stay
+plain English rather than `msg`/`Trans` macros, so the platform's catalogues need no desktop
+entries and `lingui extract` stays clean.
 
 In the bundled app the page's origin is the webview's (`tauri://localhost`, or
 `http://tauri.localhost` on Windows), so API calls are sent to `MW_DESKTOP_BASE_URL` with a
@@ -86,17 +134,17 @@ native client refuses the webview rather than half-working.
 1. The SPA's `/login` page, inside the shell, offers "Sign in with your browser" and calls
    `sign_in` (`web/src/shell/LoginPage.tsx`); it never starts the browser redirect the web app
    uses, because the webview has no cookie jar for that callback to fill. The native side reads
-   `/api/auth-config` for the native the identity provider client (`native_client_id`, `authorization_endpoint`,
+   `/api/auth-config` for the native client (`native_client_id`, `authorization_endpoint`,
    `token_endpoint`).
 2. It makes a PKCE verifier and a `state`, and opens the authorize URL in the **system browser**
    (never an embedded page: password managers and passkeys live there).
-3. the identity provider redirects to `matterwave://auth/callback`. The deep-link plugin hands the URL to the
+3. The identity provider redirects to `matterwave://auth/callback`. The deep-link plugin hands the URL to the
    running app (a second launch on Windows and Linux is folded into the first by the
    single-instance plugin). Where the scheme is not registered (a dev build on macOS, a Linux
    desktop without the `.desktop` entry), the redirect is `http://127.0.0.1:<port>/callback`
    instead, served once by a listener bound to loopback only. Both redirects are registered on
-   the native client the gateway play provisions (`matterwave-desktop`,
-   `deploy/ansible/roles/the identity provider/tasks/provision.yml`): the scheme as is, and the loopback as
+   the native client the gateway play provisions (`matterwave-desktop`; matterwave-infra,
+   `ansible/roles/zitadel/tasks/provision_gateway_app.yml`): the scheme as is, and the loopback as
    `http://127.0.0.1/callback` without a port, because the port is picked by the OS per sign-in
    and the identity provider matches loopback redirects of a native app on host and path only (RFC 8252 7.3).
 4. The callback's `state` is checked before its code is used; the code is exchanged with the
@@ -110,7 +158,10 @@ native client refuses the webview rather than half-working.
 whether or not the revoke reached it. The shell's Sign out (`web/src/shell/signOut.ts`) calls it
 and reloads the page into Boot; it never sends the webview to the identity provider's end_session, which is the
 browser's path and would leave the window on the IdP. `open_external` opens http(s) and mailto
-links in the system browser and refuses any other scheme.
+links in the system browser and refuses any other scheme, and every link out of the app goes
+through it: one document-level click listener (`web/src/lib/desktopLinks.ts`) hands any `<a>`
+whose URL leaves the app's own origin -- a reply's links, the help page's, the footer's -- to the
+system browser instead of the webview.
 
 ### An API key instead of the browser
 
@@ -123,11 +174,22 @@ tokens involved. Only the id half is shown again (`api_key_state`). Removing the
 to the browser session -- which stays signed in underneath -- while `sign_out` clears key and
 tokens together. OIDC stays the default: a completed browser sign-in supersedes a stored key.
 
-The webview may call only the app's own sixteen commands (`src-tauri/capabilities/default.json`);
-no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
+Passkeys are made in the browser, not in the window: a passkey is bound to the platform's origin and
+the webview's is the app's own. Settings → Account lists, renames and removes them as on the web,
+and its "Add a passkey in your browser" opens that pane of the web app (`MW_DESKTOP_BASE_URL` +
+`/settings/account`) in the system browser. A passkey added there also serves the app, whose
+sign-in runs in the browser.
+
+The webview may call only the app's own commands and the event plugin's listen and unlisten
+(`src-tauri/capabilities/default.json`, one `allow-<command>` per command declared in
+`src-tauri/build.rs`); no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
 (`tauri.conf.json`): no remote script (one hash, for the theme boot script inlined to avoid a
 flash), `wasm-unsafe-eval` for the syntax highlighter, and network access only to the page's own
-origin plus https for the API.
+origin and the IPC bridge plus, in the committed config, any https host. A release narrows that
+last part to the API: `scripts/release-config.mjs` rewrites `connect-src` to the origin of
+`MW_DESKTOP_BASE_URL` and nothing else, so script injected into the packaged app cannot reach any
+other host. The webview never talks to the identity provider (sign-in and refresh are native), so
+the issuer is not on the list.
 
 ### Pairing this machine as a device
 
@@ -142,6 +204,27 @@ on the platform's Devices pane beside the paired boxes. Unpairing revokes with t
 unreachable; a re-pairing keeps the machine's device id. The section is open to any signed-in
 person because redemption needs no role; only minting codes is an admin act.
 
+## Links into the app
+
+`matterwave://conversation/<id>` (optionally `?m=<message id>`) opens that conversation,
+`matterwave://share/<token>` opens a shared one and `matterwave://billing/return` opens Settings →
+Billing, whether the app is running or the link is what starts it. The native side parses the link against that allow-list (`src-tauri/src/navigation.rs`;
+anything else opens nothing, not even the window), keeps the target until the SPA takes it, and
+announces it as the `navigate` event; the SPA takes it on start-up and on every event and routes
+it itself (`web/src/lib/desktopNavigation.ts`). A link that needs a session while signed out is
+remembered by the front door and opened after sign-in, as in the browser.
+`matterwave://auth/callback` is the sign-in's own and never reaches the SPA.
+
+### Billing
+
+Stripe Checkout and the customer portal open in the system browser, not in the webview
+(`web/src/lib/desktopBilling.ts`): inside the webview they would replace the app, and Stripe
+returns to the web origin, where the webview has no session. The plans page and the billing pane
+say the payment is open in the browser and read `/api/billing/status` again each time the window
+comes back to the front, so the new plan shows as soon as Stripe has confirmed it. Stripe's return
+URL is the platform's, so it still lands on the web app in the browser; `matterwave://billing/return`
+is ready for a platform that sends desktop buyers back to the app.
+
 ## Notifications
 
 One OS notification, and one case for it: a generation finished while the window was not
@@ -149,15 +232,32 @@ focused. The SPA tells the native side when a stream ends in `done`
 (`web/src/apps/chat/chatAdapter.ts`); the native side checks focus and shows the notification
 only when the window is unfocused (`notify_generation_complete` in `src-tauri/src/lib.rs`) --
 a focused window already shows the reply land. The copy is fixed ("Your reply is ready.");
-reply text never goes into a notification. Clicking it does nothing (no notification actions
-are wired), and an error or a cancellation sends none: the in-app notices cover those when the
-person comes back.
+reply text never goes into a notification, only the conversation's id, so clicking it brings the
+window forward on that conversation (the plugin reports the click; on Windows only while the
+toast is on screen, not from the Action Center). An error or a cancellation sends none: the
+in-app notices cover those when the person comes back.
+
+## Menus, tray and start at login
+
+The window has a menu (`src-tauri/src/menu.rs`): New Chat (`Ctrl+N`, `Cmd+N` on macOS),
+Settings (`Ctrl+,`), Check for Updates (off in a build without the updater; with it, a newer
+version brings up the banner and "up to date" or a failed check is said in a notification), the
+standard Edit items, full screen and Minimize -- on macOS under the usual app, File, Edit, View and
+Window menus, on Windows and Linux in the window's menu bar with Settings and Quit under File.
+`Ctrl` (`Cmd`) with `+`, `-` and `0` zoom the page. The tray's menu, on left click too, is Show,
+New Chat, the three conversations the sidebar lists first (ids and titles only, handed over by
+the SPA) and Quit. Every item that acts on the page is a navigation request, the same path links
+take ("Links into the app"). Preferences (desktop only) has "Open MatterWave at login", the
+operating system's own login item (`tauri-plugin-autostart`: a Launch Agent on macOS, the `Run`
+key on Windows, an autostart entry on Linux).
 
 ## Global hotkey
 
 `Ctrl+Shift+M` by default (the plugin's `CommandOrControl+Shift+M`, so a Mac gets `Cmd+Shift+M`):
-a quick-summon that toggles the window from anywhere, the tray's Show/Hide without finding the
-tray (`src-tauri/src/hotkey.rs`, the `tauri-plugin-global-shortcut` plugin). The chord is
+a quick-summon that toggles the window from anywhere: one press puts a focused window away, and
+one press brings it forward from any other state -- hidden, minimized or behind other windows
+(`src-tauri/src/summon.rs`, `src-tauri/src/hotkey.rs`, the `tauri-plugin-global-shortcut`
+plugin). The tray's Show always brings the window forward. The chord is
 registered at launch -- before the SPA is up -- from the persisted choice, so the setting lives
 on the native side, in the app's config directory (`hotkey.json`), and the Preferences pane's
 "Global hotkey" select (desktop only) drives it through `set_global_shortcut`. A chord another
@@ -198,6 +298,7 @@ The endpoint and key come from the release job. `pnpm build:release` runs
 
 | Variable | Meaning |
 |---|---|
+| `MW_DESKTOP_BASE_URL` | The API; required. Its origin is the only host the page's CSP may connect to. |
 | `MW_UPDATER_PUBKEY` | Public half of the updater key (`pnpm tauri signer generate`). |
 | `MW_DESKTOP_CHANNEL` | One channel per `MW_ENV` (`dev`, `staging`, `prod`). |
 | `MW_DESKTOP_UPDATES_URL` | Where the release job publishes manifests. |

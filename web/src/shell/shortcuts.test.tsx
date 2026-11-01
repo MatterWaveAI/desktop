@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { i18n } from "@lingui/core";
 import {
   chordLabel,
   isMacPlatform,
@@ -330,7 +331,7 @@ describe("the shortcuts overlay", () => {
     const overlay = document.querySelector("[data-mw-shortcuts-help]")!;
     expect(overlay).not.toBeNull();
     for (const shortcut of SHORTCUTS) {
-      expect(overlay.textContent).toContain(shortcut.label);
+      expect(overlay.textContent).toContain(i18n._(shortcut.label));
     }
     const caps = [...overlay.querySelectorAll("kbd")].map((kbd) => kbd.textContent);
     expect(caps).toContain("Ctrl+Shift+O");
@@ -361,7 +362,7 @@ describe("the help page", () => {
     render(<HelpPage mac={false} />);
     const text = container!.textContent ?? "";
     expect(container!.querySelector("h1")?.textContent).toBe("Help");
-    for (const shortcut of SHORTCUTS) expect(text).toContain(shortcut.label);
+    for (const shortcut of SHORTCUTS) expect(text).toContain(i18n._(shortcut.label));
     expect(text).toContain("Ctrl+Shift+O");
     // The disclosure, word for word, and what it means in practice.
     expect(text).toContain("You are talking with an AI assistant, not a human.");

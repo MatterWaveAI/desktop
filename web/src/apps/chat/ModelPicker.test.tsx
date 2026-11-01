@@ -13,7 +13,7 @@ import { ModelPicker } from "./ModelPicker";
  * group by the API's flags, a model the plan does not include is listed but
  * cannot be chosen, and the line under the control names the plan that has
  * it with the same "See plans" link UpgradePrompt gives every other gated
- * feature.
+ * feature -- as a note under the list, where a choice is being made.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -85,42 +85,75 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function options(): HTMLOptionElement[] {
-  return [...container!.querySelectorAll("option")];
+function trigger(): HTMLElement {
+  return container!.querySelector<HTMLElement>("[data-mw-model-picker]")!;
+}
+
+/** Open the list: it is portalled, so its entries are looked for on the document. */
+async function openList(): Promise<void> {
+  await act(async () => {
+    trigger().dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    trigger().dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    trigger().click();
+  });
+  await act(async () => {});
+}
+
+function item(id: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[role="option"][data-mw-model="${id}"]`);
+}
+
+function name(id: string): string | null | undefined {
+  return item(id)?.querySelector("[data-slot='select-item-body'] > :first-child")?.textContent;
+}
+
+function description(id: string): string | null | undefined {
+  return item(id)?.querySelector("[data-slot='select-item-description']")?.textContent;
+}
+
+function disabled(id: string): boolean {
+  return item(id)?.getAttribute("aria-disabled") === "true";
 }
 
 describe("ModelPicker with a priced model list", () => {
-  it("names models and the default by label with the price, never by id", async () => {
+  it("is one pill naming the model in force by its label, never by id", async () => {
     stubModels(FREE_ORG);
     await render();
-    const texts = options().map((o) => o.textContent);
-    expect(texts[0]).toBe("Default (GRT Nano)");
-    // GRT is the product: an ordinary entry, with its list price, outside any group.
-    const nano = options().find((o) => o.value === "grt-nano")!;
-    // The label alone: the price and window are on the line under the box,
-    // where they can be read in full, not squeezed into a one-line option.
-    expect(nano.textContent).toBe("GRT Nano");
-    expect(nano.parentElement?.tagName).toBe("SELECT");
-    expect(container!.querySelector("#mw-model-description")?.textContent).toBe(
-      "Using GRT Nano, the default model.",
-    );
+    const pill = trigger();
+    expect(pill.getAttribute("role")).toBe("combobox");
+    expect(pill.getAttribute("aria-label")).toBe("Model");
+    expect(pill.textContent).toBe("GRT Nano");
+    expect(pill.querySelector("[data-slot='status-dot']")).not.toBeNull();
+    // The hint line is gone from the page; the description is the control's.
+    expect(container!.querySelector("[data-model-upgrade]")).toBeNull();
+    const described = pill.getAttribute("aria-describedby")!;
+    expect(document.getElementById(described)?.textContent).toBe("Using GRT Nano, the default model.");
+  });
+
+  it("lists the default by label, each model with its price as its second line", async () => {
+    stubModels(FREE_ORG);
+    await render();
+    await openList();
+    expect(name("")).toBe("Default (GRT Nano)");
+    expect(name("grt-nano")).toBe("GRT Nano");
+    expect(description("grt-nano")).toBe("$0.10 / $0.40 per 1M · counts 1× · 8k context");
+    // GRT is the product: an ordinary entry, outside any group.
+    expect(item("grt-nano")?.closest("[role='group']")).toBeNull();
   });
 
   it("lists a model the plan does not include as disabled, with the plan that has it", async () => {
     stubModels(FREE_ORG);
     await render();
-    const pro = options().find((o) => o.value === "grt-nano-pro")!;
-    const max = options().find((o) => o.value === "grt-nano-max")!;
-    const nano = options().find((o) => o.value === "grt-nano")!;
-    expect(pro.disabled).toBe(true);
-    expect(pro.textContent).toBe("GRT Nano Pro — needs Pro");
-    expect(max.disabled).toBe(true);
-    expect(max.textContent).toBe("GRT Nano Max — needs Pro Plus");
-    expect(nano.disabled).toBe(false);
-    // An ordinary entry, not in a group.
-    expect(pro.parentElement?.tagName).toBe("SELECT");
+    await openList();
+    expect(disabled("grt-nano-pro")).toBe(true);
+    expect(description("grt-nano-pro")).toBe("Needs Pro");
+    expect(disabled("grt-nano-max")).toBe(true);
+    expect(description("grt-nano-max")).toBe("Needs Pro Plus");
+    expect(disabled("grt-nano")).toBe(false);
 
-    const upgrade = container!.querySelector("[data-model-upgrade]")!;
+    // The plan note sits under the list, outside the listbox, with the link.
+    const upgrade = document.querySelector("[data-model-upgrade]")!;
+    expect(upgrade.closest("[role='listbox']")).toBeNull();
     expect(upgrade.textContent).toContain("Pro includes GRT Nano Pro.");
     expect(upgrade.textContent).toContain("Pro Plus includes GRT Nano Max.");
     expect(upgrade.textContent).toContain("GLM 4.6: not on your plan.");
@@ -129,32 +162,20 @@ describe("ModelPicker with a priced model list", () => {
     expect(link.getAttribute("href")).toBe("/pricing");
   });
 
-  it("lets both hint lines wrap rather than cutting them to one line each", async () => {
-    stubModels(FREE_ORG);
-    await render();
-    const description = container!.querySelector("#mw-model-description")!;
-    const upgrade = container!.querySelector("[data-model-upgrade]")!;
-    for (const line of [description, upgrade]) {
-      expect(line.className).not.toContain("truncate");
-      expect(line.className).not.toContain("line-clamp");
-    }
-    expect(description.parentElement?.className).toContain("flex-wrap");
-    // The box is not capped on a phone: a cap clipped the default's name.
-    const select = container!.querySelector("select")!;
-    expect(select.className).not.toMatch(/max-w-\d/);
-    expect(select.className).not.toContain("truncate");
-  });
-
   it("puts partner models and research previews in their own groups, by the API's flags", async () => {
     stubModels(FREE_ORG);
     await render();
-    const groups = [...container!.querySelectorAll("optgroup")];
-    expect(groups.map((g) => g.label)).toEqual(["Partner models", "Research preview — not for real use"]);
-    const glm = groups[0]!.querySelector("option")!;
-    expect(glm.value).toBe("glm-4.6");
-    expect(glm.textContent).toBe("GLM 4.6 — not on your plan");
-    expect(glm.disabled).toBe(true);
-    expect(groups[1]!.querySelector("option")?.value).toBe("tiny-demo");
+    await openList();
+    const groups = [...document.querySelectorAll("[role='group']")];
+    expect(groups.map((g) => g.querySelector("[data-slot='select-label']")?.textContent)).toEqual([
+      "Partner models",
+      "Research preview — not for real use",
+    ]);
+    expect(groups[0]!.contains(item("glm-4.6"))).toBe(true);
+    expect(disabled("glm-4.6")).toBe(true);
+    expect(description("glm-4.6")).toBe("Not on your plan");
+    expect(groups[1]!.contains(item("tiny-demo"))).toBe(true);
+    expect(description("tiny-demo")).toMatch(/^Research demo/);
   });
 
   it("offers a partner model a plan names like any other", async () => {
@@ -163,9 +184,9 @@ describe("ModelPicker with a priced model list", () => {
       data: FREE_ORG.data.map((m) => (m.partner ? { ...m, included: true } : m)),
     });
     await render();
-    const glm = container!.querySelector("optgroup[label='Partner models'] option") as HTMLOptionElement;
-    expect(glm.disabled).toBe(false);
-    expect(glm.textContent).toBe("GLM 4.6");
+    await openList();
+    expect(disabled("glm-4.6")).toBe(false);
+    expect(name("glm-4.6")).toBe("GLM 4.6");
   });
 
   it("says nothing about upgrades when the plan includes every listed model", async () => {
@@ -174,8 +195,9 @@ describe("ModelPicker with a priced model list", () => {
       data: FREE_ORG.data.map((m) => ({ ...m, included: true, upgrade_to: null })),
     });
     await render();
-    expect(options().every((o) => !o.disabled)).toBe(true);
-    expect(container!.querySelector("[data-model-upgrade]")).toBeNull();
+    await openList();
+    expect(document.querySelectorAll("[role='option'][aria-disabled='true']").length).toBe(0);
+    expect(document.querySelector("[data-model-upgrade]")).toBeNull();
   });
 
   it("shows a preset's model as fixed: named by its label, not changeable, and said to be the preset's", async () => {
@@ -196,13 +218,13 @@ describe("ModelPicker with a priced model list", () => {
       );
     });
     await act(async () => {});
-    const select = container!.querySelector("select")!;
-    expect(select.value).toBe("grt-nano-pro");
-    expect(select.selectedOptions[0]?.textContent).toBe("GRT Nano Pro");
-    expect(select.hasAttribute("data-mw-model-fixed")).toBe(true);
-    expect(select.disabled).toBe(true);
-    expect(select.title).toBe("Set by the Support desk preset");
-    expect(container!.querySelector("#mw-model-description")?.textContent).toBe(
+    const pill = trigger();
+    expect(pill.textContent).toBe("GRT Nano Pro");
+    expect(pill.hasAttribute("data-mw-model-fixed")).toBe(true);
+    expect(pill.hasAttribute("disabled") || pill.getAttribute("aria-disabled") === "true").toBe(true);
+    expect(pill.title).toBe("Set by the Support desk preset");
+    const described = pill.getAttribute("aria-describedby")!;
+    expect(document.getElementById(described)?.textContent).toBe(
       "Set by the Support desk preset: $0.50 / $2.00 per 1M · counts 5× · 8k context",
     );
   });

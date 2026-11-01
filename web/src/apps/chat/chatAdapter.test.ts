@@ -393,6 +393,24 @@ describe("compaction frames", () => {
     expect(results.map(textOf).at(-1)).toBe("ok");
   });
 
+  it("says a fold is running before the turn, and when it has finished", async () => {
+    const onCompacting = vi.fn();
+    const h = hooks({ getConversationId: vi.fn(() => "c1"), onCompacting });
+    const summary = { id: "s1", role: "system", parts: [{ type: "summary", text: "earlier" }] };
+    stubFetch(() =>
+      sseResponse([
+        sse("compacting", { detail: "Summarising the earlier messages." }),
+        sse("compaction", { message: summary, covers_from: "q1", covers_to: "a2", tokens_before: 900, tokens_after: 80 }),
+        sse("delta", { content: "ok" }),
+        sse("done", { id: "a3", model: "m" }),
+      ]),
+    );
+    const results = await collect(createChatAdapter(h), runOptions("next"));
+    expect(onCompacting.mock.calls).toEqual([[true], [false]]);
+    expect(h.onError).not.toHaveBeenCalled();
+    expect(results.map(textOf).at(-1)).toBe("ok");
+  });
+
   it("says when a complete stream carried an answer cut at the token limit", async () => {
     const onLengthTruncated = vi.fn();
     const h = hooks({ getConversationId: vi.fn(() => "c1"), onLengthTruncated });

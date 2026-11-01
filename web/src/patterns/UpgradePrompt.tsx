@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import { Link } from "@tanstack/react-router";
 import { upgradeRequired } from "../lib/billing";
 
@@ -17,6 +18,8 @@ import { upgradeRequired } from "../lib/billing";
 export function UpgradePrompt(props: { error: unknown; className?: string }) {
   const info = upgradeRequired(props.error);
   if (!info) return null;
+  const currentPlan = info.currentPlan;
+  const upgradeTo = info.upgradeTo;
   return (
     <div
       role="status"
@@ -25,11 +28,11 @@ export function UpgradePrompt(props: { error: unknown; className?: string }) {
     >
       <p>{info.message}</p>
       <p className="mt-1 text-mw-text-muted">
-        You are on the {info.currentPlan} plan.{" "}
-        {info.upgradeTo ? `${info.upgradeTo} includes this.` : "A higher plan includes this."}
+        <Trans>You are on the {currentPlan} plan.</Trans>{" "}
+        {upgradeTo ? <Trans>{upgradeTo} includes this.</Trans> : <Trans>A higher plan includes this.</Trans>}
       </p>
       <Link to="/pricing" className="mt-2 inline-block underline underline-offset-2">
-        See plans
+        <Trans>See plans</Trans>
       </Link>
     </div>
   );

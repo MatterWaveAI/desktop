@@ -64,13 +64,19 @@ export function matchCommands(
 }
 
 /**
- * Whether a fold would have anything to do: stored turns beyond the tail
- * the server always keeps. The kept count is the server's (`keep_pairs`
- * from `/context`); until it has answered, any stored turn counts, and the
- * server's 409 says the rest.
+ * Whether a fold would have anything to do. The server's answer
+ * (`compactable` from `/context`) wins whenever it has given one: how many
+ * exchanges a fold keeps depends on how big they are, so no count here can
+ * say. Before it has answered, stored turns beyond the kept tail count
+ * (`keep_pairs`), or any stored turn, and the server's 409 says the rest.
  */
-export function canCompact(storedTurns: number, keepPairs: number | null): boolean {
+export function canCompact(
+  storedTurns: number,
+  keepPairs: number | null,
+  serverSays: boolean | null = null,
+): boolean {
   if (storedTurns === 0) return false;
+  if (serverSays !== null) return serverSays;
   if (keepPairs === null) return true;
   return storedTurns > keepPairs * 2;
 }

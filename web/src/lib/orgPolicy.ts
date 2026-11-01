@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { ApiError, apiFetch, currentToken, requestIdOf } from "./api";
 
 /**
@@ -267,9 +268,10 @@ export async function downloadCsv(path: string, filename: string): Promise<void>
       // not JSON; the status is the message
     }
     const detail = (body as { detail?: unknown } | undefined)?.detail;
+    const status = res.status;
     throw new ApiError(
       res.status,
-      typeof detail === "string" ? detail : `Request failed (${res.status})`,
+      typeof detail === "string" ? detail : t`Request failed (${status})`,
       body,
       requestIdOf(res, body),
     );

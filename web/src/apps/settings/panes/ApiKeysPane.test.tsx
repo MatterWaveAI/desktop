@@ -2,6 +2,7 @@ import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEVELOPERS_PATH } from "../../../shell/frontDoor";
 import { ApiKeysPane, keyLabel, type ApiKeyRecord } from "./ApiKeysPane";
+import { formatDate, formatDateTime } from "../../../i18n/format";
 import {
   buttonNamed,
   chooseOption,
@@ -140,7 +141,7 @@ describe("the API keys pane", () => {
     expect(items[0].textContent).toContain("Never used");
     // Dates in the reader's locale, the medium form every pane uses.
     expect(items[0].textContent).toContain(
-      `Created ${new Date(LIVE.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}`,
+      `Created ${formatDate(LIVE.created_at, { dateStyle: "medium" })}`,
     );
     expect([...items[0].querySelectorAll("button")].map((b) => b.textContent)).toEqual([
       "Edit…",
@@ -185,7 +186,7 @@ describe("the API keys pane", () => {
     expect(badge(items[0]).textContent).toBe("Expires in 3 days");
     expect(badge(items[0]).getAttribute("data-variant")).toBe("destructive");
     expect(badge(items[1]).textContent).toBe(
-      `Expires ${new Date(later.expires_at).toLocaleDateString(undefined, { dateStyle: "medium" })}`,
+      `Expires ${formatDate(later.expires_at, { dateStyle: "medium" })}`,
     );
     expect(badge(items[1]).getAttribute("data-variant")).toBe("outline");
     expect(badge(items[2]).textContent).toContain("Expired");
@@ -392,7 +393,7 @@ describe("the API keys pane", () => {
     );
     mounted = await mount(<ApiKeysPane />, principalWith(["user"]));
     const item = mounted.container.querySelector("ul[aria-label='API keys'] li")!;
-    const date = new Date(minted).toLocaleDateString(undefined, { dateStyle: "medium" });
+    const date = formatDate(minted, { dateStyle: "medium" });
     expect(item.querySelector("span.font-medium")?.textContent).toBe(`VS Code e2e · ${date}`);
     expect(item.querySelector("span.font-medium")?.getAttribute("title")).toBe(device.name);
     expect(item.textContent).toContain("Device sign-in");
@@ -443,7 +444,7 @@ describe("the API keys pane", () => {
     expect(shown.textContent).toBe("mw_new1new1_THE-ROTATED-SECRET");
     expect(dialog()!.textContent).toContain("will not be shown again");
     expect(dialog()!.textContent).toContain(
-      `The old key keeps working until ${new Date(rotatedRow.previous_valid_until).toLocaleString()}`,
+      `The old key keeps working until ${formatDateTime(rotatedRow.previous_valid_until, { dateStyle: "medium", timeStyle: "medium" })}`,
     );
     // Not reloaded yet: the list still shows the old prefix beneath the modal.
     expect(calls.filter((c) => c.method === "GET")).toHaveLength(1);

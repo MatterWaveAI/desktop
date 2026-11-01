@@ -3,6 +3,7 @@ import { AI_DISCLOSURE } from "../apps/chat/aiDisclosureText";
 import { REPORT_REASONS } from "../apps/chat/report";
 import { PaneSection } from "../apps/settings/PaneSection";
 import { PageHeader } from "../patterns";
+import { GetHelp } from "../components/GetHelp";
 import { getAuthConfig } from "../lib/auth";
 import { DEVELOPERS_PATH, PRICING_PATH } from "./frontDoor";
 import { supportLinks } from "./frontDoorLinks";
@@ -21,12 +22,13 @@ import { isMacPlatform, SHORTCUTS } from "./shortcuts";
  * a status page in /api/auth-config (Boot fetched it before this rendered);
  * without either there is nothing honest to link, so nothing is shown.
  *
- * The shortcut labels, the report reasons and the AI disclosure are the
- * chat app's own data and read as the chat app writes them; the prose
- * around them is this page's and is in the catalogue.
+ * The report reasons and the AI disclosure are the chat app's own data and
+ * read as the chat app writes them; the shortcut labels are descriptors in
+ * shortcuts.ts, and the prose around them is this page's, all in the
+ * catalogue.
  */
 export function HelpPage(props: { mac?: boolean }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const mac = props.mac ?? isMacPlatform();
   const linkClass = "text-mw-link underline underline-offset-2 hover:text-mw-link-hover";
   const config = getAuthConfig();
@@ -44,9 +46,9 @@ export function HelpPage(props: { mac?: boolean }) {
               {SHORTCUTS.map((shortcut) => (
                 <div key={shortcut.id} className="flex items-start justify-between gap-4">
                   <dt className="text-sm">
-                    {shortcut.label}
+                    {i18n._(shortcut.label)}
                     {shortcut.hint && (
-                      <span className="block text-xs text-mw-text-muted">{shortcut.hint}</span>
+                      <span className="block text-xs text-mw-text-muted">{i18n._(shortcut.hint)}</span>
                     )}
                   </dt>
                   <dd className="flex shrink-0 items-center gap-1.5">
@@ -174,6 +176,24 @@ export function HelpPage(props: { mac?: boolean }) {
                 has the quickstart, the reference and the SDKs.
               </Trans>
             </p>
+          </PaneSection>
+
+          <PaneSection title={t`When something goes wrong`}>
+            <div className="flex flex-col gap-3 text-sm text-mw-text-muted">
+              <p>
+                <Trans>
+                  Every error in the app has a <span className="text-mw-text">Get help</span> button
+                  beside its Retry. It gathers what support needs to find the failure — your
+                  account and organisation, the release you are running, the request and trace ids,
+                  and the page you were on — and never anything you wrote. With a support address
+                  set up for this deployment it opens a message already filled in; without one it
+                  gives you the details to copy.
+                </Trans>
+              </p>
+              <div>
+                <GetHelp />
+              </div>
+            </div>
           </PaneSection>
 
           {support.length > 0 && (

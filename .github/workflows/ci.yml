@@ -1,15 +1,51 @@
 name: CI
 
-# Test + lint on every push and every PR (T-240): the release workflow is
-# tags only, so this is what catches breakage between releases. The web
-# job and the Rust job gate; the tauri build matrix below is allowed to
-# fail while the runners' toolchains mature.
+# Test + lint on every push and every PR: the release workflow is
+# tags only, so this is what catches breakage between releases. Every job
+# gates, the packaged build on each OS included: an app that builds but
+# will not start is as broken as one that does not compile.
 on:
   push:
-    branches: [main, develop]
+    branches: [develop, main]
   pull_request:
+    branches: [develop, main]
+
+# Read the code, nothing else: no job here writes to the repository.
+permissions:
+  contents: read
 
 jobs:
+  secrets:
+    name: No committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # The working tree as committed, against gitleaks' rules and the
+      # allowlist for test fixtures in .gitleaks.toml. Pinned by digest.
+      - run: >
+          docker run --rm -v "$PWD:/repo" -w /repo
+          ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          dir /repo --config /repo/.gitleaks.toml --redact --no-banner
+
+  scripts:
+    name: Scripts, workflows and the SPA sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      # web/ must be spa/upstream.json's platform commit plus spa/patches,
+      # exactly: an edit to web/ that skipped `pnpm spa:refresh` fails here.
+      - run: pnpm spa:check
+      - run: pnpm test:scripts
+
   web:
     name: Web (lint, typecheck, tests, build)
     runs-on: ubuntu-latest
@@ -17,11 +53,11 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -38,41 +74,37 @@ jobs:
     defaults:
       run:
         working-directory: src-tauri
-    env:
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       # Build out of tree. Windows Application Control refuses to run
       # freshly built executables under the repo path (os error 4551); a
       # target directory in the runner's temp works everywhere and keeps
-      # the checkout clean. See README.md, "Develop".
-      CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-target
-    steps:
-      - uses: actions/checkout@v4
+      # the checkout clean. See README.md, "Develop". Set from a step: the
+      # runner context does not exist at job level, and a job-level
+      # `runner.temp` makes GitHub reject the whole workflow.
+      - name: Build out of tree
+        run: echo "CARGO_TARGET_DIR=$RUNNER_TEMP/cargo-target" >> "$GITHUB_ENV"
       - name: Install Tauri's Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - run: cargo fmt --check
-      - run: cargo clippy --all-targets
+      - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
 
   tauri-build:
-    name: Tauri build (${{ matrix.os }})
+    name: Tauri build and start (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # Allowed to fail: the bundled build needs each runner's whole
-    # toolchain (Rust, the OS webview's dev packages, WiX on Windows), and
-    # a runner missing a piece must not hold the branch hostage. Green
-    # here means the web and rust jobs passed; a red matrix entry is a
-    # sign the runner needs work, not that the code does.
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -83,10 +115,19 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir web install --frozen-lockfile
       - run: pnpm build
         env:
           # Read at build time; the release job sets the real one.
-          MW_DESKTOP_BASE_URL: https://app.matterwave.ai
+          MW_DESKTOP_BASE_URL: ${{ vars.MW_DESKTOP_BASE_URL || 'https://app.matterwave.ai' }}
+      # The installer or bundle this produced, started once: it must still
+      # be running after 20 s (scripts/smoke-packaged-app.mjs).
+      - name: Start the packaged app once
+        if: runner.os != 'Linux'
+        shell: bash
+        run: node scripts/smoke-packaged-app.mjs --bundle-dir src-tauri/target/release/bundle
+      - name: Start the packaged app once (virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke-packaged-app.mjs --bundle-dir src-tauri/target/release/bundle

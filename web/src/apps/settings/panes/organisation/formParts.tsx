@@ -1,3 +1,5 @@
+import { useLingui } from "@lingui/react/macro";
+
 /**
  * The small pieces every form on the Organisation pane shares, so a field
  * error, a form-level summary and a "Saved." line look and announce the
@@ -37,9 +39,10 @@ export function FormSummary(props: { name: string; messages: readonly string[] }
  * screen reader is already listening when the text arrives.
  */
 export function SavedStatus(props: { shown: boolean; text?: string; className?: string; marker?: string }) {
+  const { t } = useLingui();
   return (
     <p role="status" aria-live="polite" data-saved={props.marker} className={`text-sm text-mw-text-muted ${props.className ?? ""}`}>
-      {props.shown ? (props.text ?? "Saved.") : ""}
+      {props.shown ? (props.text ?? t`Saved.`) : ""}
     </p>
   );
 }

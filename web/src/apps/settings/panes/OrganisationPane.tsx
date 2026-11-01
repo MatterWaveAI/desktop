@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { msg, plural, t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { RequestReference } from "../../chat/ChatStates";
 import { Alert } from "../../../components/ui/alert";
 import { StatusDot } from "../../../components/ui/badge";
@@ -14,9 +16,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { formatDate, formatDateTime, formatNumber } from "../../../i18n/format";
 import { ApiError, apiFetch } from "../../../lib/api";
 import { managesOrg } from "../../../lib/auth";
-import { PARTNER_MODELS_HEADING, PARTNER_MODELS_NOTE, splitPartners } from "../../../lib/billing";
+import { PARTNER_MODELS_HEADING_MSG, PARTNER_MODELS_NOTE_MSG, splitPartners } from "../../../lib/billing";
 import {
   MFA_REQUIRED_EXPLANATION,
   fetchMfaSettings,
@@ -53,7 +56,6 @@ import { DestructiveConfirm, EmptyState, ErrorState, LoadingSkeleton } from "../
 import {
   describeExpiry,
   fetchOrgSharing,
-  formatDate,
   listOrgShares,
   revokeOrgShare,
   setOrgSharing,
@@ -88,11 +90,12 @@ import { SectionTabs } from "./organisation/SectionTabs";
  */
 export function OrganisationPane() {
   const { principal } = useShell();
+  const { t } = useLingui();
   if (!managesOrg(principal)) {
     return (
       <EmptyState
-        title="Organisation settings are for admins"
-        description="Domains and single sign-on are set up by an administrator of your organisation. Ask one to make changes here."
+        title={t`Organisation settings are for admins`}
+        description={t`Domains and single sign-on are set up by an administrator of your organisation. Ask one to make changes here.`}
       />
     );
   }
@@ -129,6 +132,7 @@ async function fetchOrg(): Promise<OrgState> {
 }
 
 function OrgAdmin() {
+  const { t } = useLingui();
   const [state, setState] = useState<
     { phase: "loading" } | { phase: "error"; message: string } | ({ phase: "ready" } & OrgState)
   >({ phase: "loading" });
@@ -152,7 +156,7 @@ function OrgAdmin() {
 
   if (state.phase === "loading") return <LoadingSkeleton rows={4} />;
   if (state.phase === "error") {
-    return <ErrorState title="Could not load organisation settings" message={state.message} />;
+    return <ErrorState title={t`Could not load organisation settings`} message={state.message} />;
   }
   const reload = () => setGeneration((n) => n + 1);
   // Nine cards in one column was a page nobody could find anything on.
@@ -160,11 +164,11 @@ function OrgAdmin() {
   // what may members use; how do people get in; who changed what.
   return (
     <SectionTabs
-      label="Organisation settings"
+      label={t`Organisation settings`}
       tabs={[
         {
           id: "general",
-          label: "General",
+          label: t`General`,
           content: (
             <>
               <NameSection org={state.org} onChanged={reload} />
@@ -181,7 +185,7 @@ function OrgAdmin() {
         },
         {
           id: "sign-in",
-          label: "Sign-in & security",
+          label: t`Sign-in & security`,
           content: (
             <>
               <SignInSummary domains={state.domains} idps={state.idps} sso={state.sso} />
@@ -191,7 +195,7 @@ function OrgAdmin() {
             </>
           ),
         },
-        { id: "audit", label: "Audit log", content: <AuditSection /> },
+        { id: "audit", label: t`Audit log`, content: <AuditSection /> },
       ]}
     />
   );
@@ -230,7 +234,7 @@ function CopyButton(props: { value: string; label: string }) {
       aria-label={props.label}
       onClick={() => void copy()}
     >
-      {copied ? "Copied" : "Copy"}
+      {copied ? <Trans>Copied</Trans> : <Trans>Copy</Trans>}
     </Button>
   );
 }
@@ -247,6 +251,7 @@ const ORG_NAME_MAX_LEN = 120;
  * the organisation's real name, which invites and the shell then show.
  */
 function NameSection(props: { org: OrgSummary; onChanged: () => void }) {
+  const { t } = useLingui();
   // The name the API holds, as this section last heard it: the PATCH
   // response updates it directly, so "saved" does not wait on the reload.
   const [current, setCurrent] = useState(props.org.name);
@@ -261,7 +266,7 @@ function NameSection(props: { org: OrgSummary; onChanged: () => void }) {
   const trimmed = draft.trim();
   const invalid = trimmed.length === 0 || trimmed.length > ORG_NAME_MAX_LEN;
   const dirty = trimmed !== current;
-  const fieldError = trimmed.length === 0 ? "Enter a name." : apiError;
+  const fieldError = trimmed.length === 0 ? t`Enter a name.` : apiError;
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -289,7 +294,7 @@ function NameSection(props: { org: OrgSummary; onChanged: () => void }) {
   }
 
   return (
-    <PaneSection title="Name" description="Shown on invitations and in the account menu.">
+    <PaneSection title={t`Name`} description={t`Shown on invitations and in the account menu.`}>
       <form
         noValidate
         aria-busy={busy}
@@ -298,7 +303,7 @@ function NameSection(props: { org: OrgSummary; onChanged: () => void }) {
       >
         <div className="flex min-w-0 flex-1 basis-48 flex-col gap-1.5">
           <label htmlFor={fieldId} className="text-sm text-mw-text-muted">
-            Name
+            <Trans>Name</Trans>
           </label>
           <Input
             id={fieldId}
@@ -317,7 +322,7 @@ function NameSection(props: { org: OrgSummary; onChanged: () => void }) {
           />
         </div>
         <Button type="submit" disabled={busy || !dirty || invalid}>
-          {busy ? "Saving…" : "Save name"}
+          {busy ? t`Saving…` : t`Save name`}
         </Button>
         <div className="basis-full">
           <FieldError id={errorId} message={fieldError} />
@@ -334,6 +339,7 @@ function NameSection(props: { org: OrgSummary; onChanged: () => void }) {
 // --- domains ------------------------------------------------------------------
 
 function DomainsSection(props: { domains: OrgDomain[]; onChanged: () => void }) {
+  const { t } = useLingui();
   const [busy, setBusy] = useState(false);
   /** What a verify or remove press on a row said, if it failed. */
   const [rowError, setRowError] = useState<string | null>(null);
@@ -387,65 +393,77 @@ function DomainsSection(props: { domains: OrgDomain[]; onChanged: () => void }) 
 
   return (
     <PaneSection
-      title="Email domains"
+      title={t`Email domains`}
       flush
       description={
         <>
-          Addresses on a verified domain are offered your organisation&apos;s sign-in.
+          {t`Addresses on a verified domain are offered your organisation's sign-in.`}
           <LearnMore className="mt-1">
             <p>
-              A domain is verified by publishing a DNS TXT record we give you, which proves the
-              domain is yours.
+              <Trans>
+                A domain is verified by publishing a DNS TXT record we give you, which proves the
+                domain is yours.
+              </Trans>
             </p>
           </LearnMore>
         </>
       }
     >
       {props.domains.length === 0 ? (
-        <p className="px-5 pt-4 text-sm text-mw-text-muted">No domains claimed yet.</p>
+        <p className="px-5 pt-4 text-sm text-mw-text-muted">
+          <Trans>No domains claimed yet.</Trans>
+        </p>
       ) : (
-        <RowList aria-label="Claimed domains" className="border-b border-border">
-          {props.domains.map((d) => (
+        <RowList aria-label={t`Claimed domains`} className="border-b border-border">
+          {props.domains.map((d) => {
+            const domain = d.domain;
+            const verifier = d.verified_by;
             // Row's layout by hand: the DNS record opens under the whole
             // row, not squeezed into the name column beside the buttons.
-            <li key={d.domain} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
-              <div className="flex min-w-0 flex-1 basis-56 flex-col leading-snug">
-                <div className="min-w-0 font-medium break-all">{d.domain}</div>
-                <div className="inline-flex items-center gap-1.5 text-sm text-mw-text-muted">
-                  <StatusDot tone={d.verified ? "positive" : "warning"} />
-                  {d.verified ? `Verified by ${d.verified_by ?? "an admin"}` : "Not verified"}
+            return (
+              <li key={d.domain} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
+                <div className="flex min-w-0 flex-1 basis-56 flex-col leading-snug">
+                  <div className="min-w-0 font-medium break-all">{d.domain}</div>
+                  <div className="inline-flex items-center gap-1.5 text-sm text-mw-text-muted">
+                    <StatusDot tone={d.verified ? "positive" : "warning"} />
+                    {d.verified
+                      ? verifier
+                        ? t`Verified by ${verifier}`
+                        : t`Verified by an admin`
+                      : t`Not verified`}
+                  </div>
                 </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {!d.verified && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {!d.verified && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      aria-expanded={proving === d.domain}
+                      onClick={() => setProving(proving === d.domain ? null : d.domain)}
+                    >
+                      <Trans>Verify {domain}</Trans>
+                    </Button>
+                  )}
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     disabled={busy}
-                    aria-expanded={proving === d.domain}
-                    onClick={() => setProving(proving === d.domain ? null : d.domain)}
+                    onClick={() => void removeDomain(d.domain)}
                   >
-                    Verify {d.domain}
+                    <Trans>Remove {domain}</Trans>
                   </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void removeDomain(d.domain)}
-                >
-                  Remove {d.domain}
-                  </Button>
-              </div>
-              {!d.verified && proving === d.domain && (
-                <div className="basis-full">
-                  <DomainProof domain={d.domain} onVerified={props.onChanged} />
                 </div>
-              )}
-            </li>
-          ))}
+                {!d.verified && proving === d.domain && (
+                  <div className="basis-full">
+                    <DomainProof domain={d.domain} onVerified={props.onChanged} />
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </RowList>
       )}
       <div className="flex flex-col gap-3 px-5 py-4">
@@ -459,7 +477,7 @@ function DomainsSection(props: { domains: OrgDomain[]; onChanged: () => void }) 
         >
           <div className="flex min-w-0 flex-1 basis-48 flex-col gap-1.5">
             <label htmlFor={domainId} className="text-sm text-mw-text-muted">
-              Domain
+              <Trans>Domain</Trans>
             </label>
             <Input
               ref={inputRef}
@@ -476,7 +494,7 @@ function DomainsSection(props: { domains: OrgDomain[]; onChanged: () => void }) 
             />
           </div>
           <Button type="submit" disabled={busy}>
-            Add domain
+            <Trans>Add domain</Trans>
           </Button>
           <div className="basis-full">
             <FieldError id={errorId} message={fieldError} />
@@ -499,6 +517,8 @@ function DomainsSection(props: { domains: OrgDomain[]; onChanged: () => void }) 
  * look" means try again -- advice that is useless if the three are blurred.
  */
 function DomainProof(props: { domain: string; onVerified: () => void }) {
+  const { t } = useLingui();
+  const domain = props.domain;
   const [record, setRecord] = useState<
     { phase: "loading" } | { phase: "error"; message: string } | { phase: "ready"; record: DomainChallenge }
   >({ phase: "loading" });
@@ -542,9 +562,12 @@ function DomainProof(props: { domain: string; onVerified: () => void }) {
 
   if (record.phase === "loading") return <LoadingSkeleton rows={2} />;
   if (record.phase === "error") {
+    const problem = record.message;
     return (
       <p role="alert" className="text-sm text-mw-danger">
-        Could not fetch the DNS record for {props.domain}: {record.message}
+        <Trans>
+          Could not fetch the DNS record for {domain}: {problem}
+        </Trans>
       </p>
     );
   }
@@ -555,35 +578,43 @@ function DomainProof(props: { domain: string; onVerified: () => void }) {
       className="flex flex-col gap-3 border-t border-border pt-3"
     >
       <p className="text-sm">
-        Add this TXT record at your DNS provider, under {props.domain}. Once it has propagated,
-        check it here; the record stays the same however many times you check.
+        <Trans>
+          Add this TXT record at your DNS provider, under {domain}. Once it has propagated, check
+          it here; the record stays the same however many times you check.
+        </Trans>
       </p>
       <dl className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-2 text-sm">
-        <dt className="text-mw-text-muted">Type</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Type</Trans>
+        </dt>
         <dd className="font-mono">TXT</dd>
         <dd />
-        <dt className="text-mw-text-muted">Name</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Name</Trans>
+        </dt>
         <dd>
           <code data-testid="txt-name" className="select-all break-all font-mono">
             {name}
           </code>
         </dd>
         <dd>
-          <CopyButton value={name} label={`Copy the record name for ${props.domain}`} />
+          <CopyButton value={name} label={t`Copy the record name for ${domain}`} />
         </dd>
-        <dt className="text-mw-text-muted">Value</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Value</Trans>
+        </dt>
         <dd>
           <code data-testid="txt-value" className="select-all break-all font-mono">
             {value}
           </code>
         </dd>
         <dd>
-          <CopyButton value={value} label={`Copy the record value for ${props.domain}`} />
+          <CopyButton value={value} label={t`Copy the record value for ${domain}`} />
         </dd>
       </dl>
       <div>
         <Button type="button" disabled={checking} onClick={() => void check()}>
-          {checking ? "Checking…" : `Check ${props.domain} now`}
+          {checking ? t`Checking…` : t`Check ${domain} now`}
         </Button>
       </div>
       {outcome && <VerifyResult domain={props.domain} outcome={outcome} />}
@@ -595,30 +626,33 @@ function VerifyResult(props: {
   domain: string;
   outcome: VerifyOutcome | { kind: "failed"; message: string; requestId: string | null };
 }) {
+  const { t } = useLingui();
   const { outcome } = props;
+  const domain = props.domain;
   switch (outcome.kind) {
     case "verified":
       return (
         <p role="status" data-verify-outcome="verified" className="text-sm">
-          {props.domain} is verified. Anyone with an address on it is now offered your
-          organisation&apos;s sign-in.
+          {t`${domain} is verified. Anyone with an address on it is now offered your organisation's sign-in.`}
         </p>
       );
     case "missing":
       return (
         <p role="status" data-verify-outcome="missing" className="text-sm text-mw-text-muted">
-          {outcome.detail} Keep the record published and check again in a while; nothing here
-          needs changing.
+          {outcome.detail}{" "}
+          <Trans>Keep the record published and check again in a while; nothing here needs changing.</Trans>
         </p>
       );
-    case "mismatch":
+    case "mismatch": {
+      const recordName = outcome.record.name;
       return (
         <div role="status" data-verify-outcome="mismatch" className="text-sm text-mw-text-muted">
           <p>
-            {outcome.detail} Replace it with the value above, or add the value as a second record.
+            {outcome.detail}{" "}
+            <Trans>Replace it with the value above, or add the value as a second record.</Trans>
           </p>
           <p className="mt-1">
-            Found at {outcome.record.name}:{" "}
+            <Trans>Found at {recordName}:</Trans>{" "}
             {outcome.found.map((v, i) => (
               <code key={i} className="mr-1 break-all font-mono">
                 {v}
@@ -627,6 +661,7 @@ function VerifyResult(props: {
           </p>
         </div>
       );
+    }
     case "failed":
       return (
         <div role="alert" data-verify-outcome="failed" className="text-sm text-mw-danger">
@@ -642,11 +677,16 @@ function VerifyResult(props: {
 // --- identity providers -----------------------------------------------------------
 
 const IDP_FIELDS = [
-  { name: "name", label: "Name", hint: "Shown on the sign-in button.", type: "text" },
-  { name: "issuer", label: "Issuer URL", hint: "The https:// issuer of your provider.", type: "url" },
-  { name: "client_id", label: "Client ID", type: "text" },
-  { name: "client_secret", label: "Client secret", type: "password" },
-  { name: "scopes", label: "Scopes (optional)", hint: "Space-separated; openid profile email by default.", type: "text" },
+  { name: "name", label: msg`Name`, hint: msg`Shown on the sign-in button.`, type: "text" },
+  { name: "issuer", label: msg`Issuer URL`, hint: msg`The https:// issuer of your provider.`, type: "url" },
+  { name: "client_id", label: msg`Client ID`, type: "text" },
+  { name: "client_secret", label: msg`Client secret`, type: "password" },
+  {
+    name: "scopes",
+    label: msg`Scopes (optional)`,
+    hint: msg`Space-separated; openid profile email by default.`,
+    type: "text",
+  },
 ] as const;
 
 /**
@@ -659,44 +699,57 @@ const IDP_FIELDS = [
  * how an admin checks the whole path without signing out.
  */
 function SignInSummary(props: { domains: OrgDomain[]; idps: OrgIdp[]; sso: SsoSettings }) {
+  const { t } = useLingui();
   const verified = props.domains.filter((d) => d.verified).map((d) => d.domain);
   const unverified = props.domains.filter((d) => !d.verified).map((d) => d.domain);
   const provider = props.idps[0] ?? null;
   const ready = verified.length > 0 && provider !== null;
+  const verifiedList = verified.join(", ");
+  const verifiedCount = verified.length;
+  const unverifiedList = unverified.join(", ");
+  const providerName = provider?.name ?? "";
+  const providerIssuer = provider?.issuer ?? "";
   const steps: { done: boolean; text: string }[] = [
     {
       done: verified.length > 0,
       text:
         verified.length > 0
-          ? `Verified ${verified.length === 1 ? "domain" : "domains"}: ${verified.join(", ")}.`
+          ? plural(verifiedCount, {
+              one: `Verified domain: ${verifiedList}.`,
+              other: `Verified domains: ${verifiedList}.`,
+            })
           : unverified.length > 0
-            ? `Domain claimed but not yet verified: ${unverified.join(", ")}. Publish the DNS record under General > Domains.`
-            : "No domain yet. Claim and verify one under General > Domains.",
+            ? t`Domain claimed but not yet verified: ${unverifiedList}. Publish the DNS record under General > Domains.`
+            : t`No domain yet. Claim and verify one under General > Domains.`,
     },
     {
       done: provider !== null,
       text: provider
-        ? `Identity provider: ${provider.name}${provider.issuer ? ` (${provider.issuer})` : ""}.`
-        : "No identity provider attached. Attach one below.",
+        ? providerIssuer
+          ? t`Identity provider: ${providerName} (${providerIssuer}).`
+          : t`Identity provider: ${providerName}.`
+        : t`No identity provider attached. Attach one below.`,
     },
     {
       done: props.sso.sso_required,
       text: props.sso.sso_required
-        ? "Single sign-on is required: passwords no longer work for members."
-        : "Passwords still work beside single sign-on. Require it below once everyone can sign in through the provider.",
+        ? t`Single sign-on is required: passwords no longer work for members.`
+        : t`Passwords still work beside single sign-on. Require it below once everyone can sign in through the provider.`,
     },
   ];
   const testHref = verified.length > 0 ? `/login?org=${encodeURIComponent(verified[0])}` : null;
   return (
     <PaneSection
-      title="How members sign in"
+      title={t`How members sign in`}
       description={
         <>
-          What a member on a verified domain meets on the login page.
+          <Trans>What a member on a verified domain meets on the login page.</Trans>
           <LearnMore className="mt-1">
             <p>
-              Members whose email is on a verified domain see Sign in with your organisation on
-              the login page and are sent to your identity provider.
+              <Trans>
+                Members whose email is on a verified domain see Sign in with your organisation on
+                the login page and are sent to your identity provider.
+              </Trans>
             </p>
           </LearnMore>
         </>
@@ -705,14 +758,14 @@ function SignInSummary(props: { domains: OrgDomain[]; idps: OrgIdp[]; sso: SsoSe
       <div className="flex flex-col gap-3" data-mw-signin-summary={ready ? "ready" : "pending"}>
         <p role="status" className="text-sm">
           {ready
-            ? `Members at ${verified.join(", ")} sign in with ${provider?.name}.`
-            : "Single sign-on is not offered to anyone yet."}
+            ? t`Members at ${verifiedList} sign in with ${providerName}.`
+            : t`Single sign-on is not offered to anyone yet.`}
         </p>
         <ol className="flex flex-col gap-1 text-sm">
           {steps.map((step) => (
             <li key={step.text} className="flex gap-2">
               <span
-                aria-label={step.done ? "Done" : "To do"}
+                aria-label={step.done ? t`Done` : t`To do`}
                 className={step.done ? "text-mw-positive" : "text-mw-text-muted"}
               >
                 {step.done ? "\u2713" : "\u25CB"}
@@ -729,11 +782,10 @@ function SignInSummary(props: { domains: OrgDomain[]; idps: OrgIdp[]; sso: SsoSe
               rel="noreferrer"
               className="text-mw-link underline underline-offset-2 hover:text-mw-link-hover"
             >
-              Try the organisation sign-in
+              <Trans>Try the organisation sign-in</Trans>
             </a>{" "}
             <span className="text-mw-text-muted">
-              (opens the login page's organisation entry in a new tab; your own session stays
-              signed in)
+              {t`(opens the login page's organisation entry in a new tab; your own session stays signed in)`}
             </span>
           </p>
         )}
@@ -743,6 +795,7 @@ function SignInSummary(props: { domains: OrgDomain[]; idps: OrgIdp[]; sso: SsoSe
 }
 
 function ProvidersSection(props: { idps: OrgIdp[]; onChanged: () => void }) {
+  const { t, i18n } = useLingui();
   const [busy, setBusy] = useState(false);
   /** What a remove press said, if it failed. */
   const [rowError, setRowError] = useState<string | null>(null);
@@ -819,44 +872,52 @@ function ProvidersSection(props: { idps: OrgIdp[]; onChanged: () => void }) {
 
   return (
     <PaneSection
-      title="Single sign-on"
+      title={t`Single sign-on`}
       flush
       description={
         <>
-          Attach your organisation&apos;s OpenID Connect provider.
+          {t`Attach your organisation's OpenID Connect provider.`}
           <LearnMore className="mt-1">
-            <p>The client secret goes to the identity backend and is not stored here.</p>
+            <p>
+              <Trans>The client secret goes to the identity backend and is not stored here.</Trans>
+            </p>
           </LearnMore>
         </>
       }
     >
       {props.idps.length === 0 ? (
-        <p className="px-5 pt-4 text-sm text-mw-text-muted">No provider attached.</p>
+        <p className="px-5 pt-4 text-sm text-mw-text-muted">
+          <Trans>No provider attached.</Trans>
+        </p>
       ) : (
-        <RowList aria-label="Identity providers" className="border-b border-border">
-          {props.idps.map((idp) => (
-            <Row
-              key={idp.provider}
-              leading={<StatusDot tone="positive" />}
-              title={idp.name}
-              meta={
-                <span className="break-all">
-                  {idp.kind.toUpperCase()} · {idp.issuer ?? "no issuer"} · handle {idp.provider}
-                </span>
-              }
-              trailing={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void removeProvider(idp.provider)}
-                >
-                  Remove {idp.name}
-                </Button>
-              }
-            />
-          ))}
+        <RowList aria-label={t`Identity providers`} className="border-b border-border">
+          {props.idps.map((idp) => {
+            const handle = idp.provider;
+            const idpName = idp.name;
+            return (
+              <Row
+                key={idp.provider}
+                leading={<StatusDot tone="positive" />}
+                title={idp.name}
+                meta={
+                  <span className="break-all">
+                    {idp.kind.toUpperCase()} · {idp.issuer ?? t`no issuer`} · {t`handle ${handle}`}
+                  </span>
+                }
+                trailing={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void removeProvider(idp.provider)}
+                  >
+                    <Trans>Remove {idpName}</Trans>
+                  </Button>
+                }
+              />
+            );
+          })}
         </RowList>
       )}
       <div className="flex flex-col gap-3 px-5 py-4">
@@ -879,7 +940,7 @@ function ProvidersSection(props: { idps: OrgIdp[]; onChanged: () => void }) {
             return (
               <div key={f.name} className="flex min-w-0 flex-col gap-1.5">
                 <label htmlFor={id} className="text-sm text-mw-text-muted">
-                  {f.label}
+                  {i18n._(f.label)}
                 </label>
                 <Input
                   id={id}
@@ -894,7 +955,7 @@ function ProvidersSection(props: { idps: OrgIdp[]; onChanged: () => void }) {
                 />
                 {"hint" in f && (
                   <p id={`${id}-hint`} className="text-xs text-mw-text-muted">
-                    {f.hint}
+                    {i18n._(f.hint)}
                   </p>
                 )}
                 <FieldError id={`${id}-error`} message={error} />
@@ -904,7 +965,7 @@ function ProvidersSection(props: { idps: OrgIdp[]; onChanged: () => void }) {
           <FormSummary name="idp" messages={summary} />
           <div>
             <Button type="submit" disabled={busy}>
-              Attach provider
+              <Trans>Attach provider</Trans>
             </Button>
           </div>
         </form>
@@ -928,6 +989,7 @@ function ProvidersSection(props: { idps: OrgIdp[]; onChanged: () => void }) {
  * retires the previous unused one, so the copy says that too.
  */
 function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChanged: () => void }) {
+  const { t } = useLingui();
   const [confirming, setConfirming] = useState<"enable" | "disable" | "mint" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -969,22 +1031,22 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
 
   return (
     <PaneSection
-      title="Require single sign-on"
-      description="When required, passwords stop working and members sign in through the provider only."
+      title={t`Require single sign-on`}
+      description={t`When required, passwords stop working and members sign in through the provider only.`}
     >
       <div className="flex flex-col gap-3">
         <p role="status" data-sso-required={required} className="text-sm">
           {required
-            ? "Single sign-on is required. Members sign in through your identity provider only."
-            : "Single sign-on is not required. Members may sign in with a password or through your identity provider."}
+            ? t`Single sign-on is required. Members sign in through your identity provider only.`
+            : t`Single sign-on is not required. Members may sign in with a password or through your identity provider.`}
         </p>
 
         {!required && blockers.length > 0 && (
           <Alert
             variant="warning"
-            title="It cannot be required yet, because enforcing it now would lock people out"
+            title={t`It cannot be required yet, because enforcing it now would lock people out`}
           >
-            <ul aria-label="Why single sign-on cannot be required" className="mt-1 flex flex-col gap-1.5">
+            <ul aria-label={t`Why single sign-on cannot be required`} className="mt-1 flex flex-col gap-1.5">
               {blockers.map((blocker) => (
                 <li key={blocker}>
                   <span className="font-medium">{blockerHeadline(blocker)}</span>
@@ -997,7 +1059,7 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
 
         {!required && !isOwner && (
           <p className="text-sm text-mw-text-muted">
-            Only an organisation owner can turn this on; an admin can turn it off.
+            <Trans>Only an organisation owner can turn this on; an admin can turn it off.</Trans>
           </p>
         )}
 
@@ -1009,7 +1071,7 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
               disabled={busy}
               onClick={() => setConfirming("disable")}
             >
-              Stop requiring single sign-on…
+              <Trans>Stop requiring single sign-on…</Trans>
             </Button>
           ) : (
             <Button
@@ -1017,7 +1079,7 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
               disabled={busy || !canEnable}
               onClick={() => setConfirming("enable")}
             >
-              Require single sign-on…
+              <Trans>Require single sign-on…</Trans>
             </Button>
           )}
           {isOwner && (
@@ -1027,16 +1089,18 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
               disabled={busy}
               onClick={() => setConfirming("mint")}
             >
-              Generate a new recovery code…
+              <Trans>Generate a new recovery code…</Trans>
             </Button>
           )}
         </div>
         {isOwner && (
-          <LearnMore label="About recovery codes">
+          <LearnMore label={t`About recovery codes`}>
             <p>
-              A recovery code lets an owner sign in with a password once while single sign-on is
-              required, for when the provider is broken. Generating a new one retires the previous
-              unused code.
+              <Trans>
+                A recovery code lets an owner sign in with a password once while single sign-on is
+                required, for when the provider is broken. Generating a new one retires the previous
+                unused code.
+              </Trans>
             </p>
           </LearnMore>
         )}
@@ -1053,20 +1117,24 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
           {confirming === "enable" && (
             <>
               <DialogHeader>
-                <DialogTitle>Require single sign-on?</DialogTitle>
+                <DialogTitle>
+                  <Trans>Require single sign-on?</Trans>
+                </DialogTitle>
                 <DialogDescription>
-                  From now on every member of this organisation can only sign in through your
-                  identity provider. Their passwords stop working here. You will be shown a
-                  recovery code once, which gets you back in with a password if the provider
-                  breaks; store it before you close that window.
+                  <Trans>
+                    From now on every member of this organisation can only sign in through your
+                    identity provider. Their passwords stop working here. You will be shown a
+                    recovery code once, which gets you back in with a password if the provider
+                    breaks; store it before you close that window.
+                  </Trans>
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button variant="outline" disabled={busy} onClick={() => setConfirming(null)}>
-                  Cancel
+                  <Trans>Cancel</Trans>
                 </Button>
                 <Button disabled={busy} onClick={() => void enable()}>
-                  {busy ? "Turning on…" : "Require single sign-on"}
+                  {busy ? t`Turning on…` : t`Require single sign-on`}
                 </Button>
               </DialogFooter>
             </>
@@ -1074,18 +1142,22 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
           {confirming === "disable" && (
             <>
               <DialogHeader>
-                <DialogTitle>Stop requiring single sign-on?</DialogTitle>
+                <DialogTitle>
+                  <Trans>Stop requiring single sign-on?</Trans>
+                </DialogTitle>
                 <DialogDescription>
-                  Members will be able to sign in with a password again, as well as through your
-                  identity provider.
+                  <Trans>
+                    Members will be able to sign in with a password again, as well as through your
+                    identity provider.
+                  </Trans>
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button variant="outline" disabled={busy} onClick={() => setConfirming(null)}>
-                  Cancel
+                  <Trans>Cancel</Trans>
                 </Button>
                 <Button disabled={busy} onClick={() => void disable()}>
-                  {busy ? "Turning off…" : "Stop requiring"}
+                  {busy ? t`Turning off…` : t`Stop requiring`}
                 </Button>
               </DialogFooter>
             </>
@@ -1093,18 +1165,22 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
           {confirming === "mint" && (
             <>
               <DialogHeader>
-                <DialogTitle>Generate a new recovery code?</DialogTitle>
+                <DialogTitle>
+                  <Trans>Generate a new recovery code?</Trans>
+                </DialogTitle>
                 <DialogDescription>
-                  The previous code, if it has not been used, stops working the moment the new
-                  one is made. The new code is shown once.
+                  <Trans>
+                    The previous code, if it has not been used, stops working the moment the new
+                    one is made. The new code is shown once.
+                  </Trans>
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button variant="outline" disabled={busy} onClick={() => setConfirming(null)}>
-                  Cancel
+                  <Trans>Cancel</Trans>
                 </Button>
                 <Button disabled={busy} onClick={() => void mint()}>
-                  {busy ? "Generating…" : "Generate code"}
+                  {busy ? t`Generating…` : t`Generate code`}
                 </Button>
               </DialogFooter>
             </>
@@ -1127,6 +1203,7 @@ function SsoEnforcementSection(props: { sso: SsoSettings; role: string; onChange
  * is -- an admin sees the state and why they cannot change it.
  */
 function SecuritySection(props: { mfa: MfaSettings; role: string }) {
+  const { t } = useLingui();
   const [required, setRequired] = useState(props.mfa.mfa_required);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1175,13 +1252,13 @@ function SecuritySection(props: { mfa: MfaSettings; role: string }) {
 
   return (
     <PaneSection
-      title="Two-factor authentication"
-      description="Whether every member of this organisation must sign in with a second factor."
+      title={t`Two-factor authentication`}
+      description={t`Whether every member of this organisation must sign in with a second factor.`}
     >
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <label htmlFor={switchId} className="min-w-0 text-sm font-medium">
-            Require two-factor authentication
+            <Trans>Require two-factor authentication</Trans>
           </label>
           <Switch
             id={switchId}
@@ -1196,8 +1273,8 @@ function SecuritySection(props: { mfa: MfaSettings; role: string }) {
         <p data-mfa-required={required} className="text-sm">
           {mfaStatusLine(required)}
         </p>
-        <LearnMore label="What requiring it does">
-          <ul aria-label="What requiring two-factor authentication does" className="flex flex-col gap-1">
+        <LearnMore label={t`What requiring it does`}>
+          <ul aria-label={t`What requiring two-factor authentication does`} className="flex flex-col gap-1">
             {MFA_REQUIRED_EXPLANATION.map((line) => (
               <li key={line}>{line}</li>
             ))}
@@ -1205,7 +1282,7 @@ function SecuritySection(props: { mfa: MfaSettings; role: string }) {
         </LearnMore>
         {!isOwner && (
           <p className="text-sm text-mw-text-muted">
-            Only an organisation owner can change this, in either direction.
+            <Trans>Only an organisation owner can change this, in either direction.</Trans>
           </p>
         )}
       </div>
@@ -1218,19 +1295,23 @@ function SecuritySection(props: { mfa: MfaSettings; role: string }) {
       >
         <DialogContent showCloseButton={false} data-mfa-confirm="">
           <DialogHeader>
-            <DialogTitle>Require two-factor authentication?</DialogTitle>
+            <DialogTitle>
+              <Trans>Require two-factor authentication?</Trans>
+            </DialogTitle>
             <DialogDescription>
-              Members without an authenticator app will be asked to set one up at their next
-              password sign-in, before they can carry on. Members who already have one keep
-              using it, and sessions that are already open stay open.
+              <Trans>
+                Members without an authenticator app will be asked to set one up at their next
+                password sign-in, before they can carry on. Members who already have one keep
+                using it, and sessions that are already open stay open.
+              </Trans>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" disabled={busy} onClick={() => setConfirming(false)}>
-              Cancel
+              <Trans>Cancel</Trans>
             </Button>
             <Button disabled={busy} onClick={() => void save(true)}>
-              {busy ? "Saving…" : "Require two-factor"}
+              {busy ? t`Saving…` : t`Require two-factor`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1246,8 +1327,10 @@ function SecuritySection(props: { mfa: MfaSettings; role: string }) {
  */
 function RecoveryCodeDialog(props: { code: RecoveryCode | null; onDone: () => void }) {
   const [stored, setStored] = useState(false);
+  const { t } = useLingui();
   const checkId = useId();
   const code = props.code;
+  const expiry = code?.expires_at ? formatWhen(code.expires_at) : "";
   return (
     <Dialog
       open={code !== null}
@@ -1260,12 +1343,22 @@ function RecoveryCodeDialog(props: { code: RecoveryCode | null; onDone: () => vo
     >
       <DialogContent showCloseButton={false} data-recovery-code-dialog="">
         <DialogHeader>
-          <DialogTitle>Your recovery code</DialogTitle>
+          <DialogTitle>
+            <Trans>Your recovery code</Trans>
+          </DialogTitle>
           <DialogDescription>
-            This is the only time it is shown. It signs an owner in with a password once while
-            single sign-on is required
-            {code?.expires_at ? `, until ${formatWhen(code.expires_at)}` : ""}. Store it
-            somewhere you can reach without this provider.
+            {expiry ? (
+              <Trans>
+                This is the only time it is shown. It signs an owner in with a password once while
+                single sign-on is required, until {expiry}. Store it somewhere you can reach without
+                this provider.
+              </Trans>
+            ) : (
+              <Trans>
+                This is the only time it is shown. It signs an owner in with a password once while
+                single sign-on is required. Store it somewhere you can reach without this provider.
+              </Trans>
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
@@ -1275,7 +1368,7 @@ function RecoveryCodeDialog(props: { code: RecoveryCode | null; onDone: () => vo
           >
             {code?.code ?? ""}
           </code>
-          {code?.code && <CopyButton value={code.code} label="Copy the recovery code" />}
+          {code?.code && <CopyButton value={code.code} label={t`Copy the recovery code`} />}
         </div>
         <label htmlFor={checkId} className="flex items-start gap-2 text-sm">
           <input
@@ -1285,7 +1378,9 @@ function RecoveryCodeDialog(props: { code: RecoveryCode | null; onDone: () => vo
             onChange={(event) => setStored(event.target.checked)}
             className="mt-1"
           />
-          <span>I have stored this code somewhere safe.</span>
+          <span>
+            <Trans>I have stored this code somewhere safe.</Trans>
+          </span>
         </label>
         <DialogFooter>
           <Button
@@ -1295,7 +1390,7 @@ function RecoveryCodeDialog(props: { code: RecoveryCode | null; onDone: () => vo
               props.onDone();
             }}
           >
-            Done
+            <Trans>Done</Trans>
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1305,9 +1400,7 @@ function RecoveryCodeDialog(props: { code: RecoveryCode | null; onDone: () => vo
 
 /** A timestamp as a short local date and time; the raw string if it does not parse. */
 function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return formatDateTime(iso) || iso;
 }
 
 // --- custom instructions ----------------------------------------------
@@ -1324,6 +1417,7 @@ export const ORG_INSTRUCTIONS_MAX_LEN = 4000;
  * single conversation can replace the user's — but never this.
  */
 function OrgInstructionsSection(props: { text: string; onChanged: () => void }) {
+  const { t } = useLingui();
   const [draft, setDraft] = useState(props.text);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1352,14 +1446,13 @@ function OrgInstructionsSection(props: { text: string; onChanged: () => void }) 
 
   return (
     <PaneSection
-      title="Instructions"
+      title={t`Instructions`}
       description={
         <>
-          Text every conversation in this organisation starts with.
+          <Trans>Text every conversation in this organisation starts with.</Trans>
           <LearnMore className="mt-1">
             <p>
-              It always applies: a member&apos;s own custom instructions are added to it, never in
-              place of it.
+              {t`It always applies: a member's own custom instructions are added to it, never in place of it.`}
             </p>
           </LearnMore>
         </>
@@ -1367,13 +1460,13 @@ function OrgInstructionsSection(props: { text: string; onChanged: () => void }) 
     >
       <form className="flex flex-col gap-3" onSubmit={(event) => void handleSave(event)}>
         <label className="sr-only" htmlFor={fieldId}>
-          Organisation instructions
+          <Trans>Organisation instructions</Trans>
         </label>
         <Textarea
           id={fieldId}
           rows={4}
           value={draft}
-          placeholder="Answer in British English. Never give legal or financial advice."
+          placeholder={t`Answer in British English. Never give legal or financial advice.`}
           aria-describedby={`${fieldId}-count`}
           aria-invalid={over || undefined}
           onChange={(event) => {
@@ -1390,9 +1483,9 @@ function OrgInstructionsSection(props: { text: string; onChanged: () => void }) 
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" disabled={busy || !dirty || over}>
-            {busy ? "Saving…" : "Save instructions"}
+            {busy ? t`Saving…` : t`Save instructions`}
           </Button>
-          <SavedStatus shown={saved && !dirty} text="Saved. Every conversation here will use these." />
+          <SavedStatus shown={saved && !dirty} text={t`Saved. Every conversation here will use these.`} />
         </div>
         <ActionError message={error} />
       </form>
@@ -1418,6 +1511,7 @@ function OrgInstructionsSection(props: { text: string; onChanged: () => void }) 
  * so a switch here reads as the same model a member sees there.
  */
 function ModelsSection() {
+  const { t, i18n } = useLingui();
   const [state, setState] = useState<
     | { phase: "loading" }
     | { phase: "error"; message: string }
@@ -1453,16 +1547,17 @@ function ModelsSection() {
     }
   }
 
+  const loadProblem = state.phase === "error" ? state.message : "";
+  const unlistedModels = state.phase === "ready" ? state.policy.unlisted.join(", ") : "";
   return (
     <PaneSection
-      title="Models"
+      title={t`Models`}
       description={
         <>
-          Which of the models your plan includes members may use.
+          <Trans>Which of the models your plan includes members may use.</Trans>
           <LearnMore className="mt-1">
             <p>
-              A model switched off disappears from everyone&apos;s picker and is refused if asked
-              for by name.
+              {t`A model switched off disappears from everyone's picker and is refused if asked for by name.`}
             </p>
           </LearnMore>
         </>
@@ -1471,18 +1566,20 @@ function ModelsSection() {
       {state.phase === "loading" && <LoadingSkeleton rows={3} />}
       {state.phase === "error" && (
         <p role="alert" className="text-sm text-mw-danger">
-          Could not load the model list: {state.message}
+          {t`Could not load the model list: ${loadProblem}`}
         </p>
       )}
       {state.phase === "ready" && (
         <div className="flex flex-col gap-3">
           {state.policy.data.length === 0 ? (
-            <p className="text-sm text-mw-text-muted">Your plan includes no models to choose between.</p>
+            <p className="text-sm text-mw-text-muted">
+              <Trans>Your plan includes no models to choose between.</Trans>
+            </p>
           ) : (
             <>
               {splitPartners(state.policy.data).own.length > 0 && (
                 <ModelSwitches
-                  name="Models"
+                  name={t`Models`}
                   models={splitPartners(state.policy.data).own}
                   busy={busy !== null}
                   onToggle={(model, on) => void toggle(state.policy.data, model, on)}
@@ -1490,10 +1587,10 @@ function ModelsSection() {
               )}
               {splitPartners(state.policy.data).partners.length > 0 && (
                 <div className="flex flex-col gap-1 border-t border-border pt-3">
-                  <h3 className="text-sm font-medium">{PARTNER_MODELS_HEADING}</h3>
-                  <p className="text-xs text-mw-text-muted">{PARTNER_MODELS_NOTE}</p>
+                  <h3 className="text-sm font-medium">{i18n._(PARTNER_MODELS_HEADING_MSG)}</h3>
+                  <p className="text-xs text-mw-text-muted">{i18n._(PARTNER_MODELS_NOTE_MSG)}</p>
                   <ModelSwitches
-                    name={PARTNER_MODELS_HEADING}
+                    name={i18n._(PARTNER_MODELS_HEADING_MSG)}
                     models={splitPartners(state.policy.data).partners}
                     busy={busy !== null}
                     onToggle={(model, on) => void toggle(state.policy.data, model, on)}
@@ -1504,13 +1601,12 @@ function ModelsSection() {
           )}
           <p role="status" className="text-xs text-mw-text-muted">
             {state.policy.restricted
-              ? "Members may use only the models switched on above."
-              : "Every model your plan includes is available to members."}
+              ? t`Members may use only the models switched on above.`
+              : t`Every model your plan includes is available to members.`}
           </p>
           {state.policy.unlisted.length > 0 && (
             <p className="text-xs text-mw-text-muted">
-              Also allowed, but no longer offered by your plan or the gateway:{" "}
-              {state.policy.unlisted.join(", ")}.
+              {t`Also allowed, but no longer offered by your plan or the gateway: ${unlistedModels}.`}
             </p>
           )}
           <ActionError message={error} />
@@ -1522,9 +1618,11 @@ function ModelsSection() {
 
 /** What stands beside a model's name: why it cannot be switched, or what it is. */
 function modelNote(model: OrgModel): string {
-  if (model.locked) return "Always on: the model this deployment serves to everyone.";
-  if (model.research_preview) return "Research preview.";
-  return model.context_window ? `${model.context_window.toLocaleString()} context` : "";
+  if (model.locked) return t`Always on: the model this deployment serves to everyone.`;
+  if (model.research_preview) return t`Research preview.`;
+  if (!model.context_window) return "";
+  const contextWindow = formatNumber(model.context_window);
+  return t`${contextWindow} context`;
 }
 
 /** One list of the org's model switches; the house model's is locked on. */
@@ -1534,10 +1632,12 @@ function ModelSwitches(props: {
   busy: boolean;
   onToggle: (model: OrgModel, on: boolean) => void;
 }) {
+  const { t } = useLingui();
   return (
     <ul className="divide-y divide-border" aria-label={props.name}>
       {props.models.map((model) => {
         const switchId = `mw-model-${model.id}`;
+        const modelLabel = model.label;
         return (
           <li key={model.id} data-model={model.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
             <div className="min-w-0">
@@ -1558,7 +1658,7 @@ function ModelSwitches(props: {
               type="checkbox"
               role="switch"
               aria-checked={model.allowed}
-              aria-label={`Allow ${model.label}`}
+              aria-label={t`Allow ${modelLabel}`}
               checked={model.allowed}
               disabled={model.locked || props.busy}
               onChange={(event) => props.onToggle(model, event.target.checked)}
@@ -1580,6 +1680,7 @@ function ModelSwitches(props: {
  * any member's link from here.
  */
 function SharingSection() {
+  const { t } = useLingui();
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [links, setLinks] = useState<OrgShareRecord[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1638,7 +1739,7 @@ function SharingSection() {
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 404
-          ? "That link was already revoked."
+          ? t`That link was already revoked.`
           : failureMessage(err),
       );
     } finally {
@@ -1648,16 +1749,18 @@ function SharingSection() {
 
   return (
     <PaneSection
-      title="Sharing by link"
+      title={t`Sharing by link`}
       flush
       description={
         <>
-          Public, read-only snapshots of a conversation, open to anyone with the link.
+          <Trans>Public, read-only snapshots of a conversation, open to anyone with the link.</Trans>
           <LearnMore className="mt-1">
             <p>
-              Members can share a conversation as a public, read-only link: a snapshot of the
-              conversation at that moment, open to anyone holding the link. Switch it off to stop
-              every link in this organisation, or revoke single links below.
+              <Trans>
+                Members can share a conversation as a public, read-only link: a snapshot of the
+                conversation at that moment, open to anyone holding the link. Switch it off to stop
+                every link in this organisation, or revoke single links below.
+              </Trans>
             </p>
           </LearnMore>
         </>
@@ -1666,7 +1769,7 @@ function SharingSection() {
       <div className="flex flex-col gap-3 px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <label htmlFor={switchId} className="min-w-0 text-sm font-medium">
-            Allow sharing by link
+            <Trans>Allow sharing by link</Trans>
           </label>
           <Switch
             id={switchId}
@@ -1687,46 +1790,59 @@ function SharingSection() {
       </div>
 
       <div className="border-t border-border px-5 pt-4 pb-1">
-        <h3 className="text-sm font-medium">Links members have made</h3>
-        {links === null && !error && <p className="py-3 text-sm text-mw-text-muted">Loading…</p>}
+        <h3 className="text-sm font-medium">
+          <Trans>Links members have made</Trans>
+        </h3>
+        {links === null && !error && (
+          <p className="py-3 text-sm text-mw-text-muted">
+            <Trans>Loading…</Trans>
+          </p>
+        )}
         {links !== null && links.length === 0 && (
-          <p className="py-3 text-sm text-mw-text-muted">No conversation has been shared by link.</p>
+          <p className="py-3 text-sm text-mw-text-muted">
+            <Trans>No conversation has been shared by link.</Trans>
+          </p>
         )}
       </div>
       {links !== null && links.length > 0 && (
-        <ul aria-label="Shared links in this organisation" className="m-0 list-none divide-y divide-border p-0">
-          {links.map((share) => (
+        <ul aria-label={t`Shared links in this organisation`} className="m-0 list-none divide-y divide-border p-0">
+          {links.map((share) => {
+            const author = share.created_by;
+            const created = formatDate(share.created_at, { day: "numeric", month: "short", year: "numeric" });
+            const views = share.view_count;
             // Row's layout by hand, so the row itself carries its status.
-            <li
-              key={share.id}
-              data-org-share-status={share.status}
-              className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4"
-            >
-              <div className="flex min-w-0 flex-1 basis-56 flex-col leading-snug">
-                <span className="truncate font-medium">{share.title || "Untitled"}</span>
-                <span className="text-sm text-mw-text-muted">
-                  By {share.created_by} · {formatDate(share.created_at)} · {share.view_count}{" "}
-                  {share.view_count === 1 ? "view" : "views"} · {describeExpiry(share)}
-                  {share.include_attachments && " · with attachments"}
-                </span>
-              </div>
-              {share.status === "active" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={revoking === share.id}
-                  onClick={() => void revoke(share)}
-                >
-                  {revoking === share.id ? "Revoking…" : "Revoke"}
-                </Button>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-sm text-mw-text-muted">
-                  <StatusDot tone="neutral" />
-                  {share.status === "revoked" ? "Revoked" : "Expired"}
-                </span>
-              )}
-            </li>
-          ))}
+            return (
+              <li
+                key={share.id}
+                data-org-share-status={share.status}
+                className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4"
+              >
+                <div className="flex min-w-0 flex-1 basis-56 flex-col leading-snug">
+                  <span className="truncate font-medium">{share.title || t`Untitled`}</span>
+                  <span className="text-sm text-mw-text-muted">
+                    {t`By ${author}`} · {created} ·{" "}
+                    {plural(views, { one: "# view", other: "# views" })} · {describeExpiry(share)}
+                    {share.include_attachments && ` · ${t`with attachments`}`}
+                  </span>
+                </div>
+                {share.status === "active" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={revoking === share.id}
+                    onClick={() => void revoke(share)}
+                  >
+                    {revoking === share.id ? t`Revoking…` : t`Revoke`}
+                  </Button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-sm text-mw-text-muted">
+                    <StatusDot tone="neutral" />
+                    {share.status === "revoked" ? t`Revoked` : t`Expired`}
+                  </span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </PaneSection>
@@ -1738,9 +1854,7 @@ function SharingSection() {
 
 /** "3 Oct 2026, 10:00" -- when a row happened, in the reader's locale. */
 function formatOccurred(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return formatDateTime(iso) || iso;
 }
 
 /** Who did it, as a person when the API could name one. */
@@ -1773,6 +1887,7 @@ const ALL_EVENTS = "*";
  * may not be a cookie.
  */
 function AuditSection() {
+  const { t } = useLingui();
   const [draft, setDraft] = useState<AuditFilters>({});
   const [filters, setFilters] = useState<AuditFilters>({});
   // What the API answered for a filter set. Keyed on the filters object
@@ -1850,14 +1965,16 @@ function AuditSection() {
 
   return (
     <PaneSection
-      title="Audit log"
+      title={t`Audit log`}
       description={
         <>
-          Who changed what in this organisation, newest first.
+          <Trans>Who changed what in this organisation, newest first.</Trans>
           <LearnMore className="mt-1">
             <p>
-              The trail covers the name, domains, provider, single sign-on, instructions, models,
-              members, budget and plan.
+              <Trans>
+                The trail covers the name, domains, provider, single sign-on, instructions, models,
+                members, budget and plan.
+              </Trans>
             </p>
           </LearnMore>
         </>
@@ -1866,13 +1983,13 @@ function AuditSection() {
       <div className="flex flex-col gap-3">
         <form
           noValidate
-          aria-label="Filter the audit log"
+          aria-label={t`Filter the audit log`}
           onSubmit={apply}
           className="flex flex-wrap items-end gap-2"
         >
           <div className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
             <label htmlFor={`${baseId}-event`} className="text-sm text-mw-text-muted">
-              Event
+              <Trans>Event</Trans>
             </label>
             <SimpleSelect
               id={`${baseId}-event`}
@@ -1881,7 +1998,7 @@ function AuditSection() {
                 setDraft({ ...draft, event: value === ALL_EVENTS ? undefined : value })
               }
               options={[
-                { value: ALL_EVENTS, label: "All events" },
+                { value: ALL_EVENTS, label: t`All events` },
                 ...actions.map((action) => ({ value: action, label: action })),
               ]}
               className="w-full"
@@ -1889,21 +2006,21 @@ function AuditSection() {
           </div>
           <div className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
             <label htmlFor={`${baseId}-actor`} className="text-sm text-mw-text-muted">
-              Who
+              <Trans>Who</Trans>
             </label>
             <Input
               id={`${baseId}-actor`}
               name="actor"
               type="text"
               autoComplete="off"
-              placeholder="email or subject"
+              placeholder={t`email or subject`}
               value={draft.actor ?? ""}
               onChange={(event) => setDraft({ ...draft, actor: event.target.value || undefined })}
             />
           </div>
           <div className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
             <label htmlFor={`${baseId}-since`} className="text-sm text-mw-text-muted">
-              From
+              <Trans>From</Trans>
             </label>
             <Input
               id={`${baseId}-since`}
@@ -1915,7 +2032,7 @@ function AuditSection() {
           </div>
           <div className="flex min-w-0 flex-1 basis-40 flex-col gap-1">
             <label htmlFor={`${baseId}-until`} className="text-sm text-mw-text-muted">
-              To
+              <Trans>To</Trans>
             </label>
             <Input
               id={`${baseId}-until`}
@@ -1927,7 +2044,7 @@ function AuditSection() {
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <Button type="submit" disabled={loading}>
-              Apply filters
+              <Trans>Apply filters</Trans>
             </Button>
             <Button
               type="button"
@@ -1935,25 +2052,37 @@ function AuditSection() {
               disabled={exporting}
               onClick={() => void exportCsv()}
             >
-              {exporting ? "Preparing…" : "Download CSV"}
+              {exporting ? t`Preparing…` : t`Download CSV`}
             </Button>
           </div>
         </form>
 
         {rows === null && loading && <LoadingSkeleton rows={3} />}
         {rows !== null && rows.length === 0 && !loading && (
-          <p className="text-sm text-mw-text-muted">Nothing recorded for these filters.</p>
+          <p className="text-sm text-mw-text-muted">
+            <Trans>Nothing recorded for these filters.</Trans>
+          </p>
         )}
         {rows !== null && rows.length > 0 && (
           <div className="-mx-5 overflow-x-auto px-5">
-            <table className="w-full min-w-160 text-sm" aria-label="Audit events">
+            <table className="w-full min-w-160 text-sm" aria-label={t`Audit events`}>
               <thead>
                 <tr className="text-left text-xs text-mw-text-muted">
-                  <th scope="col" className="py-2 pr-3 font-normal">When</th>
-                  <th scope="col" className="py-2 pr-3 font-normal">Who</th>
-                  <th scope="col" className="py-2 pr-3 font-normal">Event</th>
-                  <th scope="col" className="py-2 pr-3 font-normal">Target</th>
-                  <th scope="col" className="py-2 font-normal">Detail</th>
+                  <th scope="col" className="py-2 pr-3 font-normal">
+                    <Trans>When</Trans>
+                  </th>
+                  <th scope="col" className="py-2 pr-3 font-normal">
+                    <Trans>Who</Trans>
+                  </th>
+                  <th scope="col" className="py-2 pr-3 font-normal">
+                    <Trans>Event</Trans>
+                  </th>
+                  <th scope="col" className="py-2 pr-3 font-normal">
+                    <Trans>Target</Trans>
+                  </th>
+                  <th scope="col" className="py-2 font-normal">
+                    <Trans>Detail</Trans>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1982,7 +2111,7 @@ function AuditSection() {
               disabled={loading}
               onClick={() => void loadMore()}
             >
-              {loading ? "Loading…" : "Load older events"}
+              {loading ? t`Loading…` : t`Load older events`}
             </Button>
           </div>
         )}
@@ -2011,7 +2140,10 @@ export function CloseOrgSection(props: { org: OrgSummary }) {
   const [typed, setTyped] = useState("");
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLingui();
   if (props.org.role !== "owner") return null;
+  const orgName = props.org.name;
+  const retentionDays = CLOSE_RETENTION_DAYS;
 
   async function runClose() {
     setClosing(true);
@@ -2021,7 +2153,7 @@ export function CloseOrgSection(props: { org: OrgSummary }) {
       setOpen(false);
       await shell.signOut();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not close the organisation.");
+      setError(err instanceof ApiError ? err.message : t`Could not close the organisation.`);
     } finally {
       setClosing(false);
     }
@@ -2029,9 +2161,9 @@ export function CloseOrgSection(props: { org: OrgSummary }) {
 
   return (
     <PaneSection
-      title="Close organisation"
+      title={t`Close organisation`}
       tone="danger"
-      description="Ends this workspace for everyone in it. This cannot be undone from here."
+      description={t`Ends this workspace for everyone in it. This cannot be undone from here.`}
       actions={
         <Button
           variant="destructive"
@@ -2041,15 +2173,16 @@ export function CloseOrgSection(props: { org: OrgSummary }) {
             setOpen(true);
           }}
         >
-          Close organisation…
+          <Trans>Close organisation…</Trans>
         </Button>
       }
     >
-      <LearnMore label="What closing does">
+      <LearnMore label={t`What closing does`}>
         <p>
-          Members are signed out and mailed, API keys and invite links stop working, the
-          subscription is cancelled now, and conversations are erased {CLOSE_RETENTION_DAYS} days
-          later.
+          <Trans>
+            Members are signed out and mailed, API keys and invite links stop working, the
+            subscription is cancelled now, and conversations are erased {retentionDays} days later.
+          </Trans>
         </p>
       </LearnMore>
       {!open && <ActionError message={error} />}
@@ -2059,12 +2192,12 @@ export function CloseOrgSection(props: { org: OrgSummary }) {
           if (!next) setTyped("");
           setOpen(next);
         }}
-        title={`Close ${props.org.name}?`}
+        title={t`Close ${orgName}?`}
         description={
           error ??
-          `Every member loses access at once and cannot sign in again. Conversations are erased after ${CLOSE_RETENTION_DAYS} days.`
+          t`Every member loses access at once and cannot sign in again. Conversations are erased after ${retentionDays} days.`
         }
-        confirmLabel="Close organisation"
+        confirmLabel={t`Close organisation`}
         confirmPhrase={props.org.name}
         typedValue={typed}
         onTypedValueChange={setTyped}

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { plural, t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Alert, Meter } from "../../../components/ui/alert";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -106,23 +108,23 @@ function summary(budget: BudgetView): { text: string; stopped: boolean } {
   // The Overage section below says this plan has none; here only where the month stands.
   if (!budget.overage_enabled) {
     return pastAllowance
-      ? { text: "The included tokens are used up. Messages are refused until the month rolls over.", stopped: true }
-      : { text: "Within the included tokens. The totals reset on the first of each month.", stopped: false };
+      ? { text: t`The included tokens are used up. Messages are refused until the month rolls over.`, stopped: true }
+      : { text: t`Within the included tokens. The totals reset on the first of each month.`, stopped: false };
   }
   if (pastAllowance && budget.overage_micros >= budget.overage_cap_micros) {
     return {
-      text: "The overage cap is reached. Messages are refused until the month rolls over or the cap is raised.",
+      text: t`The overage cap is reached. Messages are refused until the month rolls over or the cap is raised.`,
       stopped: true,
     };
   }
   if (pastAllowance) {
     return {
-      text: "Past the included tokens: usage is billed at each model's list price until the overage cap.",
+      text: t`Past the included tokens: usage is billed at each model's list price until the overage cap.`,
       stopped: false,
     };
   }
   return {
-    text: "Within the included tokens: nothing is billed on top of the plan yet. The totals reset on the first of each month.",
+    text: t`Within the included tokens: nothing is billed on top of the plan yet. The totals reset on the first of each month.`,
     stopped: false,
   };
 }
@@ -154,11 +156,17 @@ function capTermsOf(body: Partial<CapTerms>): CapTerms | null {
 function fixedCapNote(budget: BudgetView, terms: CapTerms | null): string | null {
   if (terms === null || !terms.per_seat || !budget.overage_enabled) return null;
   if (budget.overage_cap_micros === terms.default_overage_cap_micros) return null;
-  const seats = `${terms.billed_seats} seat${terms.billed_seats === 1 ? "" : "s"}`;
-  return `Your limit is fixed at ${formatMicros(budget.overage_cap_micros)}. The default for ${seats} would be ${formatMicros(terms.default_overage_cap_micros)}.`;
+  const seats = terms.billed_seats;
+  const cap = formatMicros(budget.overage_cap_micros);
+  const seatDefault = formatMicros(terms.default_overage_cap_micros);
+  return plural(seats, {
+    one: `Your limit is fixed at ${cap}. The default for # seat would be ${seatDefault}.`,
+    other: `Your limit is fixed at ${cap}. The default for # seats would be ${seatDefault}.`,
+  });
 }
 
 export function BudgetPane() {
+  const { t } = useLingui();
   const shell = useShell();
   const isAdmin = managesOrg(shell.principal);
   const [budget, setBudget] = useState<BudgetView | null>(null);
@@ -183,7 +191,7 @@ export function BudgetPane() {
       .catch((err: unknown) => {
         if (cancelled) return;
         setBudget(null);
-        setLoadError(err instanceof ApiError ? err.message : "Could not load the budget.");
+        setLoadError(err instanceof ApiError ? err.message : t`Could not load the budget.`);
       });
     // Best effort: without it the editor still explains the default in words.
     apiFetch<Partial<CapTerms>>("/api/entitlements")
@@ -194,10 +202,10 @@ export function BudgetPane() {
     return () => {
       cancelled = true;
     };
-  }, [version]);
+  }, [version, t]);
 
   if (loadError) {
-    return <ErrorState title="Could not load the budget" message={loadError} onRetry={reload} />;
+    return <ErrorState title={t`Could not load the budget`} message={loadError} onRetry={reload} />;
   }
   if (budget === null) return <LoadingSkeleton rows={4} />;
   const fixedCap = fixedCapNote(budget, capTerms);
@@ -205,6 +213,7 @@ export function BudgetPane() {
   // Only an admin on a plan with overage has a cap to raise; everyone else
   // waits for the month to roll over, so the notice offers nothing to press.
   const canRaise = month.stopped && budget.overage_enabled && isAdmin;
+  const periodMonth = formatMonth(budget.period_start);
 
   return (
     <div className="flex flex-col gap-7">
@@ -214,7 +223,7 @@ export function BudgetPane() {
         <Alert
           variant="danger"
           data-budget-stopped
-          title={budget.overage_enabled ? "Overage cap reached" : "Included tokens used up"}
+          title={budget.overage_enabled ? t`Overage cap reached` : t`Included tokens used up`}
           action={
             canRaise ? (
               <Button
@@ -225,7 +234,7 @@ export function BudgetPane() {
                   field?.focus({ preventScroll: true });
                 }}
               >
-                Raise the cap
+                <Trans>Raise the cap</Trans>
               </Button>
             ) : undefined
           }
@@ -234,17 +243,17 @@ export function BudgetPane() {
         </Alert>
       )}
       <PaneSection
-        title="This month"
-        description={month.stopped ? `Overage and its cap for ${formatMonth(budget.period_start)}.` : month.text}
+        title={t`This month`}
+        description={month.stopped ? t`Overage and its cap for ${periodMonth}.` : month.text}
       >
         <dl className="divide-y divide-border">
           {budget.overage_enabled && (
             <>
-              <Field label="Overage billed" value={formatMicros(budget.overage_micros)} />
-              <Field label="Overage cap" value={formatMicros(budget.overage_cap_micros)} />
+              <Field label={t`Overage billed`} value={formatMicros(budget.overage_micros)} />
+              <Field label={t`Overage cap`} value={formatMicros(budget.overage_cap_micros)} />
             </>
           )}
-          <Field label="Period" value={formatMonth(budget.period_start)} />
+          <Field label={t`Period`} value={periodMonth} />
         </dl>
         {budget.overage_enabled && (
           <Meter
@@ -256,21 +265,23 @@ export function BudgetPane() {
         {fixedCap && <p className="mt-3 text-sm text-mw-text-subtle">{fixedCap}</p>}
         {/* The allowance is shown once, on Usage, with its meter. */}
         <p className="mt-3 border-t border-border pt-3 text-sm text-mw-text-subtle">
-          The included tokens and how many are used are on Usage.{" "}
+          <Trans>The included tokens and how many are used are on Usage.</Trans>{" "}
           <Link to="/settings/$paneId" params={{ paneId: "usage" }} className={LINK_CLASS}>
-            See usage
+            <Trans>See usage</Trans>
           </Link>
         </p>
       </PaneSection>
 
       {!budget.overage_enabled ? (
         <PaneSection
-          title="Overage"
-          description="This plan has no overage: past the included tokens, requests are refused rather than billed."
+          title={t`Overage`}
+          description={t`This plan has no overage: past the included tokens, requests are refused rather than billed.`}
         >
-          <p className="text-sm text-mw-text-subtle">Paid plans keep going at each model&apos;s list price, up to a cap.</p>
+          <p className="text-sm text-mw-text-subtle">
+            <Trans>Paid plans keep going at each model&apos;s list price, up to a cap.</Trans>
+          </p>
           <Link to="/pricing" className={`${LINK_CLASS} mt-1 inline-block`}>
-            See plans
+            <Trans>See plans</Trans>
           </Link>
         </PaneSection>
       ) : isAdmin ? (
@@ -281,8 +292,8 @@ export function BudgetPane() {
         />
       ) : (
         <PaneSection
-          title="Changing the overage cap"
-          description="Only an organisation administrator can change the overage cap. Ask one if you are running out."
+          title={t`Changing the overage cap`}
+          description={t`Only an organisation administrator can change the overage cap. Ask one if you are running out.`}
         />
       )}
 
@@ -293,24 +304,25 @@ export function BudgetPane() {
 
 /** A member's own cap and what they have spent against it. */
 function OwnCap(props: { budget: BudgetView }) {
+  const { t } = useLingui();
   const cap = props.budget.member_cap ?? null;
   if (cap === null) {
     return (
       <PaneSection
-        title="Your spend cap"
-        description="No cap applies to your own usage this month: only the organisation's budget above."
+        title={t`Your spend cap`}
+        description={t`No cap applies to your own usage this month: only the organisation's budget above.`}
       />
     );
   }
   const spent = props.budget.member_spent ?? 0;
   const description = props.budget.member_exhausted
-    ? "Your monthly spend cap is reached. Messages are refused until an organisation administrator raises it or the month rolls over."
-    : "The most your own usage may cost this month at each model's list price; an organisation administrator sets it.";
+    ? t`Your monthly spend cap is reached. Messages are refused until an organisation administrator raises it or the month rolls over.`
+    : t`The most your own usage may cost this month at each model's list price; an organisation administrator sets it.`;
   return (
-    <PaneSection title="Your spend cap" description={description}>
+    <PaneSection title={t`Your spend cap`} description={description}>
       <dl className="divide-y divide-border">
-        <Field label="Spent this month" value={formatMicros(spent)} hint="at list price" />
-        <Field label="Your cap" value={formatMicros(cap)} />
+        <Field label={t`Spent this month`} value={formatMicros(spent)} hint={t`at list price`} />
+        <Field label={t`Your cap`} value={formatMicros(cap)} />
       </dl>
       <Meter
         tone={props.budget.member_exhausted ? "danger" : "positive"}
@@ -331,6 +343,7 @@ const NUM_CLASS = "py-2 pr-3 tabular-nums";
  * table shows is what the API holds.
  */
 function MemberCapsEditor() {
+  const { t } = useLingui();
   const [state, setState] = useState<
     { phase: "loading" } | { phase: "error"; message: string } | { phase: "ready"; report: MemberBudgets }
   >({ phase: "loading" });
@@ -347,16 +360,16 @@ function MemberCapsEditor() {
         if (cancelled) return;
         setState({
           phase: "error",
-          message: err instanceof ApiError ? err.message : "Could not load the member caps.",
+          message: err instanceof ApiError ? err.message : t`Could not load the member caps.`,
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [version]);
+  }, [version, t]);
 
   if (state.phase === "error") {
-    return <ErrorState title="Could not load the member caps" message={state.message} onRetry={reload} />;
+    return <ErrorState title={t`Could not load the member caps`} message={state.message} onRetry={reload} />;
   }
   if (state.phase === "loading") return <LoadingSkeleton rows={3} />;
   const { report } = state;
@@ -364,27 +377,39 @@ function MemberCapsEditor() {
 
   return (
     <PaneSection
-      title="Spend caps per member"
-      description="The most one member's usage may cost this month, in US dollars at list price."
+      title={t`Spend caps per member`}
+      description={t`The most one member's usage may cost this month, in US dollars at list price.`}
     >
       <LearnMore className="mb-4">
         <p>
-          Checked after the organisation&apos;s budget. Members at their cap are refused, and they and the owners
-          are mailed at 80% and 100%.
+          <Trans>
+            Checked after the organisation&apos;s budget. Members at their cap are refused, and they and the owners
+            are mailed at 80% and 100%.
+          </Trans>
         </p>
-        <p>Leave the default empty for no cap; a member&apos;s own cap beats the default, up or down.</p>
+        <p>
+          <Trans>Leave the default empty for no cap; a member&apos;s own cap beats the default, up or down.</Trans>
+        </p>
       </LearnMore>
       <DefaultCapForm current={report.member_default_cap_micros} onSaved={saved} />
       {/* Four columns do not fit a phone; the table scrolls sideways rather than losing Save off the edge. */}
       <div className="mt-4 overflow-x-auto">
-      <table className="w-full text-sm" aria-label="Spend caps by member">
+      <table className="w-full text-sm" aria-label={t`Spend caps by member`}>
         <thead>
           <tr className="text-left text-mw-text-subtle">
-            <th scope="col" className={TH_CLASS}>Member</th>
-            <th scope="col" className={TH_CLASS}>Spent this month</th>
-            <th scope="col" className={TH_CLASS}>Cap (USD)</th>
             <th scope="col" className={TH_CLASS}>
-              <span className="sr-only">Save</span>
+              <Trans>Member</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Spent this month</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Cap (USD)</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <span className="sr-only">
+                <Trans>Save</Trans>
+              </span>
             </th>
           </tr>
         </thead>
@@ -392,7 +417,7 @@ function MemberCapsEditor() {
           {report.data.length === 0 ? (
             <tr className="border-t border-border">
               <td colSpan={4} className="py-3 text-mw-text-subtle">
-                No members to show yet. Everyone who joins is held to the default above.
+                <Trans>No members to show yet. Everyone who joins is held to the default above.</Trans>
               </td>
             </tr>
           ) : (
@@ -406,6 +431,7 @@ function MemberCapsEditor() {
 }
 
 function DefaultCapForm(props: { current: number | null; onSaved: (report: MemberBudgets) => void }) {
+  const { t } = useLingui();
   const [text, setText] = useState(() => capText(props.current));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -427,7 +453,7 @@ function DefaultCapForm(props: { current: number | null; onSaved: (report: Membe
       setText(capText(report.member_default_cap_micros));
       setSaved(true);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the default cap.");
+      setError(err instanceof ApiError ? err.message : t`Could not save the default cap.`);
     } finally {
       setSaving(false);
     }
@@ -442,13 +468,15 @@ function DefaultCapForm(props: { current: number | null; onSaved: (report: Membe
       }}
     >
       <label className="flex flex-col gap-1">
-        <span className={LABEL_CLASS}>Default cap per member (USD)</span>
+        <span className={LABEL_CLASS}>
+          <Trans>Default cap per member (USD)</Trans>
+        </span>
         <Input
-          aria-label="Default spend cap per member in US dollars"
+          aria-label={t`Default spend cap per member in US dollars`}
           inputMode="decimal"
           className="w-40"
           value={text}
-          placeholder="No cap"
+          placeholder={t`No cap`}
           aria-invalid={micros === "invalid" || undefined}
           onChange={(event) => {
             setSaved(false);
@@ -457,11 +485,11 @@ function DefaultCapForm(props: { current: number | null; onSaved: (report: Membe
         />
       </label>
       <Button type="submit" disabled={!dirty || saving}>
-        {saving ? "Saving…" : "Save default"}
+        {saving ? t`Saving…` : t`Save default`}
       </Button>
       {micros === "invalid" && (
         <span role="alert" className="text-sm text-mw-danger">
-          Enter a dollar amount, like 25 or 12.50, or leave it empty for no cap.
+          <Trans>Enter a dollar amount, like 25 or 12.50, or leave it empty for no cap.</Trans>
         </span>
       )}
       {error && (
@@ -471,7 +499,7 @@ function DefaultCapForm(props: { current: number | null; onSaved: (report: Membe
       )}
       {saved && !error && (
         <span role="status" aria-live="polite" className="text-sm text-mw-positive">
-          Saved.
+          <Trans>Saved.</Trans>
         </span>
       )}
     </form>
@@ -479,6 +507,7 @@ function DefaultCapForm(props: { current: number | null; onSaved: (report: Membe
 }
 
 function MemberCapRow(props: { row: MemberBudgetRow; onSaved: () => void }) {
+  const { t } = useLingui();
   const { row } = props;
   const [text, setText] = useState(() => (row.own ? capText(row.cap_micros) : ""));
   const [saving, setSaving] = useState(false);
@@ -487,6 +516,8 @@ function MemberCapRow(props: { row: MemberBudgetRow; onSaved: () => void }) {
   const current = row.own ? row.cap_micros : null;
   const dirty = micros !== "invalid" && micros !== current;
   const who = row.name ? `${row.name} (${row.email})` : row.email;
+  const email = row.email;
+  const defaultCap = row.cap_micros === null ? null : capFieldText(row.cap_micros);
 
   const save = async () => {
     if (micros === "invalid") return;
@@ -499,7 +530,7 @@ function MemberCapRow(props: { row: MemberBudgetRow; onSaved: () => void }) {
       });
       props.onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not save the cap.");
+      setError(err instanceof ApiError ? err.message : t`Could not save the cap.`);
     } finally {
       setSaving(false);
     }
@@ -510,16 +541,20 @@ function MemberCapRow(props: { row: MemberBudgetRow; onSaved: () => void }) {
       <td className="min-w-40 py-2 pr-3">
         <span className="break-all">{who}</span>
         {/* Refused until the cap moves: a warning on the row, not an error. */}
-        {row.exhausted && <span className="ml-2 text-xs font-medium text-mw-warning-foreground">at cap</span>}
+        {row.exhausted && (
+          <span className="ml-2 text-xs font-medium text-mw-warning-foreground">
+            <Trans>at cap</Trans>
+          </span>
+        )}
       </td>
       <td className={NUM_CLASS}>{formatMicros(row.spent_micros)}</td>
       <td className={NUM_CLASS}>
         <Input
-          aria-label={`Spend cap for ${row.email} in US dollars`}
+          aria-label={t`Spend cap for ${email} in US dollars`}
           inputMode="decimal"
           className="w-28"
           value={text}
-          placeholder={row.cap_micros === null ? "No cap" : `${capFieldText(row.cap_micros)} (default)`}
+          placeholder={defaultCap === null ? t`No cap` : t`${defaultCap} (default)`}
           aria-invalid={micros === "invalid" || undefined}
           onChange={(event) => setText(event.target.value)}
         />
@@ -531,7 +566,7 @@ function MemberCapRow(props: { row: MemberBudgetRow; onSaved: () => void }) {
           disabled={!dirty || saving}
           onClick={() => void save()}
         >
-          {saving ? "Saving…" : "Save"}
+          {saving ? t`Saving…` : t`Save`}
         </Button>
         {error && (
           <span role="alert" className="ml-2 text-sm text-mw-danger">
@@ -548,6 +583,7 @@ function CapEditor(props: {
   planDefault: number | null;
   onSaved: (budget: BudgetView) => void;
 }) {
+  const { t } = useLingui();
   const [text, setText] = useState(() => capFieldText(props.current));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -570,21 +606,18 @@ function CapEditor(props: {
       setText(capFieldText(body.overage_cap_micros));
       setSaved(true);
     } catch (err) {
-      setSaveError(err instanceof ApiError ? err.message : "Could not save the overage cap.");
+      setSaveError(err instanceof ApiError ? err.message : t`Could not save the overage cap.`);
     } finally {
       setSaving(false);
     }
   };
 
-  const defaultText =
-    props.planDefault === null
-      ? "the plan's default, its monthly price"
-      : `the plan's default, ${formatMicros(props.planDefault)}`;
+  const planDefault = props.planDefault === null ? null : formatMicros(props.planDefault);
 
   return (
     <PaneSection
-      title="Overage cap"
-      description="The most usage past the included tokens may cost this month, in US dollars."
+      title={t`Overage cap`}
+      description={t`The most usage past the included tokens may cost this month, in US dollars.`}
     >
       <form
         className="flex flex-wrap items-end gap-3"
@@ -594,10 +627,12 @@ function CapEditor(props: {
         }}
       >
         <label className="flex flex-col gap-1">
-          <span className={LABEL_CLASS}>Cap (USD)</span>
+          <span className={LABEL_CLASS}>
+            <Trans>Cap (USD)</Trans>
+          </span>
           <Input
             id={CAP_FIELD_ID}
-            aria-label="Overage cap in US dollars"
+            aria-label={t`Overage cap in US dollars`}
             inputMode="decimal"
             className="w-40"
             value={text}
@@ -609,11 +644,11 @@ function CapEditor(props: {
           />
         </label>
         <Button type="submit" disabled={!dirty || saving}>
-          {saving ? "Saving…" : "Save cap"}
+          {saving ? t`Saving…` : t`Save cap`}
         </Button>
         {micros === null && (
           <span role="alert" className="text-sm text-mw-danger">
-            Enter a dollar amount, like 25 or 12.50.
+            <Trans>Enter a dollar amount, like 25 or 12.50.</Trans>
           </span>
         )}
         {saveError && (
@@ -623,14 +658,23 @@ function CapEditor(props: {
         )}
         {saved && !saveError && (
           <span role="status" aria-live="polite" className="text-sm text-mw-positive">
-            Overage cap saved.
+            <Trans>Overage cap saved.</Trans>
           </span>
         )}
       </form>
       <LearnMore className="mt-4">
         <p>
-          At each model&apos;s list price. Requests are refused once it is reached. Leave it empty or enter 0 to use{" "}
-          {defaultText}.
+          {planDefault === null ? (
+            <Trans>
+              At each model&apos;s list price. Requests are refused once it is reached. Leave it empty or enter 0 to
+              use the plan&apos;s default, its monthly price.
+            </Trans>
+          ) : (
+            <Trans>
+              At each model&apos;s list price. Requests are refused once it is reached. Leave it empty or enter 0 to
+              use the plan&apos;s default, {planDefault}.
+            </Trans>
+          )}
         </p>
       </LearnMore>
     </PaneSection>

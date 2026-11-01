@@ -1,10 +1,14 @@
 import { useId, useState, type FormEvent } from "react";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Alert } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { SimpleSelect } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
+import { formatDateTime } from "../../i18n/format";
 import { DestructiveConfirm, EmptyState, ErrorState, LoadingSkeleton } from "../../patterns";
 import { failureMessage } from "../../shell/authForms";
 import {
@@ -32,22 +36,25 @@ import { useLoad } from "./useLoad";
  * that would be ignored.
  */
 export function AnnouncementsTab() {
+  const { t } = useLingui();
   const [state, reload] = useLoad(fetchAnnouncements, "announcements");
   return (
     <div className="space-y-6">
       <p className="text-sm text-mw-text-muted">
-        Shown above the app to everyone signed in, most severe first, from its start until its end. Users see a change
-        within two minutes.
+        <Trans>
+          Shown above the app to everyone signed in, most severe first, from its start until its end. Users see a
+          change within two minutes.
+        </Trans>
       </p>
       <AnnouncementForm onSaved={reload} />
       {state.phase === "loading" ? (
         <LoadingSkeleton rows={3} />
       ) : state.phase === "error" ? (
-        <ErrorState title="Could not load announcements" message={state.message} onRetry={reload} />
+        <ErrorState title={t`Could not load announcements`} message={state.message} onRetry={reload} />
       ) : state.data.length === 0 ? (
-        <EmptyState title="No announcements yet" description="Post one above." />
+        <EmptyState title={t`No announcements yet`} description={t`Post one above.`} />
       ) : (
-        <ul className="space-y-3" aria-label="Announcements">
+        <ul className="space-y-3" aria-label={t`Announcements`}>
           {state.data.map((row) => (
             <AnnouncementRow key={row.id} row={row} onChanged={reload} />
           ))}
@@ -59,8 +66,7 @@ export function AnnouncementsTab() {
 
 /** Date and time: a maintenance window is hours, not days. */
 function when(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+  return formatDateTime(iso) || iso;
 }
 
 const STATE_VARIANT = {
@@ -75,7 +81,20 @@ const SEVERITY_VARIANT = {
   critical: "destructive",
 } as const;
 
+const SEVERITY_LABEL: Record<AnnouncementSeverity, MessageDescriptor> = {
+  info: msg`info`,
+  warning: msg`warning`,
+  critical: msg`critical`,
+};
+
+const STATE_LABEL: Record<AdminAnnouncement["state"], MessageDescriptor> = {
+  active: msg`active`,
+  scheduled: msg`scheduled`,
+  ended: msg`ended`,
+};
+
 function AnnouncementRow({ row, onChanged }: { row: AdminAnnouncement; onChanged: () => void }) {
+  const { t, i18n } = useLingui();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -95,14 +114,21 @@ function AnnouncementRow({ row, onChanged }: { row: AdminAnnouncement; onChanged
     }
   }
 
+  const starts = when(row.starts_at);
+  const ends = row.ends_at ? when(row.ends_at) : "";
+  const updatedBy = row.updated_by;
   return (
     <li className="space-y-2 rounded-xl border border-border bg-card p-5">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={SEVERITY_VARIANT[row.severity]}>{row.severity}</Badge>
-        <Badge variant={STATE_VARIANT[row.state]}>{row.state}</Badge>
-        {!row.dismissible && <span className="text-xs text-mw-text-muted">not dismissible</span>}
+        <Badge variant={SEVERITY_VARIANT[row.severity]}>{i18n._(SEVERITY_LABEL[row.severity])}</Badge>
+        <Badge variant={STATE_VARIANT[row.state]}>{i18n._(STATE_LABEL[row.state])}</Badge>
+        {!row.dismissible && (
+          <span className="text-xs text-mw-text-muted">
+            <Trans>not dismissible</Trans>
+          </span>
+        )}
         <span className="ml-auto text-xs text-mw-text-muted">
-          {when(row.starts_at)} – {row.ends_at ? when(row.ends_at) : "until ended"} · by {row.updated_by}
+          {row.ends_at ? <Trans>{starts} – {ends} · by {updatedBy}</Trans> : <Trans>{starts} – until ended · by {updatedBy}</Trans>}
         </span>
       </div>
       <p className="whitespace-pre-wrap break-words text-sm text-mw-text">{row.message}</p>
@@ -114,11 +140,11 @@ function AnnouncementRow({ row, onChanged }: { row: AdminAnnouncement; onChanged
       )}
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={busy} onClick={() => setEditing((v) => !v)}>
-          {editing ? "Close editor" : "Edit"}
+          {editing ? <Trans>Close editor</Trans> : <Trans>Edit</Trans>}
         </Button>
         {row.state !== "ended" && (
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void run(() => endAnnouncement(row.id))}>
-            End now
+            <Trans>End now</Trans>
           </Button>
         )}
         <Button
@@ -127,7 +153,7 @@ function AnnouncementRow({ row, onChanged }: { row: AdminAnnouncement; onChanged
           disabled={busy}
           onClick={() => setConfirmDelete(true)}
         >
-          Delete
+          <Trans>Delete</Trans>
         </Button>
       </div>
       {editing && (
@@ -144,9 +170,9 @@ function AnnouncementRow({ row, onChanged }: { row: AdminAnnouncement; onChanged
         onOpenChange={(open) => {
           if (!open && !busy) setConfirmDelete(false);
         }}
-        title="Delete this announcement?"
-        description="It disappears from every banner and from this list. End it instead to keep the record."
-        confirmLabel="Delete"
+        title={t`Delete this announcement?`}
+        description={t`It disappears from every banner and from this list. End it instead to keep the record.`}
+        confirmLabel={t`Delete`}
         inFlight={busy}
         onConfirm={() => void run(() => deleteAnnouncement(row.id))}
       />
@@ -165,19 +191,21 @@ function draftOf(row: AdminAnnouncement | undefined): AnnouncementDraft {
   };
 }
 
-const SEVERITY_OPTIONS: { value: AnnouncementSeverity; label: string }[] = [
-  { value: "info", label: "Info" },
-  { value: "warning", label: "Warning" },
-  { value: "critical", label: "Critical" },
+const SEVERITY_OPTIONS: { value: AnnouncementSeverity; label: MessageDescriptor }[] = [
+  { value: "info", label: msg`Info` },
+  { value: "warning", label: msg`Warning` },
+  { value: "critical", label: msg`Critical` },
 ];
 
 function AnnouncementForm({ existing, onSaved }: { existing?: AdminAnnouncement; onSaved: () => void }) {
+  const { t, i18n } = useLingui();
   const id = useId();
   const [draft, setDraft] = useState<AnnouncementDraft>(() => draftOf(existing));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const critical = draft.severity === "critical";
+  const length = draft.message.length;
 
   function update(patch: Partial<AnnouncementDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -197,7 +225,7 @@ function AnnouncementForm({ existing, onSaved }: { existing?: AdminAnnouncement;
       } else {
         await createAnnouncement(body);
         setDraft(draftOf(undefined));
-        setStatus("Announcement posted.");
+        setStatus(t`Announcement posted.`);
       }
       onSaved();
     } catch (err: unknown) {
@@ -210,12 +238,16 @@ function AnnouncementForm({ existing, onSaved }: { existing?: AdminAnnouncement;
   return (
     <form
       onSubmit={(e) => void submit(e)}
-      aria-label={existing ? "Edit announcement" : "New announcement"}
+      aria-label={existing ? t`Edit announcement` : t`New announcement`}
       className="space-y-3 rounded-xl border border-border bg-card p-5"
     >
-      {!existing && <h3 className="text-sm font-medium text-mw-text">New announcement</h3>}
+      {!existing && (
+        <h3 className="text-sm font-medium text-mw-text">
+          <Trans>New announcement</Trans>
+        </h3>
+      )}
       <label htmlFor={`${id}-message`} className="flex flex-col gap-1 text-sm">
-        Message
+        <Trans>Message</Trans>
         <Textarea
           id={`${id}-message`}
           value={draft.message}
@@ -225,34 +257,38 @@ function AnnouncementForm({ existing, onSaved }: { existing?: AdminAnnouncement;
           onChange={(e) => update({ message: e.target.value })}
         />
         <span className="text-xs text-mw-text-muted">
-          Plain text, {draft.message.length}/{MAX_ANNOUNCEMENT_LENGTH}
+          <Trans>
+            Plain text, {length}/{MAX_ANNOUNCEMENT_LENGTH}
+          </Trans>
         </span>
       </label>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1 text-sm">
-          <label htmlFor={`${id}-severity`}>Severity</label>
+          <label htmlFor={`${id}-severity`}>
+            <Trans>Severity</Trans>
+          </label>
           <SimpleSelect<AnnouncementSeverity>
             id={`${id}-severity`}
             value={draft.severity}
             disabled={busy}
             onValueChange={(severity) => update({ severity })}
-            options={SEVERITY_OPTIONS}
+            options={SEVERITY_OPTIONS.map((option) => ({ value: option.value, label: i18n._(option.label) }))}
             className="w-full"
           />
         </div>
         <label htmlFor={`${id}-link`} className="flex flex-col gap-1 text-sm">
-          Link (optional)
+          <Trans>Link (optional)</Trans>
           <Input
             id={`${id}-link`}
             value={draft.link ?? ""}
-            placeholder="https://status.example.com or /help"
+            placeholder={t`https://status.example.com or /help`}
             maxLength={2000}
             disabled={busy}
             onChange={(e) => update({ link: e.target.value })}
           />
         </label>
         <label htmlFor={`${id}-starts`} className="flex flex-col gap-1 text-sm">
-          Starts
+          <Trans>Starts</Trans>
           <Input
             id={`${id}-starts`}
             type="datetime-local"
@@ -260,10 +296,14 @@ function AnnouncementForm({ existing, onSaved }: { existing?: AdminAnnouncement;
             disabled={busy}
             onChange={(e) => update({ starts_at: fromLocalInput(e.target.value) })}
           />
-          {!existing && <span className="text-xs text-mw-text-muted">Empty: now.</span>}
+          {!existing && (
+            <span className="text-xs text-mw-text-muted">
+              <Trans>Empty: now.</Trans>
+            </span>
+          )}
         </label>
         <label htmlFor={`${id}-ends`} className="flex flex-col gap-1 text-sm">
-          Ends
+          <Trans>Ends</Trans>
           <Input
             id={`${id}-ends`}
             type="datetime-local"
@@ -271,7 +311,9 @@ function AnnouncementForm({ existing, onSaved }: { existing?: AdminAnnouncement;
             disabled={busy}
             onChange={(e) => update({ ends_at: fromLocalInput(e.target.value) })}
           />
-          <span className="text-xs text-mw-text-muted">Empty: until someone ends it.</span>
+          <span className="text-xs text-mw-text-muted">
+            <Trans>Empty: until someone ends it.</Trans>
+          </span>
         </label>
       </div>
       <label className="flex items-center gap-2 text-sm">
@@ -281,8 +323,12 @@ function AnnouncementForm({ existing, onSaved }: { existing?: AdminAnnouncement;
           disabled={busy || critical}
           onChange={(e) => update({ dismissible: e.target.checked })}
         />
-        People can dismiss it on their device
-        {critical && <span className="text-xs text-mw-text-muted">(never, for a critical one)</span>}
+        <Trans>People can dismiss it on their device</Trans>
+        {critical && (
+          <span className="text-xs text-mw-text-muted">
+            <Trans>(never, for a critical one)</Trans>
+          </span>
+        )}
       </label>
       {error && (
         <Alert role="alert" variant="danger">
@@ -295,7 +341,7 @@ function AnnouncementForm({ existing, onSaved }: { existing?: AdminAnnouncement;
         </p>
       )}
       <Button type="submit" size="sm" disabled={busy || !draft.message.trim()}>
-        {existing ? "Save" : "Post announcement"}
+        {existing ? <Trans>Save</Trans> : <Trans>Post announcement</Trans>}
       </Button>
     </form>
   );

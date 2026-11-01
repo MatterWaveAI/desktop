@@ -274,15 +274,21 @@ body {
   }
 }
 
-/* Shiki dual themes: switch to the dark palette when the html.dark class is
-   set (shiki emits --shiki-dark vars alongside the light ones). */
-.dark .shiki,
-.dark .shiki span {
-  color: var(--shiki-dark) !important;
-  background-color: var(--shiki-dark-bg) !important;
-  font-style: var(--shiki-dark-font-style) !important;
-  font-weight: var(--shiki-dark-font-weight) !important;
-  text-decoration: var(--shiki-dark-text-decoration) !important;
+/* Code blocks: shiki paints with CSS variables (styles/shiki.ts), and the
+   variables are the theme's code tokens, so a block follows the light and
+   dark themes like everything else and its colours are tested with them. */
+.shiki {
+  --mw-code-foreground: var(--mw-color-code-text);
+  --mw-code-background: transparent;
+  --mw-code-token-keyword: var(--mw-color-code-keyword);
+  --mw-code-token-link: var(--mw-color-code-keyword);
+  --mw-code-token-string: var(--mw-color-code-string);
+  --mw-code-token-string-expression: var(--mw-color-code-string);
+  --mw-code-token-constant: var(--mw-color-code-constant);
+  --mw-code-token-comment: var(--mw-color-code-comment);
+  --mw-code-token-function: var(--mw-color-code-text);
+  --mw-code-token-parameter: var(--mw-color-code-text);
+  --mw-code-token-punctuation: var(--mw-color-code-text);
 }
 
 /*

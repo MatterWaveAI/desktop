@@ -143,17 +143,18 @@ describe("the compaction divider", () => {
 });
 
 describe("the context meter", () => {
-  it("shows used over window and colours by level", () => {
+  it("shows how full the window is, with the exact count as its value, and colours by level", () => {
     render(<ContextMeter context={{ used: 900, window: 1024 }} draft={"x".repeat(40)} />);
     const meter = container!.querySelector("[role='meter']")!;
-    expect(meter.textContent).toBe("910 / 1,024");
+    expect(meter.textContent).toBe("89%");
+    expect(meter.getAttribute("aria-valuetext")).toBe("910 of 1,024 tokens");
     expect(meter.getAttribute("data-mw-context-meter")).toBe("warn");
   });
 
   it("marks a count that is the summary's estimate", () => {
     render(<ContextMeter context={{ used: 300, window: 1024, estimated: true }} draft="" />);
     const meter = container!.querySelector("[role='meter']")!;
-    expect(meter.textContent).toBe("~300 / 1,024");
+    expect(meter.textContent).toBe("~29%");
     expect(meter.getAttribute("aria-valuetext")).toBe("about 300 of 1,024 tokens");
   });
 
@@ -165,7 +166,7 @@ describe("the context meter", () => {
   it("offers Compact beside a full count, with a sentence on what it does", () => {
     const onCompact = vi.fn();
     render(<ContextMeter context={{ used: 1024, window: 1024 }} draft="" onCompact={onCompact} />);
-    expect(container!.querySelector("[role='meter']")?.textContent).toBe("1,024 / 1,024");
+    expect(container!.querySelector("[role='meter']")?.textContent).toBe("100%");
     const compact = button("Compact")!;
     expect(compact).toBeDefined();
     expect(container!.querySelector("[data-mw-compact-hint]")?.textContent).toMatch(

@@ -1,5 +1,7 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { useLingui } from "@lingui/react/macro";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, plural, t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Link } from "@tanstack/react-router";
 import { Alert, Meter } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
@@ -9,7 +11,8 @@ import { Input } from "../../../components/ui/input";
 import { SearchInput } from "../../../components/ui/search-input";
 import { SimpleSelect } from "../../../components/ui/select";
 import { apiFetch } from "../../../lib/api";
-import { SEATS_FOLLOW_MEMBERS_NOTE, formatSeats, upgradeRequired } from "../../../lib/billing";
+import { formatDate } from "../../../i18n/format";
+import { SEATS_FOLLOW_MEMBERS_NOTE_MSG, upgradeRequired } from "../../../lib/billing";
 import { DestructiveConfirm, ErrorState, LoadingSkeleton, UpgradePrompt } from "../../../patterns";
 import { failureMessage, validateEmail } from "../../../shell/authForms";
 import { useShell } from "../../../shell/shellContext";
@@ -35,8 +38,8 @@ import { CONNECTOR_LABELS, fetchLinkedAccounts, type LinkedAccount } from "./con
 export type OrgRole = "owner" | "admin" | "member" | "viewer";
 const ORG_ROLES: readonly OrgRole[] = ["owner", "admin", "member", "viewer"];
 
-/** What the ownership confirmation makes an owner type. */
-const TRANSFER_PHRASE = "transfer ownership";
+/** What the ownership confirmation makes an owner type, in the reader's language. */
+const TRANSFER_PHRASE = msg`transfer ownership`;
 
 export interface Member {
   subject: string;
@@ -120,19 +123,19 @@ function canTouch(actor: OrgRole, target: OrgRole): boolean {
 const LABEL_CLASS = "text-sm font-medium";
 
 /** A role as a person reads it: "Member", not the API's "member". */
-export const ROLE_LABEL: Record<OrgRole, string> = {
-  owner: "Owner",
-  admin: "Admin",
-  member: "Member",
-  viewer: "Viewer",
+export const ROLE_LABEL: Record<OrgRole, MessageDescriptor> = {
+  owner: msg`Owner`,
+  admin: msg`Admin`,
+  member: msg`Member`,
+  viewer: msg`Viewer`,
 };
 
 /** What each role can do, said once for the whole pane. */
-const ROLE_SUMMARY: Record<OrgRole, string> = {
-  owner: "Everything, including billing and handing over ownership.",
-  admin: "Members, invites and keys.",
-  member: "Uses the app.",
-  viewer: "Reads shared work.",
+const ROLE_SUMMARY: Record<OrgRole, MessageDescriptor> = {
+  owner: msg`Everything, including billing and handing over ownership.`,
+  admin: msg`Members, invites and keys.`,
+  member: msg`Uses the app.`,
+  viewer: msg`Reads shared work.`,
 };
 
 /** Where the "Invite people" action at the top of the page takes focus. */
@@ -159,6 +162,7 @@ function canTransferTo(actor: OrgRole, target: Member, self: string): boolean {
 
 export function MembersPane() {
   const { principal } = useShell();
+  const { t } = useLingui();
   const [state, setState] = useState<
     { phase: "loading" } | { phase: "error"; message: string } | ({ phase: "ready" } & MembersState)
   >({ phase: "loading" });
@@ -182,7 +186,7 @@ export function MembersPane() {
 
   if (state.phase === "loading") return <LoadingSkeleton rows={4} />;
   if (state.phase === "error") {
-    return <ErrorState title="Could not load members" message={state.message} />;
+    return <ErrorState title={t`Could not load members`} message={state.message} />;
   }
   const reload = () => setGeneration((n) => n + 1);
   const nameOf = namesFrom(state.members);
@@ -202,7 +206,7 @@ export function MembersPane() {
               field?.focus({ preventScroll: true });
             }}
           >
-            Invite people
+            <Trans>Invite people</Trans>
           </Button>
         </PaneActions>
       )}
@@ -229,15 +233,16 @@ export function MembersPane() {
  */
 function OverCapacity(props: { seats: Seats; reason: string }) {
   const max = props.seats.max ?? props.seats.used;
+  const used = props.seats.used;
   return (
     <Alert
       variant="warning"
       role="alert"
       data-testid="over-capacity"
-      title={`${props.seats.used} of ${formatSeats(max)} in use`}
+      title={plural(max, { one: `${used} of # seat in use`, other: `${used} of # seats in use` })}
       action={
         <Link to="/pricing" className={buttonVariants({ size: "lg" })}>
-          Add seats
+          <Trans>Add seats</Trans>
         </Link>
       }
     >
@@ -249,25 +254,26 @@ function OverCapacity(props: { seats: Seats; reason: string }) {
 
 /** The four roles in one line each, in place of a paragraph per section. */
 function RolesSection(props: { actor: OrgRole }) {
+  const { t, i18n } = useLingui();
   return (
     <section aria-labelledby="members-roles" className="flex flex-col gap-3.5">
       <div>
         <h2 id="members-roles" className="font-display text-display-sm">
-          Roles
+          <Trans>Roles</Trans>
         </h2>
         <p className="mt-1 text-sm text-mw-text-subtle">
           {props.actor === "owner"
-            ? "Only an owner hands over ownership."
+            ? t`Only an owner hands over ownership.`
             : canManage(props.actor)
-              ? "You can change roles below owner and remove members."
-              : "Ask an owner or admin to change roles or invite people."}
+              ? t`You can change roles below owner and remove members.`
+              : t`Ask an owner or admin to change roles or invite people.`}
         </p>
       </div>
       <dl className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-3">
         {ORG_ROLES.map((role) => (
           <div key={role} className="rounded-xl border border-border px-4 py-3.5">
-            <dt className="font-semibold">{ROLE_LABEL[role]}</dt>
-            <dd className="mt-1 text-sm text-mw-text-subtle">{ROLE_SUMMARY[role]}</dd>
+            <dt className="font-semibold">{i18n._(ROLE_LABEL[role])}</dt>
+            <dd className="mt-1 text-sm text-mw-text-subtle">{i18n._(ROLE_SUMMARY[role])}</dd>
           </div>
         ))}
       </dl>
@@ -312,11 +318,16 @@ function useAction(onChanged: () => void) {
 // --- members -----------------------------------------------------------------------------
 
 function seatsLine(seats: Seats): string {
-  if (seats.billed !== null) return `${formatSeats(seats.billed)}, billed per seat`;
-  const noun = seats.used === 1 ? "seat" : "seats";
-  return seats.max === null
-    ? `${seats.used} ${noun}, unlimited`
-    : `${seats.used} of ${seats.max} ${seats.max === 1 ? "seat" : "seats"}`;
+  const used = seats.used;
+  if (seats.billed !== null) {
+    const billed = seats.billed;
+    return plural(billed, { one: "# seat, billed per seat", other: "# seats, billed per seat" });
+  }
+  if (seats.max === null) {
+    return plural(used, { one: "# seat, unlimited", other: "# seats, unlimited" });
+  }
+  const max = seats.max;
+  return plural(max, { one: `${used} of # seat`, other: `${used} of # seats` });
 }
 
 /**
@@ -328,7 +339,13 @@ function seatsLine(seats: Seats): string {
  */
 export function inviteBlockedReason(seats: Seats): string | null {
   if (seats.max === null || seats.used <= seats.max) return null;
-  return `Over capacity: ${seats.used} ${seats.used === 1 ? "seat" : "seats"} are taken on a plan with ${formatSeats(seats.max)}. Remove a member or upgrade before inviting anyone.`;
+  const max = seats.max;
+  const used = seats.used;
+  const capacity = plural(max, { one: "# seat", other: "# seats" });
+  return plural(used, {
+    one: `Over capacity: # seat is taken on a plan with ${capacity}. Remove a member or upgrade before inviting anyone.`,
+    other: `Over capacity: # seats are taken on a plan with ${capacity}. Remove a member or upgrade before inviting anyone.`,
+  });
 }
 
 /** The sole owner cannot leave or step down; ownership has to be handed over first. */
@@ -401,6 +418,7 @@ function MembersSection(props: {
   onChanged: () => void;
 }) {
   const shell = useShell();
+  const { t, i18n } = useLingui();
   const { busy, error, run } = useAction(props.onChanged);
   const [pending, setPending] = useState<MemberAction | null>(null);
   const [typed, setTyped] = useState("");
@@ -435,8 +453,12 @@ function MembersSection(props: {
 
   const leaving = pending?.kind === "remove" && pending.member.subject === props.self;
 
-  const people = `${props.members.length} ${props.members.length === 1 ? "person" : "people"}`;
+  const memberCount = props.members.length;
+  const people = plural(memberCount, { one: "# person", other: "# people" });
   const seatMax = props.seats.max;
+  const filterText = query.trim();
+  const pendingEmail = pending?.member.email ?? "";
+  const transferPhrase = i18n._(TRANSFER_PHRASE);
   return (
     <PaneSection
       title={people}
@@ -446,7 +468,8 @@ function MembersSection(props: {
           <span data-testid="seats">
             {seatsLine(props.seats)}
             <span className="ml-1">
-              {props.seats.billed !== null ? `· ${SEATS_FOLLOW_MEMBERS_NOTE}` : "· members and pending invites"}
+              {"· "}
+              {props.seats.billed !== null ? i18n._(SEATS_FOLLOW_MEMBERS_NOTE_MSG) : t`members and pending invites`}
             </span>
           </span>
           {seatMax !== null && seatMax > 0 && props.seats.used <= seatMax && (
@@ -457,19 +480,19 @@ function MembersSection(props: {
       actions={
         <>
           <SearchInput
-            aria-label="Filter members"
-            placeholder="Filter"
+            aria-label={t`Filter members`}
+            placeholder={t`Filter`}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             wrapperClassName="w-44"
           />
           <SimpleSelect
-            aria-label="Sort members"
+            aria-label={t`Sort members`}
             value={sort}
             onValueChange={setSort}
             options={[
-              { value: "name", label: "Sort by name" },
-              { value: "last_active", label: "Sort by last active" },
+              { value: "name", label: t`Sort by name` },
+              { value: "last_active", label: t`Sort by last active` },
             ]}
           />
         </>
@@ -479,12 +502,13 @@ function MembersSection(props: {
           news: the second names the filter so it can be corrected. */}
       {shown.length === 0 && (
         <p className="px-5 py-4 text-sm text-mw-text-muted">
-          {props.members.length === 0 ? "No members yet." : `No members match "${query.trim()}".`}
+          {props.members.length === 0 ? t`No members yet.` : t`No members match "${filterText}".`}
         </p>
       )}
-      <RowList aria-label="Members">
+      <RowList aria-label={t`Members`}>
         {shown.map((member) => {
           const isSelf = member.subject === props.self;
+          const email = member.email;
           // The only owner has nowhere to go: no Leave, no role to pick,
           // until ownership is transferred (the button on another row).
           const pinned = isSelf && isSoleOwner(member, props.members);
@@ -502,10 +526,14 @@ function MembersSection(props: {
                       {member.email}
                     </span>
                   )}
-                  {isSelf && <Badge variant="secondary">You</Badge>}
+                  {isSelf && (
+                    <Badge variant="secondary">
+                      <Trans>You</Trans>
+                    </Badge>
+                  )}
                   {member.state !== "active" && (
                     <Badge variant={member.state === "suspended" ? "destructive" : "outline"}>
-                      {member.state === "suspended" ? "Suspended" : "Unverified"}
+                      {member.state === "suspended" ? t`Suspended` : t`Unverified`}
                     </Badge>
                   )}
                 </span>
@@ -527,7 +555,9 @@ function MembersSection(props: {
                 <>
                   {pinned && (
                     <span data-testid="sole-owner" className="text-xs text-mw-text-muted">
-                      The only owner. Transfer ownership to someone before leaving or changing your role.
+                      <Trans>
+                        The only owner. Transfer ownership to someone before leaving or changing your role.
+                      </Trans>
                     </span>
                   )}
                   {(props.linked.get(member.subject)?.length ?? 0) > 0 && (
@@ -539,7 +569,7 @@ function MembersSection(props: {
                 <>
                   {editable ? (
                     <SimpleSelect
-                      aria-label={`Role of ${member.email}`}
+                      aria-label={t`Role of ${email}`}
                       value={member.role}
                       disabled={busy}
                       onValueChange={(role) =>
@@ -552,10 +582,10 @@ function MembersSection(props: {
                       }
                       options={ORG_ROLES.filter(
                         (role) => canGrant(props.actor, role) || role === member.role,
-                      ).map((role) => ({ value: role, label: ROLE_LABEL[role] }))}
+                      ).map((role) => ({ value: role, label: i18n._(ROLE_LABEL[role]) }))}
                     />
                   ) : (
-                    <span className="text-sm text-mw-text-secondary">{ROLE_LABEL[member.role]}</span>
+                    <span className="text-sm text-mw-text-secondary">{i18n._(ROLE_LABEL[member.role])}</span>
                   )}
                   {/* Short words on the button, the person in its name: the
                       email is already on the row, and repeating it wraps the
@@ -565,10 +595,10 @@ function MembersSection(props: {
                       type="button"
                       variant="ghost"
                       disabled={busy}
-                      aria-label={`Transfer ownership to ${member.email}`}
+                      aria-label={t`Transfer ownership to ${email}`}
                       onClick={() => open({ kind: "transfer", member })}
                     >
-                      Transfer ownership
+                      <Trans>Transfer ownership</Trans>
                     </Button>
                   )}
                   {(editable || isSelf) && !pinned && (
@@ -576,10 +606,10 @@ function MembersSection(props: {
                       type="button"
                       variant="ghost"
                       disabled={busy}
-                      aria-label={isSelf ? undefined : `Remove ${member.email}`}
+                      aria-label={isSelf ? undefined : t`Remove ${email}`}
                       onClick={() => open({ kind: "remove", member })}
                     >
-                      {isSelf ? "Leave" : "Remove"}
+                      {isSelf ? t`Leave` : t`Remove`}
                     </Button>
                   )}
                 </>
@@ -600,17 +630,17 @@ function MembersSection(props: {
         }}
         title={
           leaving
-            ? "Leave this organisation?"
+            ? t`Leave this organisation?`
             : pending?.kind === "remove"
-              ? `Remove ${pending.member.email}?`
-              : "Remove this member?"
+              ? t`Remove ${pendingEmail}?`
+              : t`Remove this member?`
         }
         description={
           leaving
-            ? "Leaving deactivates your account and signs you out: this email address stays attached to this organisation and cannot sign in again. To use MatterWave afterwards, sign up with a different address to start a new organisation, or ask an operator to restore this account."
-            : "Their access ends on their next request: the account is suspended, not only unlisted. An operator can restore it."
+            ? t`Leaving deactivates your account and signs you out: this email address stays attached to this organisation and cannot sign in again. To use MatterWave afterwards, sign up with a different address to start a new organisation, or ask an operator to restore this account.`
+            : t`Their access ends on their next request: the account is suspended, not only unlisted. An operator can restore it.`
         }
-        confirmLabel={leaving ? "Leave and deactivate my account" : "Remove member"}
+        confirmLabel={leaving ? t`Leave and deactivate my account` : t`Remove member`}
         onConfirm={() => {
           if (pending?.kind === "remove") void remove(pending.member);
         }}
@@ -623,18 +653,18 @@ function MembersSection(props: {
         }}
         title={
           pending?.kind === "transfer"
-            ? `Transfer ownership to ${pending.member.email}?`
-            : "Transfer ownership?"
+            ? t`Transfer ownership to ${pendingEmail}?`
+            : t`Transfer ownership?`
         }
-        description="They become an owner and you become an admin, in one step. Only they can hand it back."
-        confirmLabel="Transfer ownership"
-        confirmPhrase={TRANSFER_PHRASE}
+        description={t`They become an owner and you become an admin, in one step. Only they can hand it back.`}
+        confirmLabel={t`Transfer ownership`}
+        confirmPhrase={transferPhrase}
         typedValue={typed}
         onTypedValueChange={setTyped}
         onConfirm={() => {
           // The dialog disables the button until the phrase matches, so a
           // confirm without it is a bug, not a decision.
-          if (pending?.kind === "transfer" && typed.trim().toLowerCase() === TRANSFER_PHRASE) {
+          if (pending?.kind === "transfer" && typed.trim().toLowerCase() === transferPhrase.toLowerCase()) {
             void transfer(pending.member);
           }
         }}
@@ -649,6 +679,7 @@ function MembersSection(props: {
 type MailResult = { mail: "sent" | "failed"; detail?: string };
 
 function InviteSection(props: { actor: OrgRole; seats: Seats; onChanged: () => void }) {
+  const { t, i18n } = useLingui();
   const { busy, error, refusal, run } = useAction(props.onChanged);
   const blocked = inviteBlockedReason(props.seats);
   const [notice, setNotice] = useState<string | null>(null);
@@ -664,7 +695,7 @@ function InviteSection(props: { actor: OrgRole; seats: Seats; onChanged: () => v
     const email = String(data.get("email") ?? "").trim();
     // An empty submit used to do nothing at all; say what the field needs.
     // The address is someone else's, so not validateEmail's "your".
-    const problem = email === "" ? "Enter an email address." : validateEmail(email);
+    const problem = email === "" ? t`Enter an email address.` : validateEmail(email);
     setEmailError(problem ?? null);
     if (problem) {
       (form.elements.namedItem("email") as HTMLInputElement | null)?.focus();
@@ -676,10 +707,11 @@ function InviteSection(props: { actor: OrgRole; seats: Seats; onChanged: () => v
         method: "POST",
         json: { email, role },
       });
+      const invitee = created.email;
       setNotice(
         created.mail === "sent"
-          ? `Invitation sent to ${created.email}.`
-          : (created.detail ?? "The invite was created but the mail could not be sent."),
+          ? t`Invitation sent to ${invitee}.`
+          : (created.detail ?? t`The invite was created but the mail could not be sent.`),
       );
     });
     if (done) {
@@ -690,12 +722,16 @@ function InviteSection(props: { actor: OrgRole; seats: Seats; onChanged: () => v
 
   return (
     <PaneSection
-      title="Invite someone"
+      title={t`Invite someone`}
       description={
         <>
-          A one-time link by email, valid for seven days.
+          <Trans>A one-time link by email, valid for seven days.</Trans>
           <LearnMore className="mt-1">
-            <p>An address that already has an account elsewhere cannot join: one account, one organisation.</p>
+            <p>
+              <Trans>
+                An address that already has an account elsewhere cannot join: one account, one organisation.
+              </Trans>
+            </p>
           </LearnMore>
         </>
       }
@@ -711,7 +747,7 @@ function InviteSection(props: { actor: OrgRole; seats: Seats; onChanged: () => v
         <fieldset disabled={blocked !== null} className="contents">
         <div className="flex min-w-48 flex-1 flex-col gap-1.5">
           <label htmlFor={INVITE_EMAIL_ID} className={LABEL_CLASS}>
-            Email
+            <Trans>Email</Trans>
           </label>
           <Input
             id={INVITE_EMAIL_ID}
@@ -726,7 +762,7 @@ function InviteSection(props: { actor: OrgRole; seats: Seats; onChanged: () => v
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={roleId} className={LABEL_CLASS}>
-            Role
+            <Trans>Role</Trans>
           </label>
           <SimpleSelect
             id={roleId}
@@ -736,12 +772,12 @@ function InviteSection(props: { actor: OrgRole; seats: Seats; onChanged: () => v
             disabled={blocked !== null}
             options={ORG_ROLES.filter((r) => canGrant(props.actor, r)).map((r) => ({
               value: r,
-              label: ROLE_LABEL[r],
+              label: i18n._(ROLE_LABEL[r]),
             }))}
           />
         </div>
         <Button type="submit" disabled={busy || blocked !== null}>
-          Send invite
+          <Trans>Send invite</Trans>
         </Button>
         </fieldset>
         {emailError && (
@@ -769,6 +805,7 @@ function InvitesSection(props: {
   nameOf: NameOf;
   onChanged: () => void;
 }) {
+  const { t, i18n } = useLingui();
   const { busy, error, run } = useAction(props.onChanged);
   // The last resend's outcome, by invite: the list reloads after every
   // action, so the row cannot carry it.
@@ -791,72 +828,79 @@ function InvitesSection(props: {
         `/api/org/invites/${encodeURIComponent(invite.id)}/resend`,
         { method: "POST" },
       );
+      const invitee = result.email;
       setResent({
         id: invite.id,
         message:
           result.mail === "sent"
-            ? `Invitation re-sent to ${result.email}.`
-            : (result.detail ?? "The link was renewed but the mail could not be sent."),
+            ? t`Invitation re-sent to ${invitee}.`
+            : (result.detail ?? t`The link was renewed but the mail could not be sent.`),
       });
     });
   }
 
+  const revokingEmail = revoking?.email ?? "";
   return (
     <PaneSection
-      title="Pending invites"
+      title={t`Pending invites`}
       flush
-      description="Resending renews the link for seven days; the earlier mail stops working."
+      description={t`Resending renews the link for seven days; the earlier mail stops working.`}
     >
       {props.invites.length === 0 ? (
-        <p className="px-5 py-4 text-sm text-mw-text-muted">No invites yet.</p>
+        <p className="px-5 py-4 text-sm text-mw-text-muted">
+          <Trans>No invites yet.</Trans>
+        </p>
       ) : (
-        <RowList aria-label="Pending invites">
-          {props.invites.map((invite) => (
-            <Row
-              key={invite.id}
-              leading={<Initials name={invite.email} />}
-              title={<span className="break-all font-normal">{invite.email}</span>}
-              meta={
-                <>
-                  as {ROLE_LABEL[invite.role]} · invited by {props.nameOf(invite.invited_by)}
-                  {invite.status === "expired"
-                    ? " · expired"
-                    : ` · expires ${new Date(invite.expires_at).toLocaleDateString()}`}
-                </>
-              }
-              extra={
-                resent?.id === invite.id && (
-                  <p role="status" className="text-xs text-mw-text-muted">
-                    {resent.message}
-                  </p>
-                )
-              }
-              trailing={
-                canManage(props.actor) && (
-                  <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={busy}
-                      aria-label={`Resend to ${invite.email}`}
-                      onClick={() => void resend(invite)}
-                    >
-                      Resend
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      disabled={busy}
-                      aria-label={`Revoke invite to ${invite.email}`}
-                      onClick={() => setRevoking(invite)}
-                    >
-                      Revoke
-                    </Button>
-                  </>
-                )
-              }
-            />
-          ))}
+        <RowList aria-label={t`Pending invites`}>
+          {props.invites.map((invite) => {
+            const email = invite.email;
+            const roleName = i18n._(ROLE_LABEL[invite.role]);
+            const inviter = props.nameOf(invite.invited_by);
+            const expiry = formatDate(invite.expires_at, { dateStyle: "medium" });
+            return (
+              <Row
+                key={invite.id}
+                leading={<Initials name={invite.email} />}
+                title={<span className="break-all font-normal">{invite.email}</span>}
+                meta={
+                  invite.status === "expired"
+                    ? t`as ${roleName} · invited by ${inviter} · expired`
+                    : t`as ${roleName} · invited by ${inviter} · expires ${expiry}`
+                }
+                extra={
+                  resent?.id === invite.id && (
+                    <p role="status" className="text-xs text-mw-text-muted">
+                      {resent.message}
+                    </p>
+                  )
+                }
+                trailing={
+                  canManage(props.actor) && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={busy}
+                        aria-label={t`Resend to ${email}`}
+                        onClick={() => void resend(invite)}
+                      >
+                        <Trans>Resend</Trans>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={busy}
+                        aria-label={t`Revoke invite to ${email}`}
+                        onClick={() => setRevoking(invite)}
+                      >
+                        <Trans>Revoke</Trans>
+                      </Button>
+                    </>
+                  )
+                }
+              />
+            );
+          })}
         </RowList>
       )}
       {error && (
@@ -869,9 +913,9 @@ function InvitesSection(props: {
         onOpenChange={(open) => {
           if (!open && !busy) setRevoking(null);
         }}
-        title={revoking ? `Revoke the invite to ${revoking.email}?` : "Revoke this invite?"}
-        description="The link in their email stops working. You can invite them again later."
-        confirmLabel="Revoke invite"
+        title={revoking ? t`Revoke the invite to ${revokingEmail}?` : t`Revoke this invite?`}
+        description={t`The link in their email stops working. You can invite them again later.`}
+        confirmLabel={t`Revoke invite`}
         onConfirm={() => {
           if (revoking) void revoke(revoking);
         }}
@@ -886,19 +930,28 @@ function InvitesSection(props: {
 /** Ownership is never handed out by link; the API refuses it. */
 const LINK_ROLES: readonly InviteLink["role"][] = ["admin", "member", "viewer"];
 const LINK_DAYS = ["1", "7", "14", "30"] as const;
-const LINK_STATUS: Record<Exclude<InviteLink["status"], "active">, string> = {
-  expired: "expired",
-  used_up: "used up",
-  revoked: "revoked",
-};
+function linkState(link: InviteLink): string {
+  switch (link.status) {
+    case "active": {
+      const expiry = formatDate(link.expires_at, { dateStyle: "medium" });
+      return t`expires ${expiry}`;
+    }
+    case "expired":
+      return t`expired`;
+    case "used_up":
+      return t`used up`;
+    case "revoked":
+      return t`revoked`;
+  }
+}
 
 function linkLine(link: InviteLink, nameOf: NameOf): string {
-  const uses = `${link.uses} of ${link.max_uses} ${link.max_uses === 1 ? "use" : "uses"}`;
-  const state =
-    link.status === "active"
-      ? `expires ${new Date(link.expires_at).toLocaleDateString()}`
-      : LINK_STATUS[link.status];
-  return `${uses} · ${state} · made by ${nameOf(link.created_by)}`;
+  const used = link.uses;
+  const maxUses = link.max_uses;
+  const uses = plural(maxUses, { one: `${used} of # use`, other: `${used} of # uses` });
+  const state = linkState(link);
+  const maker = nameOf(link.created_by);
+  return t`${uses} · ${state} · made by ${maker}`;
 }
 
 /**
@@ -909,6 +962,7 @@ function linkLine(link: InviteLink, nameOf: NameOf): string {
  * Loads on its own, so a failure here leaves the rest of the pane working.
  */
 function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
+  const { t, i18n } = useLingui();
   const blocked = inviteBlockedReason(props.seats);
   const [links, setLinks] = useState<InviteLink[] | null>(null);
   const [revoking, setRevoking] = useState<InviteLink | null>(null);
@@ -963,16 +1017,19 @@ function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
     if (done) setRevoking(null);
   }
 
+  const revokingSummary = revoking ? linkLine(revoking, props.nameOf) : "";
   return (
     <PaneSection
-      title="Invite link"
+      title={t`Invite link`}
       description={
         <>
-          One link for a whole team, until its uses run out or it expires.
+          <Trans>One link for a whole team, until its uses run out or it expires.</Trans>
           <LearnMore className="mt-1">
             <p>
-              Anyone who has it can join with the role you pick. Copy it now; it is shown only once. Revoke it
-              once it has done its job.
+              <Trans>
+                Anyone who has it can join with the role you pick. Copy it now; it is shown only once. Revoke it
+                once it has done its job.
+              </Trans>
             </p>
           </LearnMore>
         </>
@@ -980,7 +1037,7 @@ function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
     >
       <form
         noValidate
-        aria-label="Create an invite link"
+        aria-label={t`Create an invite link`}
         aria-busy={busy}
         aria-disabled={blocked ? true : undefined}
         onSubmit={(event) => void handleCreate(event)}
@@ -989,7 +1046,7 @@ function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
         <fieldset disabled={blocked !== null} className="contents">
         <div className="flex flex-col gap-1.5">
           <label htmlFor={roleId} className={LABEL_CLASS}>
-            Role
+            <Trans>Role</Trans>
           </label>
           <SimpleSelect
             id={roleId}
@@ -997,18 +1054,18 @@ function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
             value={linkRole}
             onValueChange={setLinkRole}
             disabled={blocked !== null}
-            options={LINK_ROLES.map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+            options={LINK_ROLES.map((r) => ({ value: r, label: i18n._(ROLE_LABEL[r]) }))}
           />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={usesId} className={LABEL_CLASS}>
-            Max uses
+            <Trans>Max uses</Trans>
           </label>
           <Input id={usesId} name="max_uses" type="number" min={1} max={500} defaultValue={10} className="w-24" />
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor={daysId} className={LABEL_CLASS}>
-            Expires after
+            <Trans>Expires after</Trans>
           </label>
           <SimpleSelect
             id={daysId}
@@ -1016,18 +1073,21 @@ function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
             value={linkDays}
             onValueChange={setLinkDays}
             disabled={blocked !== null}
-            options={LINK_DAYS.map((days) => ({ value: days, label: days === "1" ? "1 day" : `${days} days` }))}
+            options={LINK_DAYS.map((days) => {
+              const dayCount = Number(days);
+              return { value: days, label: plural(dayCount, { one: "# day", other: "# days" }) };
+            })}
           />
         </div>
         <Button type="submit" disabled={busy || blocked !== null}>
-          Create link
+          <Trans>Create link</Trans>
         </Button>
         </fieldset>
       </form>
       {created && (
         <div data-testid="new-invite-link" className="mt-3 flex flex-wrap items-center gap-2">
           <label htmlFor={urlId} className="sr-only">
-            Invite link
+            <Trans>Invite link</Trans>
           </label>
           <Input
             id={urlId}
@@ -1036,7 +1096,7 @@ function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
             onFocus={(event) => event.currentTarget.select()}
             className="min-w-64 flex-1 font-mono text-xs"
           />
-          <CopyButton text={created.url} label="Copy link" size="default" />
+          <CopyButton text={created.url} label={t`Copy link`} size="default" />
         </div>
       )}
       <UpgradePrompt error={refusal} className="mt-2" />
@@ -1044,20 +1104,25 @@ function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
       {loadError ? (
         <ActionError message={loadError} />
       ) : links === null ? null : links.length === 0 ? (
-        <p className="mt-3 text-sm text-mw-text-muted">No invite links out.</p>
+        <p className="mt-3 text-sm text-mw-text-muted">
+          <Trans>No invite links out.</Trans>
+        </p>
       ) : (
-        <ul className="mt-4 -mx-5 -mb-4 divide-y divide-border border-t border-border" aria-label="Invite links">
-          {links.map((link) => (
-            <li key={link.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
-              <div className="flex min-w-0 flex-col">
-                <span className="text-sm font-medium">as {ROLE_LABEL[link.role]}</span>
-                <span className="text-sm text-mw-text-muted">{linkLine(link, props.nameOf)}</span>
-              </div>
-              <Button type="button" variant="ghost" disabled={busy} onClick={() => setRevoking(link)}>
-                Revoke link
-              </Button>
-            </li>
-          ))}
+        <ul className="mt-4 -mx-5 -mb-4 divide-y divide-border border-t border-border" aria-label={t`Invite links`}>
+          {links.map((link) => {
+            const roleName = i18n._(ROLE_LABEL[link.role]);
+            return (
+              <li key={link.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-sm font-medium">{t`as ${roleName}`}</span>
+                  <span className="text-sm text-mw-text-muted">{linkLine(link, props.nameOf)}</span>
+                </div>
+                <Button type="button" variant="ghost" disabled={busy} onClick={() => setRevoking(link)}>
+                  <Trans>Revoke link</Trans>
+                </Button>
+              </li>
+            );
+          })}
         </ul>
       )}
       <DestructiveConfirm
@@ -1065,13 +1130,13 @@ function InviteLinkSection(props: { nameOf: NameOf; seats: Seats }) {
         onOpenChange={(open) => {
           if (!open && !busy) setRevoking(null);
         }}
-        title="Revoke this invite link?"
+        title={t`Revoke this invite link?`}
         description={
           revoking
-            ? `Nobody else can join with it, including anyone it was sent to who has not used it yet. ${linkLine(revoking, props.nameOf)}.`
+            ? t`Nobody else can join with it, including anyone it was sent to who has not used it yet. ${revokingSummary}.`
             : undefined
         }
-        confirmLabel="Revoke link"
+        confirmLabel={t`Revoke link`}
         onConfirm={() => {
           if (revoking) void revoke(revoking);
         }}

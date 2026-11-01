@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Message } from "../../types";
 import { BranchSwitcher, MessageAction } from "./BranchControls";
 import type { BranchPosition } from "./branches";
@@ -35,6 +36,8 @@ export function MessageControls(props: {
    * to fork, a support session).
    */
   onBranch?: (messageId: string) => void;
+  /** Ahead of the buttons: which model wrote the reply. */
+  leading?: ReactNode;
   /** The thumbs, on a stored reply: the first thing in the same row. */
   feedback?: {
     current: Feedback | null;
@@ -60,7 +63,11 @@ export function MessageControls(props: {
   // Branching needs a server id to cut at; every stored message has one.
   const canBranch = props.onBranch !== undefined && !message.id.startsWith("pending-");
 
-  if (!branch && !isUser && !isStoredReply && !props.canRegenerate && !canBranch) return null;
+  if (!branch && !isUser && !isStoredReply && !props.canRegenerate && !canBranch) {
+    return props.leading === undefined ? null : (
+      <div className="mt-2 flex min-h-8 items-center">{props.leading}</div>
+    );
+  }
 
   // One toolbar of icons, thumbs included: the reply used to carry a row of
   // thumbs and a row of words under it, two things to scan for one job.
@@ -68,8 +75,9 @@ export function MessageControls(props: {
     <div
       role="toolbar"
       aria-label={isUser ? "Your message" : "Reply actions"}
-      className={`mt-1 flex flex-wrap items-center gap-0.5 ${isUser ? "justify-end" : ""}`}
+      className={`flex flex-wrap items-center gap-1 ${isUser ? "mt-1 justify-end" : "mt-2"}`}
     >
+      {props.leading}
       {props.feedback && isStoredReply && (
         <MessageFeedback
           messageId={message.id}

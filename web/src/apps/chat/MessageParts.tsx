@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { FileTextIcon } from "lucide-react";
+import { StatusDot } from "../../components/ui/badge";
 import type {
   DocumentPart,
   ImagePart,
@@ -320,21 +322,37 @@ function DocumentRow(props: { part: DocumentPart }) {
       : part.truncated
         ? "Only the first part of this file was sent to the model; it was too long to include in full."
         : undefined;
-  return <Attachment name={part.filename} detail={detail} id={part.attachment_id} />;
+  // In the transcript means it went with a message, and the server takes
+  // no message whose attachment is not `clean`: the scan's verdict is
+  // known, and said, the way the composer's chip said it before the send.
+  return <Attachment name={part.filename} detail={detail} id={part.attachment_id} clean />;
 }
 
-/** The shared row for a non-image attachment, and for an image that failed. */
-function Attachment(props: { name: string; detail?: string; id: string }) {
+/** The shared chip for a non-image attachment, and for an image that failed. */
+function Attachment(props: { name: string; detail?: string; id: string; clean?: boolean }) {
   return (
-    <div className="my-2 rounded-lg border border-mw-border px-3 py-2 text-sm">
-      <a
-        href={`/api/attachments/${encodeURIComponent(props.id)}/view`}
-        className="font-medium text-mw-text hover:underline"
-      >
-        {props.name}
-      </a>
+    <div data-mw-attachment-part="" className="my-1 flex max-w-full flex-col gap-1">
+      <span className="inline-flex max-w-full items-center gap-2.5 rounded-lg border border-mw-border bg-mw-surface-raised px-3 py-2 text-xs text-mw-text-secondary">
+        <FileTextIcon aria-hidden className="size-4 shrink-0 text-mw-text-muted" />
+        <a
+          href={`/api/attachments/${encodeURIComponent(props.id)}/view`}
+          className="min-w-0 truncate hover:text-mw-text hover:underline"
+        >
+          {props.name}
+        </a>
+        {props.clean && (
+          <span
+            data-mw-scan-status="clean"
+            title="Scanned for malware: nothing found"
+            className="inline-flex shrink-0 items-center gap-1.5 font-medium text-mw-positive"
+          >
+            <StatusDot tone="positive" />
+            Clean
+          </span>
+        )}
+      </span>
       {props.detail !== undefined && (
-        <p className="mt-1 text-xs text-mw-text-muted">{props.detail}</p>
+        <p className="text-xs text-mw-text-muted">{props.detail}</p>
       )}
     </div>
   );

@@ -315,7 +315,7 @@ describe("an admin", () => {
     // A sub-cent overage still reads as money.
     expect(table.textContent).toContain("$0.000125");
     expect(mounted.container.textContent).toContain(
-      "Since 2026-09-01: $0.05 at list price, $0.000125 of it billed as overage",
+      "Since 1 September 2026: $0.05 at list price, $0.000125 of it billed as overage",
     );
   });
 });

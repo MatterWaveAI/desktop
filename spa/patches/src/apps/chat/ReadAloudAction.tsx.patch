@@ -1,0 +1,27 @@
+diff --git a/src/apps/chat/ReadAloudAction.tsx b/src/apps/chat/ReadAloudAction.tsx
+new file mode 100644
+index 0000000..4ba84ea
+--- /dev/null
++++ b/src/apps/chat/ReadAloudAction.tsx
+@@ -0,0 +1,21 @@
++import { MessageAction } from "./BranchControls";
++
++/**
++ * Read aloud, under a stored reply: the speaker button that hands the
++ * reply's text to the webview's speechSynthesis (tts.ts, useReadAloud).
++ * While it is the one reading, the same button is the stop button -- one
++ * control, the state in its label, like Copy/Copied.
++ */
++export function ReadAloudAction(props: {
++  speaking: boolean;
++  disabled?: boolean;
++  onToggle: () => void;
++}) {
++  return (
++    <MessageAction
++      label={props.speaking ? "Stop reading" : "Read aloud"}
++      onClick={() => props.onToggle()}
++      disabled={props.disabled}
++    />
++  );
++}

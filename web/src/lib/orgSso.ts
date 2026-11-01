@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { ApiError, apiFetch } from "./api";
 
 /**
@@ -137,8 +138,8 @@ export function ssoRefusalOf(err: unknown): { message: string; blockers: string[
  */
 export function blockerHeadline(blocker: string): string {
   const text = blocker.toLowerCase();
-  if (text.includes("identity provider")) return "No identity provider attached";
-  if (text.includes("no verified domain")) return "No verified domain yet";
-  if (text.includes("locked out")) return "Some members are not on a verified domain";
+  if (text.includes("identity provider")) return t`No identity provider attached`;
+  if (text.includes("no verified domain")) return t`No verified domain yet`;
+  if (text.includes("locked out")) return t`Some members are not on a verified domain`;
   return blocker;
 }

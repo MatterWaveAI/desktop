@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { formatDate } from "../../../i18n/format";
 import {
   MembersPane,
   inviteBlockedReason,
@@ -689,7 +690,7 @@ describe("finding a member", () => {
     stubMembersApi("viewer");
     mounted = await mount(<MembersPane />, principalWith(["user"]));
     expect(lastActive("cy@acme.com")).toBe("Never active");
-    const expected = new Date("2026-10-10T12:00:00Z").toLocaleDateString(undefined, { dateStyle: "medium" });
+    const expected = formatDate("2026-10-10T12:00:00Z", { dateStyle: "medium" });
     expect(lastActive("ada@acme.com")).toBe(`Active ${expected}`);
   });
 

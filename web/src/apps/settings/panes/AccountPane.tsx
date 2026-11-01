@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 import { KeyRoundIcon, MonitorIcon, SmartphoneIcon } from "lucide-react";
+import { plural, t as coreT } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { formatDateTime } from "../../../i18n/format";
 import { Alert } from "../../../components/ui/alert";
 import { Badge, StatusDot } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -11,7 +14,7 @@ import {
   hasErrors,
   validateConfirm,
   validateEmail,
-  validatePassword,
+  validateNewPassword,
 } from "../../../shell/authForms";
 import { EnrolWizard, RecoveryCodes } from "../../../shell/MfaPage";
 import {
@@ -31,12 +34,14 @@ import {
 import { PasskeyCancelled, passkeysSupported } from "../../../lib/webauthn";
 import {
   desktopApiKeyState,
+  desktopAppInfo,
   desktopClearApiKey,
   desktopReload,
   desktopSetApiKey,
   isDesktop,
   type DesktopApiKeyState,
 } from "../../../lib/desktopAuth";
+import { openOutside } from "../../../lib/desktopLinks";
 import { useShell } from "../../../shell/shellContext";
 import type { SessionInfo } from "../../../types";
 import { LearnMore, PaneSection } from "../PaneSection";
@@ -58,6 +63,9 @@ function Field(props: { label: string; value: string; hint?: string }) {
 
 /** An org role as a person reads it: "owner" -> "Owner". */
 function roleLabel(role: string): string {
+  if (role === "owner") return coreT`Owner`;
+  if (role === "admin") return coreT`Admin`;
+  if (role === "member") return coreT`Member`;
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
@@ -71,6 +79,7 @@ const NAME_MAX = 120;
  * is updated so the header shows it at once.
  */
 function DisplayNameField(props: { name: string | null }) {
+  const { t } = useLingui();
   const shell = useShell();
   // What the API last confirmed, kept here as well as on the principal:
   // the pane's own answer to "is there anything to save" cannot wait on
@@ -105,11 +114,11 @@ function DisplayNameField(props: { name: string | null }) {
       shell.updatePrincipal?.({ name: saved });
     } catch (err) {
       setError(
-        err instanceof ApiError ? err.message : "Could not save the name.",
+        err instanceof ApiError ? err.message : t`Could not save the name.`,
       );
       setState("idle");
     }
-  }, [shell, trimmed]);
+  }, [shell, t, trimmed]);
 
   return (
     <form
@@ -120,7 +129,9 @@ function DisplayNameField(props: { name: string | null }) {
       }}
     >
       <label className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-sm text-mw-text-muted">Display name</span>
+        <span className="text-sm text-mw-text-muted">
+          <Trans>Display name</Trans>
+        </span>
         <Input
           name="full_name"
           value={draft}
@@ -133,10 +144,10 @@ function DisplayNameField(props: { name: string | null }) {
         />
       </label>
       <Button type="submit" disabled={!dirty || !trimmed || state === "saving"}>
-        {state === "saving" ? "Saving…" : "Save name"}
+        {state === "saving" ? t`Saving…` : t`Save name`}
       </Button>
       <p aria-live="polite" className="basis-full text-xs text-mw-text-muted">
-        {state === "saved" && !dirty && "Name saved."}
+        {state === "saved" && !dirty && t`Name saved.`}
         {error && (
           <span role="alert" className="text-mw-danger">
             {error}
@@ -167,6 +178,7 @@ const EMAIL_CODES: Record<string, EmailField> = {
  * the new address so the Identity list shows it at once.
  */
 function EmailCard() {
+  const { t } = useLingui();
   const shell = useShell();
   const id = useId();
   const [step, setStep] = useState<"address" | "code">("address");
@@ -222,7 +234,7 @@ function EmailCard() {
     const found: Partial<Record<EmailField, string>> = {
       email: validateEmail(email),
       password:
-        values.password === "" ? "Enter your current password." : undefined,
+        values.password === "" ? t`Enter your current password.` : undefined,
     };
     setErrors(found);
     setFormError(null);
@@ -249,7 +261,7 @@ function EmailCard() {
     event.preventDefault();
     const code = values.code.trim();
     const found = {
-      code: code === "" ? "Enter the code from the mail." : undefined,
+      code: code === "" ? t`Enter the code from the mail.` : undefined,
     };
     setErrors(found);
     setFormError(null);
@@ -285,7 +297,8 @@ function EmailCard() {
       setPending(null);
       setErrors({});
       setValues({ email: "", password: "", code: "" });
-      setNotice(`Change cancelled. You still sign in as ${body.email}.`);
+      const email = body.email;
+      setNotice(t`Change cancelled. You still sign in as ${email}.`);
     } catch (err) {
       setFormError(failureMessage(err));
     } finally {
@@ -302,7 +315,8 @@ function EmailCard() {
         method: "POST",
       });
       setPending(body.new_email);
-      setNotice(`A new code is on its way to ${body.new_email}.`);
+      const newEmail = body.new_email;
+      setNotice(t`A new code is on its way to ${newEmail}.`);
     } catch (err) {
       const code =
         err instanceof ApiError ? (err.body as { code?: unknown })?.code : undefined;
@@ -363,8 +377,7 @@ function EmailCard() {
         </p>
       )}
       <p aria-live="polite" className="text-sm text-mw-text-muted">
-        {done &&
-          `Your sign-in address is now ${done}. Other devices were signed out.`}
+        {done && t`Your sign-in address is now ${done}. Other devices were signed out.`}
         {notice}
       </p>
     </>
@@ -379,11 +392,12 @@ function EmailCard() {
         className="flex flex-col gap-2"
       >
         <p className="text-sm">
-          We sent a code to{" "}
-          <span className="font-medium break-all">{pending}</span>. Enter it to
-          make that your sign-in address.
+          <Trans>
+            We sent a code to <span className="font-medium break-all">{pending}</span>. Enter it
+            to make that your sign-in address.
+          </Trans>
         </p>
-        {input("code", "Code from the mail", {
+        {input("code", t`Code from the mail`, {
           name: "email_code",
           autoComplete: "one-time-code",
           maxLength: 64,
@@ -392,7 +406,7 @@ function EmailCard() {
         {status}
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" disabled={busy}>
-            {busy ? "Checking…" : "Confirm address"}
+            {busy ? t`Checking…` : t`Confirm address`}
           </Button>
           <Button
             type="button"
@@ -400,7 +414,7 @@ function EmailCard() {
             disabled={busy}
             onClick={() => void resend()}
           >
-            Resend code
+            <Trans>Resend code</Trans>
           </Button>
           <Button
             type="button"
@@ -408,7 +422,7 @@ function EmailCard() {
             disabled={busy}
             onClick={() => void cancelChange()}
           >
-            Cancel change
+            <Trans>Cancel change</Trans>
           </Button>
         </div>
       </form>
@@ -422,14 +436,14 @@ function EmailCard() {
       onSubmit={handleStart}
       className="flex flex-col gap-2"
     >
-      {input("email", "New email address", {
+      {input("email", t`New email address`, {
         name: "new_email",
         type: "email",
         autoComplete: "email",
         maxLength: 254,
         inputMode: "email",
       })}
-      {input("password", "Your current password, to confirm", {
+      {input("password", t`Your current password, to confirm`, {
         name: "email_current_password",
         type: "password",
         autoComplete: "current-password",
@@ -438,7 +452,7 @@ function EmailCard() {
       {status}
       <div>
         <Button type="submit" disabled={busy}>
-          {busy ? "Sending…" : "Send code"}
+          {busy ? t`Sending…` : t`Send code`}
         </Button>
       </div>
     </form>
@@ -462,6 +476,7 @@ const PASSWORD_CODES: Record<string, PasswordField> = {
  * is most often a response to a device the person no longer trusts.
  */
 function PasswordCard() {
+  const { t } = useLingui();
   const id = useId();
   const [values, setValues] = useState<Record<PasswordField, string>>({
     current: "",
@@ -483,8 +498,8 @@ function PasswordCard() {
     event.preventDefault();
     const found: Partial<Record<PasswordField, string>> = {
       current:
-        values.current === "" ? "Enter your current password." : undefined,
-      next: validatePassword(values.next, "a new password"),
+        values.current === "" ? t`Enter your current password.` : undefined,
+      next: validateNewPassword(values.next),
       confirm: validateConfirm(values.next, values.confirm),
     };
     setErrors(found);
@@ -499,8 +514,8 @@ function PasswordCard() {
       setValues({ current: "", next: "", confirm: "" });
       toast.add({
         type: "success",
-        title: "Password changed.",
-        description: "Other devices were signed out.",
+        title: t`Password changed.`,
+        description: t`Other devices were signed out.`,
       });
     } catch (err) {
       const code =
@@ -519,13 +534,13 @@ function PasswordCard() {
     [
       {
         key: "current",
-        label: "Current password",
+        label: t`Current password`,
         autoComplete: "current-password",
       },
-      { key: "next", label: "New password", autoComplete: "new-password" },
+      { key: "next", label: t`New password`, autoComplete: "new-password" },
       {
         key: "confirm",
-        label: "Confirm new password",
+        label: t`Confirm new password`,
         autoComplete: "new-password",
       },
     ];
@@ -575,7 +590,7 @@ function PasswordCard() {
       )}
       <div>
         <Button type="submit" disabled={busy}>
-          {busy ? "Changing…" : "Change password"}
+          {busy ? t`Changing…` : t`Change password`}
         </Button>
       </div>
     </form>
@@ -586,7 +601,7 @@ function ThisDevice() {
   return (
     <Badge variant="positive">
       <StatusDot tone="positive" />
-      This device
+      <Trans>This device</Trans>
     </Badge>
   );
 }
@@ -606,9 +621,12 @@ function DeviceMark(props: { agent: string | null }) {
 
 /** "Last seen <when>" with the address, the secondary line of a session row. */
 function SeenLine(props: { at: string; ip: string | null }) {
+  const seen = formatSeen(props.at);
   return (
     <>
-      Last seen <time dateTime={props.at}>{formatSeen(props.at)}</time>
+      <Trans>
+        Last seen <time dateTime={props.at}>{seen}</time>
+      </Trans>
       {props.ip ? ` · ${props.ip}` : ""}
     </>
   );
@@ -617,10 +635,7 @@ function SeenLine(props: { at: string; ip: string | null }) {
 function formatSeen(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return formatDateTime(date, { dateStyle: "medium", timeStyle: "short" });
 }
 
 /**
@@ -629,7 +644,7 @@ function formatSeen(iso: string): string {
  * browser, not a fingerprint, and the raw string is in the title attribute.
  */
 function describeAgent(agent: string | null): string {
-  if (!agent) return "Unknown browser";
+  if (!agent) return coreT`Unknown browser`;
   const browser = /Edg\//.test(agent)
     ? "Edge"
     : /OPR\//.test(agent)
@@ -640,7 +655,7 @@ function describeAgent(agent: string | null): string {
           ? "Chrome"
           : /Safari\//.test(agent)
             ? "Safari"
-            : "Browser";
+            : coreT`Browser`;
   const os = /Windows/.test(agent)
     ? "Windows"
     : /Android/.test(agent)
@@ -652,7 +667,7 @@ function describeAgent(agent: string | null): string {
           : /Linux/.test(agent)
             ? "Linux"
             : null;
-  return os ? `${browser} on ${os}` : browser;
+  return os ? coreT`${browser} on ${os}` : browser;
 }
 
 /**
@@ -713,6 +728,7 @@ export function groupSessions(sessions: SessionInfo[]): SessionGroup[] {
  * next request is a 401.
  */
 function SessionsList() {
+  const { t } = useLingui();
   const shell = useShell();
   const [sessions, setSessions] = useState<SessionInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -732,14 +748,14 @@ function SessionsList() {
         setError(
           err instanceof ApiError
             ? err.message
-            : "Could not load your sessions.",
+            : t`Could not load your sessions.`,
         );
         setSessions([]);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const revoke = useCallback(async (session: SessionInfo) => {
     setBusy(session.id);
@@ -753,12 +769,12 @@ function SessionsList() {
       setError(
         err instanceof ApiError
           ? err.message
-          : "Could not sign that session out.",
+          : t`Could not sign that session out.`,
       );
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [t]);
 
   /** A whole device's sessions, one DELETE each; this device's own session is never among them. */
   const revokeGroup = useCallback(async (group: SessionGroup) => {
@@ -772,13 +788,13 @@ function SessionsList() {
         done.push(session.id);
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not sign that device out.");
+      setError(err instanceof ApiError ? err.message : t`Could not sign that device out.`);
     } finally {
       // Whatever was revoked before a failure is gone; show that.
       setSessions((list) => (list ?? []).filter((s) => !done.includes(s.id)));
       setBusy(null);
     }
-  }, []);
+  }, [t]);
 
   const revokeOthers = useCallback(async () => {
     setBusy("others");
@@ -790,27 +806,28 @@ function SessionsList() {
       setError(
         err instanceof ApiError
           ? err.message
-          : "Could not sign the other sessions out.",
+          : t`Could not sign the other sessions out.`,
       );
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [t]);
 
   const others = (sessions ?? []).filter((s) => !s.current);
   const groups = groupSessions(sessions ?? []);
   const collapsible = groups.some((g) => g.sessions.length > 1);
+  const sessionCount = sessions?.length ?? 0;
 
   return (
     <PaneSection
-      title="Sessions"
-      description="Where this account is signed in. A device signed out here ends on its next request."
+      title={t`Sessions`}
+      description={t`Where this account is signed in. A device signed out here ends on its next request.`}
       flush
       actions={
         // The actions in the header: on a long list they are what the person came for.
         <>
           <Button variant="outline" size="sm" onClick={() => void shell.signOut()}>
-            Sign out
+            <Trans>Sign out</Trans>
           </Button>
           <Button
             variant="outline"
@@ -818,20 +835,24 @@ function SessionsList() {
             disabled={busy !== null || others.length === 0}
             onClick={() => void revokeOthers()}
           >
-            Sign out other devices
+            <Trans>Sign out other devices</Trans>
           </Button>
         </>
       }
     >
       {sessions === null ? (
-        <p className="px-5 py-4 text-sm text-mw-text-muted">Loading sessions…</p>
+        <p className="px-5 py-4 text-sm text-mw-text-muted">
+          <Trans>Loading sessions…</Trans>
+        </p>
       ) : sessions.length === 0 ? (
         <p className="px-5 py-4 text-sm text-mw-text-muted">
-          No sessions are recorded for this account. A session signed in before
-          sessions were tracked is not listed and ends when it expires.
+          <Trans>
+            No sessions are recorded for this account. A session signed in before sessions were
+            tracked is not listed and ends when it expires.
+          </Trans>
         </p>
       ) : showAll ? (
-        <RowList aria-label="Sessions">
+        <RowList aria-label={t`Sessions`}>
           {groups.flatMap((group) => group.sessions).map((session) => (
             <Row
               key={session.id}
@@ -853,7 +874,7 @@ function SessionsList() {
                     disabled={busy !== null}
                     onClick={() => void revoke(session)}
                   >
-                    Sign out this device
+                    <Trans>Sign out this device</Trans>
                   </Button>
                 )
               }
@@ -861,9 +882,10 @@ function SessionsList() {
           ))}
         </RowList>
       ) : (
-        <RowList aria-label="Sessions">
+        <RowList aria-label={t`Sessions`}>
           {groups.map((group) => {
             const revocable = group.sessions.filter((s) => !s.current).length;
+            const sessionsHere = group.sessions.length;
             return (
               <Row
                 key={group.key}
@@ -874,7 +896,7 @@ function SessionsList() {
                     {group.current && <ThisDevice />}
                     {group.sessions.length > 1 && (
                       <span className="text-sm font-normal text-mw-text-muted">
-                        {group.sessions.length} sessions
+                        {plural(sessionsHere, { one: "# session", other: "# sessions" })}
                       </span>
                     )}
                   </span>
@@ -889,10 +911,10 @@ function SessionsList() {
                       onClick={() => void revokeGroup(group)}
                     >
                       {revocable === 1
-                        ? "Sign out this device"
+                        ? t`Sign out this device`
                         : group.current
-                          ? `Sign out ${revocable} other sessions`
-                          : `Sign out all ${revocable}`}
+                          ? t`Sign out ${revocable} other sessions`
+                          : t`Sign out all ${revocable}`}
                     </Button>
                   )
                 }
@@ -911,7 +933,7 @@ function SessionsList() {
                 aria-pressed={showAll}
                 onClick={() => setShowAll((on) => !on)}
               >
-                {showAll ? "Show one row per device" : `Show all ${sessions?.length ?? 0} sessions`}
+                {showAll ? t`Show one row per device` : t`Show all ${sessionCount} sessions`}
               </Button>
             </div>
           )}
@@ -943,6 +965,7 @@ function ProofForm(props: {
   onSubmit: (proof: { code?: string; recovery_code?: string }) => void;
   onCancel: () => void;
 }) {
+  const { t } = useLingui();
   const [useRecovery, setUseRecovery] = useState(false);
   const [fieldError, setFieldError] = useState<string | undefined>();
   const id = useId();
@@ -975,7 +998,7 @@ function ProofForm(props: {
       </p>
       <label className="flex flex-col gap-1">
         <span className="text-sm text-mw-text-muted">
-          {useRecovery ? "Recovery code" : "Code from your authenticator app"}
+          {useRecovery ? t`Recovery code` : t`Code from your authenticator app`}
         </span>
         <Input
           name="proof"
@@ -997,10 +1020,10 @@ function ProofForm(props: {
       )}
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" variant={props.destructive ? "destructive" : "default"} disabled={props.busy}>
-          {props.busy ? "Checking…" : props.submitLabel}
+          {props.busy ? t`Checking…` : props.submitLabel}
         </Button>
         <Button type="button" variant="outline" onClick={props.onCancel}>
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         {props.allowRecovery && (
           <button
@@ -1011,9 +1034,7 @@ function ProofForm(props: {
               setFieldError(undefined);
             }}
           >
-            {useRecovery
-              ? "Use the app instead"
-              : "Use a recovery code instead"}
+            {useRecovery ? t`Use the app instead` : t`Use a recovery code instead`}
           </button>
         )}
       </div>
@@ -1038,6 +1059,7 @@ type SecurityView =
  * second factor the Remove action is unavailable and says why.
  */
 function SecuritySection() {
+  const { t } = useLingui();
   const shell = useShell();
   const email = shell.principal.email ?? undefined;
   const [mfa, setMfa] = useState<MfaState | null>(null);
@@ -1054,10 +1076,10 @@ function SecuritySection() {
       setLoadError(
         err instanceof ApiError
           ? err.message
-          : "Could not load your two-factor settings.",
+          : t`Could not load your two-factor settings.`,
       );
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1072,13 +1094,13 @@ function SecuritySection() {
         setLoadError(
           err instanceof ApiError
             ? err.message
-            : "Could not load your two-factor settings.",
+            : t`Could not load your two-factor settings.`,
         );
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   const start = useCallback(
     () => apiFetch<TotpEnrolment>("/api/me/mfa/totp/start", { method: "POST" }),
@@ -1111,7 +1133,7 @@ function SecuritySection() {
       setActionError(
         err instanceof ApiError
           ? err.message
-          : "Could not remove the authenticator.",
+          : t`Could not remove the authenticator.`,
       );
     } finally {
       setBusy(false);
@@ -1133,7 +1155,7 @@ function SecuritySection() {
       await reload();
     } catch (err) {
       setActionError(
-        err instanceof ApiError ? err.message : "Could not issue new codes.",
+        err instanceof ApiError ? err.message : t`Could not issue new codes.`,
       );
     } finally {
       setBusy(false);
@@ -1149,9 +1171,13 @@ function SecuritySection() {
   }
   if (mfa === null) {
     return (
-      <p className="text-sm text-mw-text-muted">Loading two-factor settings…</p>
+      <p className="text-sm text-mw-text-muted">
+        <Trans>Loading two-factor settings…</Trans>
+      </p>
     );
   }
+
+  const codesLeft = mfa.recovery_codes_left;
 
   if (view.kind === "enrol") {
     return (
@@ -1159,7 +1185,7 @@ function SecuritySection() {
         start={start}
         confirm={confirm}
         email={email}
-        doneLabel="Done"
+        doneLabel={t`Done`}
         onDone={() => {
           setView({ kind: "status" });
           void reload();
@@ -1174,7 +1200,7 @@ function SecuritySection() {
         <RecoveryCodes codes={view.codes} email={email} />
         <div>
           <Button type="button" onClick={() => setView({ kind: "status" })}>
-            Done
+            <Trans>Done</Trans>
           </Button>
         </div>
       </div>
@@ -1187,28 +1213,34 @@ function SecuritySection() {
         <StatusDot tone={mfa.totp_enrolled ? "positive" : "neutral"} />
         {mfa.totp_enrolled ? (
           <>
-            <span className="font-medium">Authenticator app is on.</span>{" "}
-            {mfa.recovery_codes_left === 1
-              ? "1 recovery code left."
-              : `${mfa.recovery_codes_left} recovery codes left.`}
+            <span className="font-medium">
+              <Trans>Authenticator app is on.</Trans>
+            </span>{" "}
+            {plural(codesLeft, {
+              one: "# recovery code left.",
+              other: "# recovery codes left.",
+            })}
           </>
         ) : (
           <>
-            <span className="font-medium">No authenticator app.</span> Add one
-            and every sign-in asks for a code from it as well as your password.
+            <Trans>
+              <span className="font-medium">No authenticator app.</span> Add one and every sign-in
+              asks for a code from it as well as your password.
+            </Trans>
           </>
         )}
       </p>
       {mfa.org_requires_mfa && (
         <p className="text-sm text-mw-text-muted">
-          Your organisation requires an authenticator on every account
-          {mfa.totp_enrolled ? ", so it cannot be removed here." : "."}
+          {mfa.totp_enrolled
+            ? t`Your organisation requires an authenticator on every account, so it cannot be removed here.`
+            : t`Your organisation requires an authenticator on every account.`}
         </p>
       )}
       {view.kind === "remove" && (
         <ProofForm
-          title="Remove the authenticator"
-          submitLabel="Remove"
+          title={t`Remove the authenticator`}
+          submitLabel={t`Remove`}
           destructive
           allowRecovery
           busy={busy}
@@ -1219,8 +1251,8 @@ function SecuritySection() {
       )}
       {view.kind === "reissue" && (
         <ProofForm
-          title="Issue new recovery codes"
-          submitLabel="Issue new codes"
+          title={t`Issue new recovery codes`}
+          submitLabel={t`Issue new codes`}
           allowRecovery={false}
           busy={busy}
           error={actionError}
@@ -1237,7 +1269,7 @@ function SecuritySection() {
                 variant="outline"
                 onClick={() => open({ kind: "reissue" })}
               >
-                New recovery codes
+                <Trans>New recovery codes</Trans>
               </Button>
               <Button
                 type="button"
@@ -1245,12 +1277,12 @@ function SecuritySection() {
                 disabled={mfa.org_requires_mfa}
                 onClick={() => open({ kind: "remove" })}
               >
-                Remove authenticator
+                <Trans>Remove authenticator</Trans>
               </Button>
             </>
           ) : (
             <Button type="button" onClick={() => open({ kind: "enrol" })}>
-              Set up an authenticator
+              <Trans>Set up an authenticator</Trans>
             </Button>
           )}
         </div>
@@ -1273,14 +1305,17 @@ type PasskeysView =
  * way in, and removing the last one leaves the password sign-in as it
  * was. Hidden with a line saying why on a browser that cannot take part.
  *
- * In the desktop shell the "Add a passkey" option is gated off
+ * In the desktop shell a passkey cannot be made in the window
  * (`passkeysSupported` is false there): a ceremony is bound to the origin
  * it runs in and the webview's is not the rpId passkeys are made for, so
- * the browser refuses it and the provider would refuse it anyway. The
- * list, rename and remove stay: they are API calls, which the bearer
- * carries as well as the cookie does.
+ * the browser refuses it and the provider would refuse it anyway. The add
+ * button becomes "Add a passkey in your browser" instead, which opens this
+ * pane on the web app (`AddPasskeyInBrowser`). The list, rename and
+ * remove stay: they are API calls, which the bearer carries as well as the
+ * cookie does.
  */
 export function PasskeysCard() {
+  const { t } = useLingui();
   const shell = useShell();
   const [list, setList] = useState<PasskeyInfo[] | null>(null);
   const [rpId, setRpId] = useState<string | null>(null);
@@ -1307,12 +1342,12 @@ export function PasskeysCard() {
       .catch((err: unknown) => {
         if (cancelled) return;
         setList([]);
-        setLoadError(err instanceof ApiError ? err.message : "Could not load your passkeys.");
+        setLoadError(err instanceof ApiError ? err.message : t`Could not load your passkeys.`);
       });
     return () => {
       cancelled = true;
     };
-  }, [offered]);
+  }, [offered, t]);
 
   if (!offered) return null;
 
@@ -1330,14 +1365,14 @@ export function PasskeysCard() {
             : /Linux/.test(agent)
               ? "Linux"
               : "";
-    return os ? `${os} passkey` : "This device";
+    return os ? t`${os} passkey` : t`This device`;
   }
 
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = String(new FormData(event.currentTarget).get("name") ?? "").trim();
     if (!name) {
-      setError("Give the passkey a name, like the device it lives on.");
+      setError(t`Give the passkey a name, like the device it lives on.`);
       return;
     }
     setBusy(true);
@@ -1347,12 +1382,13 @@ export function PasskeysCard() {
       const made = await addPasskey(name);
       setList((rows) => [...(rows ?? []), made]);
       setView({ kind: "list" });
-      setNotice(`Passkey "${made.name}" added. You can sign in with it from the login page.`);
+      const madeName = made.name;
+      setNotice(t`Passkey "${madeName}" added. You can sign in with it from the login page.`);
     } catch (err) {
       if (err instanceof PasskeyCancelled) {
-        setError("The passkey prompt was closed before a passkey was made. Nothing was added.");
+        setError(t`The passkey prompt was closed before a passkey was made. Nothing was added.`);
       } else {
-        setError(err instanceof ApiError ? err.message : "Could not add the passkey.");
+        setError(err instanceof ApiError ? err.message : t`Could not add the passkey.`);
       }
     } finally {
       setBusy(false);
@@ -1363,7 +1399,7 @@ export function PasskeysCard() {
     event.preventDefault();
     const name = String(new FormData(event.currentTarget).get("name") ?? "").trim();
     if (!name) {
-      setError("A passkey needs a name.");
+      setError(t`A passkey needs a name.`);
       return;
     }
     setBusy(true);
@@ -1373,7 +1409,7 @@ export function PasskeysCard() {
       setList((rows) => (rows ?? []).map((row) => (row.id === id ? renamed : row)));
       setView({ kind: "list" });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not rename the passkey.");
+      setError(err instanceof ApiError ? err.message : t`Could not rename the passkey.`);
     } finally {
       setBusy(false);
     }
@@ -1386,9 +1422,10 @@ export function PasskeysCard() {
     try {
       await removePasskey(row.id);
       setList((rows) => (rows ?? []).filter((r) => r.id !== row.id));
-      setNotice(`Passkey "${row.name}" removed. It can no longer sign in to this account.`);
+      const rowName = row.name;
+      setNotice(t`Passkey "${rowName}" removed. It can no longer sign in to this account.`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not remove the passkey.");
+      setError(err instanceof ApiError ? err.message : t`Could not remove the passkey.`);
     } finally {
       setBusy(false);
     }
@@ -1396,33 +1433,38 @@ export function PasskeysCard() {
 
   const rows = list ?? [];
   const full = rows.length >= max;
+  const passkeyCount = rows.length;
   return (
     <PaneSection
-      title="Passkeys"
-      description="Sign in with your fingerprint, face or device PIN."
+      title={t`Passkeys`}
+      description={t`Sign in with your fingerprint, face or device PIN.`}
       flush
     >
       <div className="flex flex-col" data-mw-passkeys="">
         <div className="flex flex-col gap-2 px-5 py-4">
           <p className="text-sm" aria-live="polite">
             {list === null ? (
-              "Loading passkeys…"
+              t`Loading passkeys…`
             ) : rows.length === 0 ? (
               <>
-                <span className="font-medium">No passkeys.</span> Add one to sign in with your
-                fingerprint, face or device PIN instead of a password.
+                <Trans>
+                  <span className="font-medium">No passkeys.</span> Add one to sign in with your
+                  fingerprint, face or device PIN instead of a password.
+                </Trans>
               </>
             ) : (
               <>
                 <span className="font-medium">
-                  {rows.length === 1 ? "1 passkey." : `${rows.length} passkeys.`}
+                  {plural(passkeyCount, { one: "# passkey.", other: "# passkeys." })}
                 </span>{" "}
-                Any of them signs in to this account without the password.
+                <Trans>Any of them signs in to this account without the password.</Trans>
               </>
             )}
           </p>
           <LearnMore>
-            <p>A passkey is a way in beside your password, not a replacement for it.</p>
+            <p>
+              <Trans>A passkey is a way in beside your password, not a replacement for it.</Trans>
+            </p>
           </LearnMore>
           {loadError && (
             <p role="alert" className="text-sm text-mw-danger">
@@ -1431,9 +1473,11 @@ export function PasskeysCard() {
           )}
         </div>
         {rows.length > 0 && (
-          <RowList aria-label="Passkeys" className="border-t border-border">
-            {rows.map((row) =>
-              view.kind === "rename" && view.id === row.id ? (
+          <RowList aria-label={t`Passkeys`} className="border-t border-border">
+            {rows.map((row) => {
+              const rowName = row.name;
+              const added = formatSeen(row.created_at);
+              return view.kind === "rename" && view.id === row.id ? (
                 <Row
                   key={row.id}
                   leading={<PasskeyMark />}
@@ -1444,11 +1488,13 @@ export function PasskeysCard() {
                       onSubmit={(event) => void rename(event, row.id)}
                     >
                       <label className="flex min-w-0 flex-col gap-1">
-                        <span className="text-sm font-normal text-mw-text-muted">New name</span>
+                        <span className="text-sm font-normal text-mw-text-muted">
+                          <Trans>New name</Trans>
+                        </span>
                         <Input name="name" defaultValue={row.name} maxLength={64} autoFocus />
                       </label>
                       <Button type="submit" size="sm" disabled={busy}>
-                        Save
+                        <Trans>Save</Trans>
                       </Button>
                       <Button
                         type="button"
@@ -1456,7 +1502,7 @@ export function PasskeysCard() {
                         variant="ghost"
                         onClick={() => setView({ kind: "list" })}
                       >
-                        Cancel
+                        <Trans>Cancel</Trans>
                       </Button>
                     </form>
                   }
@@ -1468,7 +1514,9 @@ export function PasskeysCard() {
                   title={row.name}
                   meta={
                     <>
-                      Added <time dateTime={row.created_at}>{formatSeen(row.created_at)}</time>
+                      <Trans>
+                        Added <time dateTime={row.created_at}>{added}</time>
+                      </Trans>
                     </>
                   }
                   trailing={
@@ -1478,29 +1526,29 @@ export function PasskeysCard() {
                         variant="ghost"
                         size="sm"
                         disabled={busy}
-                        aria-label={`Rename ${row.name}`}
+                        aria-label={t`Rename ${rowName}`}
                         onClick={() => {
                           setError(null);
                           setView({ kind: "rename", id: row.id });
                         }}
                       >
-                        Rename
+                        <Trans>Rename</Trans>
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={busy}
-                        aria-label={`Remove ${row.name}`}
+                        aria-label={t`Remove ${rowName}`}
                         onClick={() => void remove(row)}
                       >
-                        Remove
+                        <Trans>Remove</Trans>
                       </Button>
                     </>
                   }
                 />
-              ),
-            )}
+              );
+            })}
           </RowList>
         )}
         {(view.kind === "add" || (view.kind === "list" && list !== null) || notice || error) && (
@@ -1508,7 +1556,9 @@ export function PasskeysCard() {
             {view.kind === "add" && (
               <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => void add(event)}>
                 <label htmlFor={nameId} className="flex min-w-0 flex-1 basis-56 flex-col gap-1">
-                  <span className="text-sm text-mw-text-muted">Name this passkey</span>
+                  <span className="text-sm text-mw-text-muted">
+                    <Trans>Name this passkey</Trans>
+                  </span>
                   <Input
                     id={nameId}
                     name="name"
@@ -1518,7 +1568,7 @@ export function PasskeysCard() {
                   />
                 </label>
                 <Button type="submit" disabled={busy}>
-                  {busy ? "Waiting for your device…" : "Create passkey"}
+                  {busy ? t`Waiting for your device…` : t`Create passkey`}
                 </Button>
                 <Button
                   type="button"
@@ -1529,38 +1579,51 @@ export function PasskeysCard() {
                     setView({ kind: "list" });
                   }}
                 >
-                  Cancel
+                  <Trans>Cancel</Trans>
                 </Button>
                 <p className="basis-full text-xs text-mw-text-muted">
-                  Your browser will ask you to confirm with your fingerprint, face or PIN.
-                  {rpId ? ` The passkey works for ${rpId}.` : ""}
+                  {rpId
+                    ? t`Your browser will ask you to confirm with your fingerprint, face or PIN. The passkey works for ${rpId}.`
+                    : t`Your browser will ask you to confirm with your fingerprint, face or PIN.`}
                 </p>
               </form>
             )}
             {view.kind === "list" && list !== null && (
               <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || !supported || full}
-                  onClick={() => {
-                    setError(null);
-                    setNotice(null);
-                    setView({ kind: "add" });
-                  }}
-                >
-                  Add a passkey
-                </Button>
+                {isDesktop() ? (
+                  <AddPasskeyInBrowser disabled={busy || full} />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || !supported || full}
+                    onClick={() => {
+                      setError(null);
+                      setNotice(null);
+                      setView({ kind: "add" });
+                    }}
+                  >
+                    <Trans>Add a passkey</Trans>
+                  </Button>
+                )}
                 {!supported && (
-                  <span className="text-xs text-mw-text-muted">
-                    {isDesktop()
-                      ? "Passkeys are made in a browser, not in the desktop app: the window's origin is not the one they are bound to. Add one in the web app and it signs you in from the browser."
-                      : "This browser cannot make passkeys here; a secure (https) connection and a recent browser are needed."}
+                  <span className="text-xs text-mw-text-muted" data-mw-passkey-why="">
+                    {isDesktop() ? (
+                      "Passkeys are created in your browser: this window's address is not the one a passkey is bound to. One added there also signs you in to this app, whose sign-in runs in your browser too."
+                    ) : (
+                      <Trans>
+                        This browser cannot make passkeys here; a secure (https) connection and a
+                        recent browser are needed.
+                      </Trans>
+                    )}
                   </span>
                 )}
                 {supported && full && (
                   <span className="text-xs text-mw-text-muted">
-                    This account holds the most passkeys it can ({max}). Remove one to add another.
+                    <Trans>
+                      This account holds the most passkeys it can ({max}). Remove one to add
+                      another.
+                    </Trans>
                   </span>
                 )}
               </div>
@@ -1602,6 +1665,7 @@ function PasskeyMark() {
  * saves (to the in-memory store) so the pane behaves the same on a laptop.
  */
 export function AccountPane() {
+  const { t } = useLingui();
   const shell = useShell();
   const {
     email,
@@ -1621,29 +1685,29 @@ export function AccountPane() {
   return (
     <div className="flex flex-col gap-4">
       <PaneSection
-        title="Identity"
+        title={t`Identity`}
         description={
           isDevPrincipal
-            ? "No identity provider here: these values come from the dev principal."
+            ? t`No identity provider here: these values come from the dev principal.`
             : undefined
         }
       >
         <DisplayNameField name={name} />
         <dl className="mt-2 divide-y divide-border border-t border-border">
-          <Field label="Email" value={email ?? "Not set"} />
-          <Field label="Organisation" value={orgName ?? "No organisation"} />
-          {orgRole && <Field label="Role" value={roleLabel(orgRole)} />}
+          <Field label={t`Email`} value={email ?? t`Not set`} />
+          <Field label={t`Organisation`} value={orgName ?? t`No organisation`} />
+          {orgRole && <Field label={t`Role`} value={roleLabel(orgRole)} />}
         </dl>
         {/* The ids are for support and scripts, not for recognising
             yourself: kept, but folded away. */}
-        <LearnMore label="Technical details" className="mt-3">
+        <LearnMore label={t`Technical details`} className="mt-3">
           <dl className="divide-y divide-border">
-            <Field label="User id" value={subject} />
-            <Field label="Organisation id" value={orgId ?? "None"} />
-            <Field label="Signed in as" value={kind} />
+            <Field label={t`User id`} value={subject} />
+            <Field label={t`Organisation id`} value={orgId ?? t`None`} />
+            <Field label={t`Signed in as`} value={kind} />
             <Field
-              label="Platform roles"
-              value={roles.length > 0 ? roles.join(", ") : "None"}
+              label={t`Platform roles`}
+              value={roles.length > 0 ? roles.join(", ") : t`None`}
             />
           </dl>
         </LearnMore>
@@ -1651,14 +1715,16 @@ export function AccountPane() {
 
       {hasPassword && (
         <PaneSection
-          title="Email"
-          description="Move your sign-in to a new address."
+          title={t`Email`}
+          description={t`Move your sign-in to a new address.`}
         >
           <EmailCard />
           <LearnMore className="mt-3">
             <p>
-              The new address has to receive a code first; until then your current
-              address keeps working.
+              <Trans>
+                The new address has to receive a code first; until then your current address
+                keeps working.
+              </Trans>
             </p>
           </LearnMore>
         </PaneSection>
@@ -1666,8 +1732,8 @@ export function AccountPane() {
 
       {hasPassword && (
         <PaneSection
-          title="Password"
-          description="Changing it signs out every other device."
+          title={t`Password`}
+          description={t`Changing it signs out every other device.`}
         >
           <Toaster>
             <PasswordCard />
@@ -1676,12 +1742,14 @@ export function AccountPane() {
       )}
 
       <PaneSection
-        title="Two-factor authentication"
-        description="A code from an authenticator app at every sign-in."
+        title={t`Two-factor authentication`}
+        description={t`A code from an authenticator app at every sign-in.`}
       >
         <SecuritySection />
         <LearnMore className="mt-3">
-          <p>Recovery codes stand in for the app when it is gone.</p>
+          <p>
+            <Trans>Recovery codes stand in for the app when it is gone.</Trans>
+          </p>
         </LearnMore>
       </PaneSection>
 
@@ -1691,6 +1759,40 @@ export function AccountPane() {
 
       <DesktopApiKeyCard />
     </div>
+  );
+}
+
+/**
+ * The desktop's way to a new passkey: this pane on the web app, in the
+ * system browser, where the ceremony runs on the origin passkeys are bound
+ * to. The address is the API base the app was built with -- the platform
+ * serves the web app from the same origin. A build without one has nowhere
+ * to send the person, so the button stays off.
+ */
+function AddPasskeyInBrowser(props: { disabled: boolean }) {
+  const [base, setBase] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    desktopAppInfo()
+      .then((info) => {
+        if (alive) setBase(info?.api_base_url ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={props.disabled || base === null}
+      onClick={() => {
+        if (base) openOutside(new URL("/settings/account", base).toString());
+      }}
+    >
+      Add a passkey in your browser
+    </Button>
   );
 }
 
