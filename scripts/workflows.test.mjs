@@ -98,6 +98,17 @@ describe("the workflow files", () => {
     });
   }
 
+  it("have code owners for every path, and for the workflows themselves", () => {
+    const owners = fs
+      .readFileSync(fileURLToPath(new URL("../.github/CODEOWNERS", import.meta.url)), "utf8")
+      .split(/\r?\n/)
+      .filter((line) => line.trim() && !line.startsWith("#"))
+      .map((line) => line.trim().split(/\s+/));
+    for (const [pattern, ...who] of owners) assert.ok(who.length > 0 && who.every((w) => w.startsWith("@")), pattern);
+    assert.ok(owners.some(([pattern]) => pattern === "*"), "a default owner");
+    assert.ok(owners.some(([pattern]) => pattern === "/.github/"), "owners for .github/");
+  });
+
   it("catches a runner context in a job's env", () => {
     const doc = parse(`
 on: push
