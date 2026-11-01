@@ -1,6 +1,6 @@
 name: CI
 
-# Test + lint on every push and every PR (T-240): the release workflow is
+# Test + lint on every push and every PR: the release workflow is
 # tags only, so this is what catches breakage between releases. Every job
 # gates, the packaged build on each OS included: an app that builds but
 # will not start is as broken as one that does not compile.

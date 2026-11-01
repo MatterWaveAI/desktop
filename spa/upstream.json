@@ -3,7 +3,8 @@
   "exclude": [
     "e2e",
     "test-results",
-    "tsconfig.tsbuildinfo"
+    "tsconfig.tsbuildinfo",
+    "index.html"
   ],
-  "digest": "sha256-b801b78effa2f964114129ee5925c897f4a97a276faf7dfddc29cf273d63b770"
+  "digest": "sha256-b4d9093721b2282713721b008439e989f6310c274f7e3b9780efd04f0cd53c3c"
 }

@@ -76,3 +76,29 @@ fn the_bundle_targets_are_the_released_installers() {
         .collect();
     assert_eq!(targets, ["msi", "nsis", "app", "dmg", "appimage", "deb"]);
 }
+
+/// The CSP allows the one inline script in `web/index.html` -- the theme
+/// boot script, inlined so the first paint is in the right palette -- by
+/// its hash. Edit the script and the hash must follow, or the page loads
+/// without it and flashes.
+#[test]
+fn the_csp_allows_the_inline_theme_script_by_its_hash() {
+    use base64::Engine;
+    use sha2::Digest;
+    let html = read("../web/index.html");
+    let inline: Vec<&str> = html
+        .split("<script>")
+        .skip(1)
+        .filter_map(|rest| rest.split("</script>").next())
+        .collect();
+    assert_eq!(inline.len(), 1, "one inline script");
+    let hash = base64::engine::general_purpose::STANDARD.encode(sha2::Sha256::digest(inline[0]));
+    let csp = config()["app"]["security"]["csp"]
+        .as_str()
+        .expect("a CSP")
+        .to_string();
+    assert!(
+        csp.contains(&format!("'sha256-{hash}'")),
+        "script-src should allow 'sha256-{hash}': {csp}"
+    );
+}

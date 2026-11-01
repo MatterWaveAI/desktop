@@ -102,8 +102,10 @@ table is at the top of the workflow.
 
 `web/` is the platform's SPA at one named commit plus this app's own changes to it, and nothing
 else. `spa/upstream.json` names the commit (and a digest of its SPA as copied: the platform's
-`web/` without its Playwright suites and build cache); `spa/patches/` holds one patch per file
-the desktop changes or adds, at the file's own path. `pnpm spa:check` proves the two agree --
+`web/` without its Playwright suites, its build cache and `index.html`); `spa/patches/` holds one
+patch per file the desktop changes or adds, at the file's own path. `web/index.html` is the
+desktop's own: the CSP allows its inline theme script by hash, so the two change together (a test
+in `src-tauri/tests/bundle_config.rs` holds them to each other). `pnpm spa:check` proves the two agree --
 `web/` minus the patches is exactly that commit, and the patches give `web/` back -- and CI runs
 it, so an edit to `web/` that skipped the patches fails the build.
 

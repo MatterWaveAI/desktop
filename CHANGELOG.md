@@ -117,7 +117,7 @@ the API's `MW_RELEASE` all report it).
 
 ### Added
 
-- **Read-aloud of replies** (T-230): a speaker button on every stored reply,
+- **Read-aloud of replies**: a speaker button on every stored reply,
   driven by the webview's own `speechSynthesis` -- client-side only, the words
   go to the OS voices and never over the network
   (`web/src/apps/chat/tts.ts`, `useReadAloud.ts`). Markdown is spoken as
@@ -126,7 +126,7 @@ the API's `MW_RELEASE` all report it).
   button is the stop button while its reply is the one speaking. Voice and
   pace are in Preferences (this device), offered only where the webview can
   speak at all.
-- **The global hotkey quick-summon** (T-231): `Ctrl+Shift+M` by default
+- **The global hotkey quick-summon**: `Ctrl+Shift+M` by default
   (`CommandOrControl+Shift+M`, so macOS gets Cmd), toggling the window from
   anywhere -- the tray's Show/Hide without finding the tray
   (`src-tauri/src/hotkey.rs`, the `tauri-plugin-global-shortcut` plugin).
@@ -146,7 +146,7 @@ the API's `MW_RELEASE` all report it).
   section is the round trip -- a check logs each stage as it passes
   (`checking` / `downloading` / `verified` / `installing`,
   `update-stage` events from `src-tauri/src/updater.rs`), and an offered
-  update can be installed from the pane (T-232's scaffolding), so a signed
+  update can be installed from the pane, so a signed
   release's check → download → verify → install → relaunch can be watched
   end to end against a real feed. The manual pass itself is written down
   in README.md ("The signed round-trip pass (Windows first)").
@@ -169,8 +169,8 @@ the API's `MW_RELEASE` all report it).
 
 ### Changed
 
-- **CI runs test + lint on every push, not only main** (T-240,
-  `.github/workflows/ci.yml`): the web job (lint, typecheck, vitest,
+- **CI runs test + lint on every push, not only main**
+  (`.github/workflows/ci.yml`): the web job (lint, typecheck, vitest,
   build) and the Rust job (fmt, clippy, tests) already gated pushes and
   PRs; the push trigger now covers the long-lived branches, develop
   included. The same checks passed locally; on GitHub the workflow file
