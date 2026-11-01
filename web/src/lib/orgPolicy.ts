@@ -179,6 +179,22 @@ export interface MemberUsage {
   last_active: string | null;
 }
 
+/**
+ * The connector share of the same rows, per connection: a workspace's
+ * mentions answered and charged to their routes' paying members. Named
+ * from the connection while it exists; a deleted one's spend keeps its id.
+ */
+export interface ConnectionUsage {
+  connection_id: string;
+  connector: string | null;
+  display_name: string | null;
+  weighted_tokens: number;
+  tokens: number;
+  cost_micros: number;
+  turns: number;
+  last_active: string | null;
+}
+
 export interface MemberUsageReport {
   /** `YYYY-MM`. */
   period: string;
@@ -188,6 +204,8 @@ export interface MemberUsageReport {
   /** `org` for an owner or admin (everyone's rows); `self` for a member (their own). */
   scope: "org" | "self";
   data: MemberUsage[];
+  /** Scoped as `data` is: every connection for an admin, the ones a member paid for otherwise. */
+  by_connection: ConnectionUsage[];
   totals: { weighted_tokens: number; tokens: number; cost_micros: number; turns: number };
 }
 
@@ -200,6 +218,7 @@ function asMemberReport(raw: Partial<MemberUsageReport> | null | undefined): Mem
     unit: "tokens",
     scope: raw?.scope === "self" ? "self" : "org",
     data,
+    by_connection: Array.isArray(raw?.by_connection) ? raw.by_connection : [],
     totals: raw?.totals ?? {
       weighted_tokens: data.reduce((sum, r) => sum + r.weighted_tokens, 0),
       tokens: data.reduce((sum, r) => sum + r.tokens, 0),

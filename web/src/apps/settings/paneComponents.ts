@@ -3,6 +3,7 @@ import { AccountPane } from "./panes/AccountPane";
 import { ApiKeysPane } from "./panes/ApiKeysPane";
 import { BudgetPane } from "./panes/BudgetPane";
 import { BillingPane } from "./panes/BillingPane";
+import { ConnectionsPane } from "./panes/ConnectionsPane";
 import { CustomInstructionsPane } from "./panes/CustomInstructionsPane";
 import { DataPane } from "./panes/DataPane";
 import { DesktopPane } from "./panes/DesktopPane";
@@ -34,6 +35,7 @@ export const paneComponents: Record<string, ComponentType> = {
   members: MembersPane,
   presets: PresetsPane,
   webhooks: WebhooksPane,
+  connections: ConnectionsPane,
   keys: ApiKeysPane,
   devices: DevicesPane,
   usage: UsagePane,

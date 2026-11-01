@@ -109,6 +109,17 @@ const basePanes: readonly SettingsPane[] = [
     description: "Where this organisation's events are posted, and how each delivery went.",
   },
   {
+    // Beside Webhooks, its inbound counterpart: a workspace that asks
+    // the org's presets a question, governed by the same owners and
+    // admins. The wizard, the routing and the trigger log need a URL of
+    // their own to be sent to.
+    id: "connections",
+    group: "Organisation",
+    title: "Connections",
+    description:
+      "Workspaces that can ask your presets a question, which channels are answered, and on whose budget.",
+  },
+  {
     id: "keys",
     group: "Organisation",
     title: "API keys",

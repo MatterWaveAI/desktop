@@ -706,3 +706,76 @@ describe("finding a member", () => {
     expect(lastActive("ada@acme.com")).toBe("Active today");
   });
 });
+
+describe("linked accounts", () => {
+  const CONNECTION_ID = "11111111-1111-7111-8111-111111111111";
+  const connections = {
+    data: [
+      {
+        id: CONNECTION_ID,
+        connector: "slack",
+        display_name: "Acme Slack",
+        status: "active",
+        ingress_url: "https://app.example.com/api/hooks/slack/tok",
+        config: {},
+        external_workspace_id: "T0ACME",
+        rate_limit_per_minute: null,
+        installed_by: "ada",
+        last_event_at: null,
+        last_error: null,
+        created_at: "2026-10-01T10:00:00+00:00",
+        updated_at: "2026-10-01T10:00:00+00:00",
+      },
+    ],
+    connectors: ["slack"],
+    notifiable_events: [],
+    outcomes: [],
+    identity_statuses: [],
+  };
+  const identities = {
+    data: [
+      { id: "i-1", connection_id: CONNECTION_ID, external_user_id: "U0JANE", display_name: "jane", email: "ada@acme.com", subject: "ada", status: "mapped", mapped_by: "auto", created_at: "2026-10-03T10:00:00+00:00", updated_at: "2026-10-03T10:00:00+00:00" },
+      { id: "i-2", connection_id: CONNECTION_ID, external_user_id: "U0EVE", display_name: null, email: "eve@acme.com", subject: "eve", status: "mapped", mapped_by: "manual", created_at: "2026-10-03T10:00:00+00:00", updated_at: "2026-10-03T10:00:00+00:00" },
+    ],
+  };
+  const registry = ({ method, url }: RecordedCall) => {
+    if (method !== "GET") return undefined;
+    if (url === "/api/org/connections") return { status: 200, body: connections };
+    if (url === `/api/org/connections/${CONNECTION_ID}/identities?status=mapped`) return { status: 200, body: identities };
+    return undefined;
+  };
+
+  function memberRows(): HTMLLIElement[] {
+    return [...mounted!.container.querySelector("ul[aria-label='Members']")!.querySelectorAll("li")];
+  }
+  function linked(email: string): string | null {
+    const row = memberRows().find((li) => li.textContent?.includes(email))!;
+    return row.querySelector("[data-testid='linked-accounts']")?.textContent ?? null;
+  }
+
+  it("shows an admin each member's workspace accounts, read once per connection rather than per member", async () => {
+    const calls = stubMembersApi("admin", registry);
+    mounted = await mount(<MembersPane />, principalWith(["user"], "admin"));
+    expect(linked("ada@acme.com")).toBe("Slack: jane");
+    expect(linked("eve@acme.com")).toBe("Slack: U0EVE");
+    expect(linked("cy@acme.com")).toBeNull();
+    expect(calls.filter((c) => c.url === "/api/org/connections")).toHaveLength(1);
+    expect(calls.filter((c) => c.url.includes("/identities"))).toHaveLength(1);
+    expect(calls.some((c) => c.url.startsWith("/api/org/connector-identities"))).toBe(false);
+  });
+
+  it("asks the registry nothing for a member, and shows the list when the registry is off", async () => {
+    const calls = stubMembersApi("member", registry);
+    mounted = await mount(<MembersPane />, principalWith(["user"], "member"));
+    expect(calls.some((c) => c.url.startsWith("/api/org/connections"))).toBe(false);
+    expect(linked("ada@acme.com")).toBeNull();
+    mounted.unmount();
+
+    stubMembersApi("admin", ({ url }) =>
+      url === "/api/org/connections" ? { status: 503, body: { detail: "Connectors are not enabled." } } : undefined,
+    );
+    mounted = await mount(<MembersPane />, principalWith(["user"], "admin"));
+    expect(memberRows()).toHaveLength(4);
+    expect(linked("ada@acme.com")).toBeNull();
+  });
+});

@@ -54,6 +54,11 @@ msgstr "{seats, plural, one {# puesto} other {# puestos}}"
 msgid "{tokens} / month"
 msgstr "{tokens} / mes"
 
+#. placeholder {0}: workspaceId ? <> (<span className="font-mono">{workspaceId}</span>)</> : null
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "{workspaceName} is connected{0}. Nothing is answered yet: route a channel to a preset and a paying member next."
+msgstr "{workspaceName} está conectado{0}. Todavía no se responde nada: a continuación, enruta un canal a un preajuste y a un miembro pagador."
+
 #: src/shell/LandingPage.tsx
 msgid "/v1 speaks the OpenAI chat-completions format, so any OpenAI client works with a MatterWave key. Python and TypeScript SDKs, and your conversations as MCP tools."
 msgstr "/v1 habla el formato chat-completions de OpenAI, así que cualquier cliente de OpenAI funciona con una clave de MatterWave. SDK de Python y TypeScript, y tus conversaciones como herramientas MCP."
@@ -98,6 +103,10 @@ msgstr "<0>Ajustes › Uso</0> — los tokens usados este periodo, cuándo se re
 msgid "<0>Verify your email</0> to subscribe."
 msgstr "<0>Verifica tu correo</0> para suscribirte."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "A member's role changed."
+msgstr "Cambió el rol de un miembro."
+
 #: src/components/AppError.tsx
 msgid "A newer version of MatterWave is available. Reload to pick it up."
 msgstr "Hay una versión más reciente de MatterWave. Recarga para usarla."
@@ -109,6 +118,10 @@ msgstr "Un preajuste es un asistente con nombre: un modelo, sus instrucciones y 
 #: src/shell/HelpPage.tsx
 msgid "A report is stored with the conversation and answered with a reference you can quote to support. It does not change the conversation, suspend anyone or tell the model anything. If a report could not be stored you are told so, because a report that was never filed must not look like one that was."
 msgstr "Un informe se guarda junto a la conversación y se responde con una referencia que puedes citar a soporte. No cambia la conversación, no suspende a nadie ni le dice nada al modelo. Si un informe no pudo guardarse, se te avisa, porque un informe que nunca se presentó no debe parecer uno que sí."
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "A Slack app of your own is created from a manifest MatterWave writes, installed in your workspace, and its token and signing secret pasted back here. Three steps; nothing is answered until a channel is routed."
+msgstr "Se crea una app de Slack propia a partir de un manifiesto que escribe MatterWave, se instala en tu espacio de trabajo y su token y su secreto de firma se pegan aquí. Tres pasos; no se responde nada hasta que se enrute un canal."
 
 #: src/shell/LandingPage.tsx
 msgid "A terminal client, a VS Code extension and a desktop app share the same conversations as the web."
@@ -130,6 +143,10 @@ msgstr "Acepta los términos para continuar."
 msgid "Acceptable use"
 msgstr "Uso aceptable"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Accepted"
+msgstr "Aceptado"
+
 #: src/shell/UserMenu.tsx
 msgid "Account and organisation"
 msgstr "Cuenta y organización"
@@ -138,17 +155,39 @@ msgstr "Cuenta y organización"
 msgid "Account menu"
 msgstr "Menú de la cuenta"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
 #: src/shell/CommandPalette.tsx
 msgid "Actions"
 msgstr "Acciones"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Active"
+msgstr "Activa"
 
 #: src/shell/UserMenu.tsx
 msgid "Add account"
 msgstr "Añadir cuenta"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Add channel"
+msgstr "Añadir canal"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Add channel…"
+msgstr "Añadir canal…"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Adding…"
+msgstr "Añadiendo…"
+
 #: src/shell/LandingPage.tsx
 msgid "Administrators invite members and set roles and spending limits. The Team plan is sold per seat, with every seat's tokens in one shared pool, and is the plan that adds single sign-on."
 msgstr "Los administradores invitan a miembros y asignan roles y límites de gasto. El plan Team se vende por puesto, con los tokens de todos los puestos en un fondo común, y es el plan que añade el inicio de sesión único."
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "All outcomes"
+msgstr "Todos los resultados"
 
 #: src/shell/LandingPage.tsx
 msgid "Allowance weight"
@@ -174,6 +213,10 @@ msgstr "Siempre se envían: los recibos forman parte de la transacción, no son 
 msgid "An allowance counts weighted tokens: every prompt and completion token times the model's multiplier, so an allowance buys the same dollars of list price whichever model spends it. Paid monthly plans keep going past the allowance at each model's list price, up to an overage cap that starts at the plan's monthly price and that an administrator can raise or lower."
 msgstr "Una cuota cuenta tokens ponderados: cada token de entrada y de salida multiplicado por el multiplicador del modelo, de modo que una cuota compra los mismos dólares de precio de lista sea cual sea el modelo que la gaste. Los planes mensuales de pago continúan más allá de la cuota al precio de lista de cada modelo, hasta un tope de exceso que empieza en el precio mensual del plan y que un administrador puede subir o bajar."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "An API key was revoked."
+msgstr "Se revocó una clave de API."
+
 #: src/shell/LandingPage.tsx
 msgid "An illustration of a MatterWave conversation: a request for five bullets and the start of the reply."
 msgstr "Una ilustración de una conversación en MatterWave: una petición de cinco puntos y el comienzo de la respuesta."
@@ -181,6 +224,22 @@ msgstr "Una ilustración de una conversación en MatterWave: una petición de ci
 #: src/apps/billing/PricingPage.tsx
 msgid "Annual"
 msgstr "Anual"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Answer in {channel}"
+msgstr "Responder en {channel}"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Answer in a channel"
+msgstr "Responder en un canal"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Answer in this channel"
+msgstr "Responder en este canal"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Answered"
+msgstr "Respondido"
 
 #: src/apps/billing/PricingPage.tsx
 msgid "API keys"
@@ -206,6 +265,14 @@ msgstr "Pide a un administrador de la organización que se suscriba"
 msgid "At least {min} characters."
 msgstr "Al menos {min} caracteres."
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Bad signature"
+msgstr "Firma incorrecta"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Between 1 and 10,000."
+msgstr "Entre 1 y 10.000."
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Billing period"
 msgstr "Periodo de facturación"
@@ -213,6 +280,24 @@ msgstr "Periodo de facturación"
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Billing receipts"
 msgstr "Recibos de facturación"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Block"
+msgstr "Bloquear"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Blocked"
+msgstr "Bloqueado"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Blocked by moderation"
+msgstr "Bloqueado por moderación"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Bot token"
+msgstr "Token del bot"
 
 #: src/shell/LandingPage.tsx
 msgid "Branches, attachments, custom instructions, dictation, and compaction when a thread runs long, on {onModels}. The model that wrote each reply is named under it."
@@ -226,6 +311,10 @@ msgstr "Ramas, adjuntos, instrucciones personalizadas, dictado y compactación c
 msgid "Bring ChatGPT and Claude history in; export a conversation or everything on your account. Nothing you write is used to train models."
 msgstr "Trae tu historial de ChatGPT y Claude; exporta una conversación o todo lo de tu cuenta. Nada de lo que escribes se usa para entrenar modelos."
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Budget refused"
+msgstr "Presupuesto rechazado"
+
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Budget warnings"
 msgstr "Avisos de presupuesto"
@@ -238,9 +327,31 @@ msgstr "CREA"
 msgid "Can I cancel or change plans?"
 msgstr "¿Puedo cancelar o cambiar de plan?"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Cancel"
 msgstr "Cancelar"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Channel"
+msgstr "Canal"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Channel id"
+msgstr "Id del canal"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Channel not routed"
+msgstr "Canal sin ruta"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Channels answered for {displayName}"
+msgstr "Canales respondidos para {displayName}"
 
 #: src/shell/Shell.tsx
 msgid "Chat"
@@ -262,13 +373,34 @@ msgstr "Revisa el formulario"
 msgid "Checking billing…"
 msgstr "Comprobando la facturación…"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Checking with Slack…"
+msgstr "Comprobando con Slack…"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Checking…"
+msgstr "Comprobando…"
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Checkout was cancelled, so nothing was charged. Pick a plan whenever you are ready."
 msgstr "El pago se canceló, así que no se cobró nada. Elige un plan cuando quieras."
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Choose a member"
+msgstr "Elige un miembro"
+
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Choose a model"
 msgstr "Elige un modelo"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Choose a preset"
+msgstr "Elige un preajuste"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Close"
+msgstr "Cerrar"
 
 #: src/shell/Shell.tsx
 msgid "Close sidebar"
@@ -299,6 +431,42 @@ msgstr "Confirmar mi correo"
 msgid "Confirm password"
 msgstr "Confirmar contraseña"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Connect"
+msgstr "Conectar"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connect a Slack workspace to have @MatterWave answered in its channels by a preset of your choosing."
+msgstr "Conecta un espacio de trabajo de Slack para que @MatterWave responda en sus canales con el preajuste que elijas."
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Connect Slack"
+msgstr "Conectar Slack"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connect Slack…"
+msgstr "Conectar Slack…"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connected by {installedBy}, {installedAt}"
+msgstr "Conectado por {installedBy}, {installedAt}"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Connection disabled"
+msgstr "Conexión desactivada"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connections"
+msgstr "Conexiones"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connections are for admins"
+msgstr "Las conexiones son para administradores"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Connectors are not switched on here, so there is no workspace to connect. Whoever runs this deployment can turn them on."
+msgstr "Los conectores no están activados aquí, así que no hay ningún espacio de trabajo que conectar. Quien administra este despliegue puede activarlos."
+
 #: src/shell/frontDoorLinks.ts
 msgid "Contact"
 msgstr "Contacto"
@@ -307,6 +475,7 @@ msgstr "Contacto"
 msgid "Contact support"
 msgstr "Contactar con soporte"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
 #: src/shell/LoginPage.tsx
 msgid "Continue"
 msgstr "Continuar"
@@ -316,10 +485,18 @@ msgstr "Continuar"
 msgid "Continue as {0}"
 msgstr "Continuar como {0}"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Continue to routing"
+msgstr "Continuar al enrutamiento"
+
 #. placeholder {0}: lastProvider.providerName
 #: src/shell/LoginPage.tsx
 msgid "Continue with {0}"
 msgstr "Continuar con {0}"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Conversation"
+msgstr "Conversación"
 
 #: src/shell/CommandPalette.tsx
 #: src/shell/Shell.tsx
@@ -329,6 +506,26 @@ msgstr "Conversaciones"
 #: src/shell/LandingPage.tsx
 msgid "Conversations that keep up"
 msgstr "Conversaciones que siguen tu ritmo"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Copy manifest"
+msgstr "Copiar manifiesto"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Copy URL"
+msgstr "Copiar URL"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not add the channel."
+msgstr "No se pudo añadir el canal."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Could not change the identity."
+msgstr "No se pudo cambiar la identidad."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not change the rate limit."
+msgstr "No se pudo cambiar el límite de frecuencia."
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Could not check your subscription: {statusError}"
@@ -342,9 +539,41 @@ msgstr "No se pudo crear el preajuste."
 msgid "Could not delete the preset."
 msgstr "No se pudo eliminar el preajuste."
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not disable the channel."
+msgstr "No se pudo desactivar el canal."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not disable the connection."
+msgstr "No se pudo desactivar la conexión."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not enable the channel."
+msgstr "No se pudo activar el canal."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not enable the connection."
+msgstr "No se pudo activar la conexión."
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Could not load more of the trigger log."
+msgstr "No se pudo cargar más del registro de activaciones."
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Could not load plans"
 msgstr "No se pudieron cargar los planes"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not load the connections"
+msgstr "No se pudieron cargar las conexiones"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not load the connections."
+msgstr "No se pudieron cargar las conexiones."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Could not load the identities."
+msgstr "No se pudieron cargar las identidades."
 
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Could not load the presets"
@@ -353,6 +582,14 @@ msgstr "No se pudieron cargar los preajustes"
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Could not load the presets."
 msgstr "No se pudieron cargar los preajustes."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not load the routing."
+msgstr "No se pudo cargar el enrutamiento."
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Could not load the trigger log."
+msgstr "No se pudo cargar el registro de activaciones."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Could not load your email preferences."
@@ -370,6 +607,30 @@ msgstr "No se pudo conectar con la API de MatterWave."
 msgid "Could not record your acceptance."
 msgstr "No se pudo registrar tu aceptación."
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not remove the channel."
+msgstr "No se pudo quitar el canal."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not remove the connection."
+msgstr "No se pudo quitar la conexión."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not replace the credentials."
+msgstr "No se pudieron sustituir las credenciales."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Could not rotate the URL."
+msgstr "No se pudo rotar la URL."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Could not save the channel."
+msgstr "No se pudo guardar el canal."
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Could not save the notifications."
+msgstr "No se pudieron guardar las notificaciones."
+
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Could not save the preset."
 msgstr "No se pudo guardar el preajuste."
@@ -382,9 +643,17 @@ msgstr "No se pudieron guardar tus preferencias."
 msgid "Could not sign that account out."
 msgstr "No se pudo cerrar la sesión de esa cuenta."
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Could not start the connection."
+msgstr "No se pudo iniciar la conexión."
+
 #: src/shell/UserMenu.tsx
 msgid "Could not switch accounts. That account may have been signed out."
 msgstr "No se pudo cambiar de cuenta. Puede que la sesión de esa cuenta se haya cerrado."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Create a preset first; it is what answers here."
+msgstr "Crea primero un preajuste; es lo que responde aquí."
 
 #: src/apps/billing/PricingPage.tsx
 #: src/shell/FrontDoorChrome.tsx
@@ -400,6 +669,10 @@ msgstr "Crea uno para dar a los miembros un asistente listo: un modelo, instrucc
 msgid "Create preset"
 msgstr "Crear preajuste"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Create the app in Slack"
+msgstr "Crear la app en Slack"
+
 #: src/shell/LandingPage.tsx
 #: src/shell/SignupPage.tsx
 msgid "Create your account"
@@ -412,6 +685,10 @@ msgstr "Creando la cuenta…"
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Creating…"
 msgstr "Creando…"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Credentials (JSON)"
+msgstr "Credenciales (JSON)"
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Custom instructions"
@@ -450,27 +727,70 @@ msgstr "Descripción <0>(opcional)</0>"
 msgid "Developers"
 msgstr "Desarrolladores"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Disable"
+msgstr "Desactivar"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Disabled"
+msgstr "Desactivado"
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Does a free trial need a card?"
 msgstr "¿Una prueba gratuita necesita tarjeta?"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Done"
+msgstr "Listo"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Duplicate"
+msgstr "Duplicado"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "e.g. #support"
+msgstr "p. ej. #soporte"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "e.g. Acme Slack"
+msgstr "p. ej. Slack de Acme"
 
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "e.g. Support desk"
 msgstr "p. ej. Mesa de soporte"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Each connection is one workspace whose mentions are answered by the presets its routing names."
+msgstr "Cada conexión es un espacio de trabajo cuyas menciones responden los preajustes que indica su enrutamiento."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Edit the channel"
+msgstr "Editar el canal"
+
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Edit the preset"
 msgstr "Editar el preajuste"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Edit…"
 msgstr "Editar…"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
 #: src/apps/settings/panes/PreferencesPane.tsx
 #: src/shell/LoginPage.tsx
 #: src/shell/SignupPage.tsx
 msgid "Email"
 msgstr "Correo electrónico"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Enable"
+msgstr "Activar"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Enabled"
+msgstr "Activado"
 
 #: src/shell/authForms.ts
 msgid "Enter a password."
@@ -528,6 +848,14 @@ msgstr "Introduce tu contraseña."
 msgid "Enter your work email. If your organisation uses single sign-on, you will be taken to its identity provider."
 msgstr "Escribe tu correo del trabajo. Si tu organización usa inicio de sesión único, te llevaremos a su proveedor de identidad."
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Error"
+msgstr "Error"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Events"
+msgstr "Eventos"
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Every plan includes a monthly allowance of tokens. Pick monthly or annual billing, compare the plans below, and read how the allowance works under the cards."
 msgstr "Cada plan incluye una cuota mensual de tokens. Elige facturación mensual o anual, compara los planes más abajo y lee cómo funciona la cuota bajo las tarjetas."
@@ -536,6 +864,14 @@ msgstr "Cada plan incluye una cuota mensual de tokens. Elige facturación mensua
 msgid "Every reply is generated by a language model, and the model that wrote it is named under the reply. A model can state things confidently that are wrong, invented or out of date, and it has no memory beyond this conversation and the instructions in force for it. Check anything that matters before you act on it. Nobody is reading your messages as you send them; the Instructions control above the transcript shows exactly what shapes the answers."
 msgstr "Cada respuesta la genera un modelo de lenguaje, y el modelo que la escribió se indica debajo de la respuesta. Un modelo puede afirmar con seguridad cosas erróneas, inventadas o desactualizadas, y no tiene memoria más allá de esta conversación y de las instrucciones vigentes para ella. Comprueba todo lo que importe antes de actuar. Nadie lee tus mensajes mientras los envías; el control de Instrucciones sobre la transcripción muestra exactamente qué da forma a las respuestas."
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Everyone"
+msgstr "Todos"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Everyone who asked is mapped, a guest or blocked."
+msgstr "Todos los que han preguntado están asignados, son invitados o están bloqueados."
+
 #: src/shell/LandingPage.tsx
 msgid "EVERYWHERE"
 msgstr "EN TODAS PARTES"
@@ -543,6 +879,15 @@ msgstr "EN TODAS PARTES"
 #: src/shell/HelpPage.tsx
 msgid "Exporting a conversation"
 msgstr "Exportar una conversación"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "External user"
+msgstr "Usuario externo"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Finish later"
+msgstr "Terminar más tarde"
 
 #: src/shell/LoginPage.tsx
 msgid "Finish signing in in the browser window that opened, then come back here."
@@ -577,6 +922,15 @@ msgstr "Plan gratuito, sin tarjeta. Nada de lo que escribes entrena un modelo."
 msgid "Go home"
 msgstr "Ir al inicio"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Guest"
+msgstr "Invitado"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Guests cannot be linked"
+msgstr "Los invitados no se pueden vincular"
+
 #: src/shell/CommandPalette.tsx
 #: src/shell/HelpPage.tsx
 #: src/shell/NotFoundPage.tsx
@@ -601,9 +955,17 @@ msgstr "¿Cómo se me factura?"
 msgid "How do seats work?"
 msgstr "¿Cómo funcionan los puestos?"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "How many mentions this connection answers per minute across all its channels. Past it, a mention is refused with a note to the person and logged as rate limited."
+msgstr "Cuántas menciones responde esta conexión por minuto en todos sus canales. Por encima, una mención se rechaza con una nota a la persona y se registra como limitada por frecuencia."
+
 #: src/apps/billing/PricingPage.tsx
 msgid "How the allowance works"
 msgstr "Cómo funciona la cuota"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "How this connection is listed here."
+msgstr "Cómo aparece esta conexión aquí."
 
 #: src/shell/SignupPage.tsx
 msgid "I accept the <0>Terms of Service</0> and <1>Privacy Policy</1>"
@@ -613,9 +975,17 @@ msgstr "Acepto los <0>Términos del servicio</0> y la <1>Política de privacidad
 msgid "I have read and accept the <0>Terms of Service</0> and <1>Privacy Policy</1>"
 msgstr "He leído y acepto los <0>Términos del servicio</0> y la <1>Política de privacidad</1>"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Identities"
+msgstr "Identidades"
+
 #: src/shell/LandingPage.tsx
 msgid "Import and export"
 msgstr "Importa y exporta"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "In Slack, open the channel's details; the id is at the bottom."
+msgstr "En Slack, abre los detalles del canal; el id está al final."
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "In the app"
@@ -632,6 +1002,10 @@ msgstr "Instrucciones"
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "It is no longer offered for new conversations. Conversations already on it keep answering with it as it is now."
 msgstr "Deja de ofrecerse para conversaciones nuevas. Las conversaciones que ya lo usan siguen respondiendo con él tal como está ahora."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Its routing, identities and trigger log go with it, and the workspace is no longer answered. The conversations it opened stay with their paying members. Uninstall the app from the workspace as well."
+msgstr "Su enrutamiento, sus identidades y su registro de activaciones se van con ella, y el espacio de trabajo deja de recibir respuestas. Las conversaciones que abrió se quedan con sus miembros pagadores. Desinstala también la app del espacio de trabajo."
 
 #: src/shell/SignupPage.tsx
 msgid "Join {orgName}"
@@ -650,9 +1024,17 @@ msgstr "Atajos de teclado y ayuda"
 msgid "Keyboard shortcuts and help (?)"
 msgstr "Atajos de teclado y ayuda (?)"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Label <0>(optional)</0>"
+msgstr "Etiqueta <0>(opcional)</0>"
+
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Language"
 msgstr "Idioma"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Last event {lastEvent}"
+msgstr "Último evento {lastEvent}"
 
 #: src/shell/SignupPage.tsx
 msgid "Last name"
@@ -668,6 +1050,26 @@ msgstr "La última vez iniciaste sesión con {0}."
 msgid "Light"
 msgstr "Claro"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Link"
+msgstr "Vincular"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Link to a member…"
+msgstr "Vincular a un miembro…"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Link to another member…"
+msgstr "Vincular a otro miembro…"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Linking…"
+msgstr "Vinculando…"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Load more"
+msgstr "Cargar más"
+
 #: src/boot.tsx
 msgid "Loading MatterWave…"
 msgstr "Cargando MatterWave…"
@@ -676,6 +1078,7 @@ msgstr "Cargando MatterWave…"
 msgid "Loading preferences…"
 msgstr "Cargando las preferencias…"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
 #: src/components/AppError.tsx
 msgid "Loading…"
 msgstr "Cargando…"
@@ -688,9 +1091,17 @@ msgstr "Buscando tu organización…"
 msgid "Mail when your organisation nears its budget or plan allowance."
 msgstr "Correo cuando tu organización se acerque a su presupuesto o a la cuota del plan."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Manage"
+msgstr "Gestionar"
+
 #: src/shell/UserMenu.tsx
 msgid "Manage billing"
 msgstr "Gestionar la facturación"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Mapped"
+msgstr "Asignado"
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Match device"
@@ -704,14 +1115,42 @@ msgstr "MatterWave inicia tu sesión a través del navegador web."
 msgid "MatterWave was updated"
 msgstr "MatterWave se ha actualizado"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Member"
+msgstr "Miembro"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Member for {who}"
+msgstr "Miembro para {who}"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Member suspended"
+msgstr "Miembro suspendido"
+
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Members who pick it get this model, these instructions after the organisation's, and only these tools."
 msgstr "Los miembros que lo elijan obtienen este modelo, estas instrucciones después de las de la organización y solo estas herramientas."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Mentions in this channel are answered by the preset, and each answer is charged to the paying member and counts against their cap."
+msgstr "Las menciones en este canal las responde el preajuste, y cada respuesta se cobra al miembro pagador y cuenta para su tope."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Mentions per minute"
+msgstr "Menciones por minuto"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Mentions there are refused from now on. The conversations already opened stay with their paying member."
+msgstr "Las menciones allí se rechazan a partir de ahora. Las conversaciones ya abiertas se quedan con su miembro pagador."
 
 #: src/apps/settings/panes/PresetsPane.tsx
 #: src/shell/LandingPage.tsx
 msgid "Model"
 msgstr "Modelo"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Model not allowed"
+msgstr "Modelo no permitido"
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Model prices"
@@ -758,6 +1197,31 @@ msgstr "Nuevo preajuste…"
 msgid "New to MatterWave? <0>Create account</0>"
 msgstr "¿Nuevo en MatterWave? <0>Crear cuenta</0>"
 
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "No channels yet. Mentions in this workspace are refused until one is added."
+msgstr "Todavía no hay canales. Las menciones en este espacio de trabajo se rechazan hasta que se añada uno."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "No connections yet"
+msgstr "Todavía no hay conexiones"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "No connector is available on this deployment."
+msgstr "No hay ningún conector disponible en este despliegue."
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "No events with this outcome."
+msgstr "No hay eventos con este resultado."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "No events yet"
+msgstr "Todavía no hay eventos"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "No guests have asked."
+msgstr "Ningún invitado ha preguntado."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "No presets yet"
 msgstr "Aún no hay preajustes"
@@ -770,9 +1234,34 @@ msgstr "No hay inicio de sesión único configurado para {detail}. Inicia sesió
 msgid "No tools"
 msgstr "Sin herramientas"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Nobody has mentioned this connection yet."
+msgstr "Nadie ha mencionado esta conexión todavía."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Nobody is blocked."
+msgstr "Nadie está bloqueado."
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Nobody is mapped to a member yet."
+msgstr "Nadie está asignado a un miembro todavía."
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Not a member"
+msgstr "No es miembro"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Not available on this deployment"
 msgstr "No disponible en este despliegue"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Not working"
+msgstr "No funciona"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Nothing has been received on this connection yet."
+msgstr "Todavía no se ha recibido nada en esta conexión."
 
 #: src/components/AppError.tsx
 #: src/shell/NotFoundPage.tsx
@@ -783,6 +1272,7 @@ msgstr "No hay nada en esta dirección. Puede haberse movido, o el enlace puede 
 msgid "Nothing matches."
 msgstr "Nada coincide."
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Notifications"
 msgstr "Notificaciones"
@@ -795,6 +1285,10 @@ msgstr "Correo ocasional sobre nuevos modelos y funciones."
 msgid "On the Free plan and on any annual plan, requests stop until the month resets. On a paid monthly plan, requests keep going at each model's list price, billed as overage on the next invoice, up to the overage cap."
 msgstr "En el plan Free y en cualquier plan anual, las solicitudes se detienen hasta que el mes se reinicia. En un plan mensual de pago, las solicitudes continúan al precio de lista de cada modelo, facturadas como exceso en la siguiente factura, hasta el tope de exceso."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "One line per event, posted to a channel of the workspace. Only these administrative events can be sent; nothing about conversations ever is."
+msgstr "Una línea por evento, publicada en un canal del espacio de trabajo. Solo se pueden enviar estos eventos administrativos; nunca nada sobre conversaciones."
+
 #: src/shell/LandingPage.tsx
 msgid "One platform, <0>every surface</0>"
 msgstr "Una plataforma, <0>en todas partes</0>"
@@ -802,6 +1296,14 @@ msgstr "Una plataforma, <0>en todas partes</0>"
 #: src/apps/billing/PricingPage.tsx
 msgid "One seat per member, added and removed as they join and leave"
 msgstr "Un puesto por miembro, añadido y retirado a medida que entran y salen"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Only channels listed here are answered. Spend is charged to the paying member and counts against their cap."
+msgstr "Solo se responde en los canales listados aquí. El gasto se cobra al miembro pagador y cuenta para su tope."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Only channels listed in a connection's routing are answered, and only people mapped to a member of this organisation are. Each answer is charged to the route's paying member and counts against their cap."
+msgstr "Solo se responde en los canales listados en el enrutamiento de una conexión, y solo a personas asignadas a un miembro de esta organización. Cada respuesta se cobra al miembro pagador de la ruta y cuenta para su tope."
 
 #: src/shell/HelpPage.tsx
 msgid "Open the conversation actions menu (the three dots beside the model picker) and choose <0>Report conversation</0>, or use the <1>Report</1> action under a reply to report just that reply. You will be asked which kind of problem it is:"
@@ -818,6 +1320,10 @@ msgstr "Opcional. Con el prefijo de país, como +34 600 000 000."
 #: src/shell/HelpPage.tsx
 msgid "or"
 msgstr "o"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Outcome"
+msgstr "Resultado"
 
 #: src/shell/NotFoundPage.tsx
 msgid "Page <0>not found</0>"
@@ -853,6 +1359,15 @@ msgstr "Contraseña"
 msgid "Past the allowance, a paid monthly plan is billed at these list prices."
 msgstr "Más allá de la cuota, un plan mensual de pago se factura a estos precios de lista."
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Paying member"
+msgstr "Miembro pagador"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "People who asked through {displayName}"
+msgstr "Personas que han preguntado a través de {displayName}"
+
 #: src/shell/SignupPage.tsx
 msgid "Phone (optional)"
 msgstr "Teléfono (opcional)"
@@ -868,6 +1383,15 @@ msgstr "Planes"
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Preferences saved."
 msgstr "Preferencias guardadas."
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Preset"
+msgstr "Preajuste"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Preset deleted"
+msgstr "Preajuste eliminado"
 
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Presets"
@@ -905,9 +1429,25 @@ msgstr "Novedades del producto"
 msgid "Prompt"
 msgstr "Prompt"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Put this in the app's Request URL in the workspace. Until then, nothing it sends is accepted."
+msgstr "Pon esto en la Request URL de la app en el espacio de trabajo. Hasta entonces, no se acepta nada de lo que envíe."
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Questions"
 msgstr "Preguntas"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rate limit"
+msgstr "Limitar frecuencia"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rate limit…"
+msgstr "Límite de frecuencia…"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Rate limited"
+msgstr "Frecuencia limitada"
 
 #: src/shell/LandingPage.tsx
 msgid "Read the docs"
@@ -917,9 +1457,47 @@ msgstr "Leer la documentación"
 msgid "Recommended"
 msgstr "Recomendado"
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Refresh"
+msgstr "Actualizar"
+
 #: src/components/AppError.tsx
 msgid "Reload"
 msgstr "Recargar"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Remove {displayName}?"
+msgstr "¿Quitar {displayName}?"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Remove channel"
+msgstr "Quitar canal"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Remove connection"
+msgstr "Quitar conexión"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Remove…"
+msgstr "Quitar…"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Removed from the workspace"
+msgstr "Eliminada del espacio de trabajo"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Replace credentials"
+msgstr "Sustituir credenciales"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Replace credentials…"
+msgstr "Sustituir credenciales…"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Replace the credentials"
+msgstr "Sustituir las credenciales"
 
 #: src/shell/HelpPage.tsx
 msgid "Reporting a conversation or a reply"
@@ -931,9 +1509,34 @@ msgstr "Denunciar una conversación o una respuesta"
 msgid "Retry"
 msgstr "Reintentar"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rotate the URL of {displayName}?"
+msgstr "¿Rotar la URL de {displayName}?"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rotate URL"
+msgstr "Rotar URL"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Rotate URL…"
+msgstr "Rotar URL…"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Routing"
+msgstr "Enrutamiento"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Save changes"
 msgstr "Guardar cambios"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Save limit"
+msgstr "Guardar límite"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Save notifications"
+msgstr "Guardar notificaciones"
 
 #: src/apps/settings/panes/PreferencesPane.tsx
 msgid "Save preferences"
@@ -947,6 +1550,13 @@ msgstr "Guardado solo en este dispositivo; no se pudo actualizar la cuenta."
 msgid "Saved to your account."
 msgstr "Guardado en tu cuenta."
 
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Saved."
+msgstr "Guardado."
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
 #: src/apps/settings/panes/PreferencesPane.tsx
 #: src/apps/settings/panes/PresetsPane.tsx
 #: src/shell/AcceptTermsNotice.tsx
@@ -960,6 +1570,10 @@ msgstr "Buscar «{q}» en las conversaciones"
 #: src/shell/LandingPage.tsx
 msgid "Seats, roles and budgets"
 msgstr "Puestos, roles y presupuestos"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Sections of {displayName}"
+msgstr "Secciones de {displayName}"
 
 #: src/shell/LandingPage.tsx
 msgid "SECURE"
@@ -982,6 +1596,7 @@ msgstr "Ajustes"
 msgid "Settings: {title}"
 msgstr "Ajustes: {title}"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
 #: src/shell/AuthForm.tsx
 msgid "Show"
 msgstr "Mostrar"
@@ -1056,6 +1671,11 @@ msgstr "Con sesión iniciada en este navegador"
 msgid "Signing in…"
 msgstr "Iniciando sesión…"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Signing secret"
+msgstr "Secreto de firma"
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Single sign-on"
 msgstr "Inicio de sesión único"
@@ -1064,9 +1684,37 @@ msgstr "Inicio de sesión único"
 msgid "Skip to composer"
 msgstr "Saltar al compositor"
 
+#: src/apps/settings/panes/connections/connectionsApi.ts
+msgid "Slack"
+msgstr "Slack"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Slack cannot reach this deployment"
+msgstr "Slack no puede alcanzar este despliegue"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Slack could not confirm these credentials."
+msgstr "Slack no pudo confirmar estas credenciales."
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Someone accepted an invitation."
+msgstr "Alguien aceptó una invitación."
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Someone was removed from the organisation."
+msgstr "Alguien fue eliminado de la organización."
+
 #: src/components/AppError.tsx
 msgid "Something went wrong"
 msgstr "Algo ha salido mal"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "Spend crossed 80% of the monthly budget."
+msgstr "El gasto superó el 80 % del presupuesto mensual."
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Stale signature"
+msgstr "Firma caducada"
 
 #: src/shell/LandingPage.tsx
 msgid "Start free"
@@ -1084,9 +1732,30 @@ msgstr "Empieza con tu correo: te enviaremos un código para confirmarlo."
 msgid "Starting sign-in…"
 msgstr "Iniciando el acceso…"
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Starting…"
+msgstr "Iniciando…"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
 #: src/shell/frontDoorLinks.ts
 msgid "Status"
 msgstr "Estado"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Step 1 of 3: create the app in Slack"
+msgstr "Paso 1 de 3: crea la app en Slack"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Step 2 of 3: paste the app's credentials"
+msgstr "Paso 2 de 3: pega las credenciales de la app"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Step 3 of 3: connected"
+msgstr "Paso 3 de 3: conectado"
+
+#: src/apps/settings/panes/connections/ConnectionRouting.tsx
+msgid "Stop answering in {channel}?"
+msgstr "¿Dejar de responder en {channel}?"
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Subscribe"
@@ -1146,9 +1815,25 @@ msgstr "Los <0>modelos</0>"
 msgid "The API may be down, or this origin may not be allowed by CORS."
 msgstr "Puede que la API esté caída o que este origen no esté permitido por CORS."
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "The app is installed"
+msgstr "La app está instalada"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "The app must be a member of the channel."
+msgstr "La app debe ser miembro del canal."
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "The bot token is under OAuth & Permissions once the app is installed; the signing secret is under Basic Information. Both are checked with Slack and kept encrypted."
+msgstr "El token del bot está en OAuth & Permissions una vez instalada la app; el secreto de firma está en Basic Information. Ambos se comprueban con Slack y se guardan cifrados."
+
 #: src/shell/authForms.ts
 msgid "The code is the six characters from the email."
 msgstr "El código son los seis caracteres del correo."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "The current URL stops accepting events now. The app's Request URL in the workspace (for Slack, under Event Subscriptions) must be updated to the new one, which is shown next."
+msgstr "La URL actual deja de aceptar eventos ahora. La Request URL de la app en el espacio de trabajo (en Slack, en Event Subscriptions) debe actualizarse a la nueva, que se muestra a continuación."
 
 #: src/shell/authForms.ts
 msgid "The form could not be read. Reload the page and try again."
@@ -1162,9 +1847,25 @@ msgstr "La invitación es para esta dirección."
 msgid "The language of the app's own text. Conversations are never translated."
 msgstr "El idioma de los textos de la aplicación. Las conversaciones nunca se traducen."
 
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "The manifest carries this connection's Request URL. Create the app from it, install the app to the workspace, then come back for step 2."
+msgstr "El manifiesto lleva la Request URL de esta conexión. Crea la app a partir de él, instálala en el espacio de trabajo y vuelve para el paso 2."
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "The monthly budget is used up."
+msgstr "El presupuesto mensual se ha agotado."
+
 #: src/apps/billing/PricingPage.tsx
 msgid "The most overage a month can add. It starts at the plan's monthly price (per seat on a plan sold per seat), so a runaway key can bill at most what you already agreed to pay once; an administrator can raise or lower it in Settings. When the cap is reached, requests are refused until the month resets. A spending budget can stop requests sooner."
 msgstr "El exceso máximo que puede añadir un mes. Empieza en el precio mensual del plan (por puesto en un plan vendido por puesto), de modo que una clave descontrolada puede facturar como mucho lo que ya aceptaste pagar una vez; un administrador puede subirlo o bajarlo en Ajustes. Cuando se alcanza el tope, las solicitudes se rechazan hasta que el mes se reinicia. Un presupuesto de gasto puede detener las solicitudes antes."
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "The new Request URL"
+msgstr "La nueva Request URL"
+
+#: src/apps/settings/panes/connections/ConnectionNotifications.tsx
+msgid "The organisation's plan moved."
+msgstr "Cambió el plan de la organización."
 
 #: src/shell/authForms.ts
 #: src/shell/SignupPage.tsx
@@ -1174,6 +1875,10 @@ msgstr "Las contraseñas no coinciden."
 #: src/shell/productCopy.ts
 msgid "The platform your AI apps run on."
 msgstr "La plataforma en la que funcionan tus aplicaciones de IA."
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "The Request URL <0>{requestUrl}</0> is not on a public host, so Slack will not be able to deliver events to it. The app can be created, but nothing will be answered until this deployment is reachable from the internet."
+msgstr "La Request URL <0>{requestUrl}</0> no está en un host público, así que Slack no podrá entregarle eventos. La app se puede crear, pero no se responderá nada hasta que este despliegue sea accesible desde internet."
 
 #: src/shell/HelpPage.tsx
 msgid "The same menu offers <0>Export as Markdown</0> and <1>Export as JSON</1>. Both are built in your browser from the conversation already on screen, so nothing is sent anywhere and it works offline. Markdown is the branch you are reading, one section per turn, with attachments and tool calls named rather than embedded. JSON carries the same messages as the API sent them, plus every other branch of the conversation. The file is named after the conversation’s title. Everything on your account at once is under <2>Settings › Data</2>."
@@ -1187,10 +1892,18 @@ msgstr "Los mismos modelos están disponibles desde tu propio código: la API ha
 msgid "The terms have <0>changed</0>"
 msgstr "Las condiciones han <0>cambiado</0>"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "The trigger log keeps ids and outcomes, never what anyone wrote. What was said lives in the conversation, which belongs to the paying member."
+msgstr "El registro de activaciones guarda ids y resultados, nunca lo que alguien escribió. Lo dicho vive en la conversación, que pertenece al miembro pagador."
+
 #: src/apps/settings/panes/PreferencesPane.tsx
 #: src/shell/UserMenu.tsx
 msgid "Theme"
 msgstr "Tema"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "They are checked with the workspace before anything changes, and kept encrypted. The old ones stop being used at once."
+msgstr "Se comprueban con el espacio de trabajo antes de cambiar nada, y se guardan cifradas. Las antiguas dejan de usarse de inmediato."
 
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "This deployment's default tools"
@@ -1236,6 +1949,14 @@ msgstr "Mostrar u ocultar la barra lateral"
 msgid "Tools"
 msgstr "Herramientas"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Trigger log"
+msgstr "Registro de activaciones"
+
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "Trigger log for {displayName}"
+msgstr "Registro de activaciones de {displayName}"
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Try again"
 msgstr "Inténtalo de nuevo"
@@ -1248,6 +1969,10 @@ msgstr "Escribe un comando o el título de una conversación"
 msgid "Type a command or a conversation title…"
 msgstr "Escribe un comando o el título de una conversación…"
 
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Unblock"
+msgstr "Desbloquear"
+
 #: src/apps/billing/PricingPage.tsx
 msgid "Unlimited conversations"
 msgstr "Conversaciones ilimitadas"
@@ -1255,6 +1980,14 @@ msgstr "Conversaciones ilimitadas"
 #: src/apps/billing/PricingPage.tsx
 msgid "Unlimited seats"
 msgstr "Puestos ilimitados"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Unlink"
+msgstr "Desvincular"
+
+#: src/apps/settings/panes/connections/ConnectionIdentities.tsx
+msgid "Unmapped"
+msgstr "Sin asignar"
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Up to {maxSaving} on annual billing"
@@ -1324,6 +2057,10 @@ msgstr "Verifica tu correo"
 msgid "Version {version}"
 msgstr "Versión {version}"
 
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Waiting for the app to be installed"
+msgstr "Esperando a que se instale la app"
+
 #: src/shell/LoginPage.tsx
 msgid "Waiting for your browser…"
 msgstr "Esperando a tu navegador…"
@@ -1368,6 +2105,10 @@ msgstr "Lo que hace el chat y no está escrito en sus botones: los atajos, qué 
 msgid "What this assistant is for, and how it should answer."
 msgstr "Para qué sirve este asistente y cómo debe responder."
 
+#: src/apps/settings/panes/connections/ConnectionEvents.tsx
+msgid "When"
+msgstr "Cuándo"
+
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "When an administrator creates one, it is offered in the composer."
 msgstr "Cuando un administrador crea uno, se ofrece en el compositor."
@@ -1383,6 +2124,14 @@ msgstr "¿Cuenta del trabajo?"
 #: src/shell/LoginPage.tsx
 msgid "Work email"
 msgstr "Correo del trabajo"
+
+#: src/apps/settings/panes/connections/ConnectSlackWizard.tsx
+msgid "Workspace name"
+msgstr "Nombre del espacio de trabajo"
+
+#: src/apps/settings/panes/ConnectionsPane.tsx
+msgid "Workspaces that can ask this organisation's presets a question are connected by an administrator. Ask one to make changes here."
+msgstr "Los espacios de trabajo que pueden hacer preguntas a los preajustes de esta organización los conecta un administrador. Pide a uno que haga cambios aquí."
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Yes. An organisation owner or admin can cancel or change the plan from Settings, Billing; a member cannot. A cancelled subscription runs to the end of the period already paid for. An upgrade takes effect on the next request. A downgrade never deletes anything: if the organisation holds more conversations than the new plan allows, the existing ones stay readable and exportable and creating new ones waits until you upgrade or remove some."

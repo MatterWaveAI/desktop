@@ -22,6 +22,7 @@ import {
   downloadCsv,
   fetchMemberUsage,
   memberUsageCsvPath,
+  type ConnectionUsage,
   type MemberUsageReport,
 } from "../../../lib/orgPolicy";
 import { LearnMore, PaneSection } from "../PaneSection";
@@ -55,7 +56,9 @@ import { LearnMore, PaneSection } from "../PaneSection";
  * scopes itself: an owner or admin gets every member, anyone else gets
  * their own row and nobody else's. The pane shows what it is given and
  * names the section accordingly, so a member is not shown an empty "by
- * member" table that looks like a loading failure.
+ * member" table that looks like a loading failure. Beside it, the same
+ * month's spend per connection -- the share a Slack workspace's mentions
+ * made -- scoped the same way.
  */
 
 const TH_CLASS = "py-1.5 pr-3 font-normal";
@@ -429,98 +432,167 @@ function MembersSection(props: { period: string; manages: boolean }) {
 
   const own = state.phase === "ready" ? state.report.scope === "self" : !props.manages;
   return (
+    <>
+      <PaneSection
+        title={own ? "Your usage" : "By member"}
+        description={
+          own
+            ? `Your own tokens and turns for ${formatMonth(period)}.`
+            : `Weighted tokens, cost, turns and last turn per member for ${formatMonth(period)}, biggest first.`
+        }
+        actions={
+          <>
+            <label htmlFor={monthId} className="sr-only">
+              Month
+            </label>
+            <Input
+              id={monthId}
+              type="month"
+              value={period}
+              onChange={(event) => {
+                if (event.target.value) setPeriod(event.target.value);
+              }}
+              className="w-44"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={exporting || state.phase !== "ready"}
+              onClick={() => void exportCsv()}
+            >
+              {exporting ? "Preparing…" : "Download CSV"}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          {state.phase === "loading" && <LoadingSkeleton rows={2} />}
+          {state.phase === "error" && (
+            <p role="alert" className="text-sm text-mw-danger">
+              Could not load usage by member: {state.message}
+            </p>
+          )}
+          {state.phase === "ready" && state.report.data.length === 0 && (
+            <p className="text-sm text-mw-text-subtle">Nothing used in {formatMonth(period)}.</p>
+          )}
+          {state.phase === "ready" && state.report.data.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" aria-label="Usage by member">
+                <thead>
+                  <tr className="text-left text-mw-text-subtle">
+                    <th scope="col" className={TH_CLASS}>Member</th>
+                    <th scope="col" className={TH_CLASS}>Weighted tokens</th>
+                    <th scope="col" className={TH_CLASS}>Tokens</th>
+                    <th scope="col" className={TH_CLASS}>At list price</th>
+                    <th scope="col" className={TH_CLASS}>Turns</th>
+                    <th scope="col" className="py-1.5 font-normal">Last active</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.report.data.map((row) => (
+                    <tr key={row.subject} data-member={row.subject} className="border-t border-border">
+                      <td className="py-1.5 pr-3 break-all">{memberLabel(row)}</td>
+                      <td className={NUM_CLASS}>{row.weighted_tokens.toLocaleString()}</td>
+                      <td className={NUM_CLASS}>{row.tokens.toLocaleString()}</td>
+                      <td className={NUM_CLASS}>{formatMicros(row.cost_micros)}</td>
+                      <td className={NUM_CLASS}>{row.turns.toLocaleString()}</td>
+                      <td className="py-1.5 whitespace-nowrap tabular-nums">
+                        {row.last_active ? (
+                          <time dateTime={row.last_active}>{formatLastActive(row.last_active)}</time>
+                        ) : (
+                          ""
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-border font-medium">
+                    <td className="py-1.5 pr-3">Total</td>
+                    <td className={NUM_CLASS}>{state.report.totals.weighted_tokens.toLocaleString()}</td>
+                    <td className={NUM_CLASS}>{state.report.totals.tokens.toLocaleString()}</td>
+                    <td className={NUM_CLASS}>{formatMicros(state.report.totals.cost_micros)}</td>
+                    <td className={NUM_CLASS}>{state.report.totals.turns.toLocaleString()}</td>
+                    <td className="py-1.5" />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+          {exportError && (
+            <p role="alert" className="text-sm text-mw-danger">
+              {exportError}
+            </p>
+          )}
+        </div>
+      </PaneSection>
+      {state.phase === "ready" && (
+        <ConnectionsSection rows={state.report.by_connection} month={formatMonth(period)} own={own} />
+      )}
+    </>
+  );
+}
+
+/** The connection as a person reads it: its name while it exists, its id after. */
+function connectionLabel(row: ConnectionUsage): string {
+  return row.display_name ?? row.connection_id;
+}
+
+/**
+ * The same month's connector spend per connection: what a workspace's
+ * mentions cost, charged to their routes' paying members and so already
+ * inside the per-member rows above, not on top of them.
+ */
+function ConnectionsSection(props: { rows: ConnectionUsage[]; month: string; own: boolean }) {
+  const month = props.month;
+  return (
     <PaneSection
-      title={own ? "Your usage" : "By member"}
+      title={props.own ? "Your usage by connection" : "By connection"}
       description={
-        own
-          ? `Your own tokens and turns for ${formatMonth(period)}.`
-          : `Weighted tokens, cost, turns and last turn per member for ${formatMonth(period)}, biggest first.`
-      }
-      actions={
-        <>
-          <label htmlFor={monthId} className="sr-only">
-            Month
-          </label>
-          <Input
-            id={monthId}
-            type="month"
-            value={period}
-            onChange={(event) => {
-              if (event.target.value) setPeriod(event.target.value);
-            }}
-            className="w-44"
-          />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={exporting || state.phase !== "ready"}
-            onClick={() => void exportCsv()}
-          >
-            {exporting ? "Preparing…" : "Download CSV"}
-          </Button>
-        </>
+        props.own
+          ? `What connected workspaces charged to you in ${month}. Part of your usage above, not on top of it.`
+          : `What each connected workspace's mentions cost in ${month}, biggest first. Part of the rows above, not on top of them.`
       }
     >
-      <div className="flex flex-col gap-3">
-        {state.phase === "loading" && <LoadingSkeleton rows={2} />}
-        {state.phase === "error" && (
-          <p role="alert" className="text-sm text-mw-danger">
-            Could not load usage by member: {state.message}
-          </p>
-        )}
-        {state.phase === "ready" && state.report.data.length === 0 && (
-          <p className="text-sm text-mw-text-subtle">Nothing used in {formatMonth(period)}.</p>
-        )}
-        {state.phase === "ready" && state.report.data.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" aria-label="Usage by member">
-              <thead>
-                <tr className="text-left text-mw-text-subtle">
-                  <th scope="col" className={TH_CLASS}>Member</th>
-                  <th scope="col" className={TH_CLASS}>Weighted tokens</th>
-                  <th scope="col" className={TH_CLASS}>Tokens</th>
-                  <th scope="col" className={TH_CLASS}>At list price</th>
-                  <th scope="col" className={TH_CLASS}>Turns</th>
-                  <th scope="col" className="py-1.5 font-normal">Last active</th>
+      {props.rows.length === 0 ? (
+        <p className="text-sm text-mw-text-subtle">No connection was used in {month}.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" aria-label="Usage by connection">
+            <thead>
+              <tr className="text-left text-mw-text-subtle">
+                <th scope="col" className={TH_CLASS}>Connection</th>
+                <th scope="col" className={TH_CLASS}>Weighted tokens</th>
+                <th scope="col" className={TH_CLASS}>Tokens</th>
+                <th scope="col" className={TH_CLASS}>At list price</th>
+                <th scope="col" className={TH_CLASS}>Turns</th>
+                <th scope="col" className="py-1.5 font-normal">Last active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((row) => (
+                <tr key={row.connection_id} data-connection={row.connection_id} className="border-t border-border">
+                  <td className="py-1.5 pr-3 break-all">
+                    {connectionLabel(row)}
+                    {row.connector && <span className="block text-xs text-mw-text-subtle">{row.connector}</span>}
+                  </td>
+                  <td className={NUM_CLASS}>{row.weighted_tokens.toLocaleString()}</td>
+                  <td className={NUM_CLASS}>{row.tokens.toLocaleString()}</td>
+                  <td className={NUM_CLASS}>{formatMicros(row.cost_micros)}</td>
+                  <td className={NUM_CLASS}>{row.turns.toLocaleString()}</td>
+                  <td className="py-1.5 whitespace-nowrap tabular-nums">
+                    {row.last_active ? (
+                      <time dateTime={row.last_active}>{formatLastActive(row.last_active)}</time>
+                    ) : (
+                      ""
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {state.report.data.map((row) => (
-                  <tr key={row.subject} data-member={row.subject} className="border-t border-border">
-                    <td className="py-1.5 pr-3 break-all">{memberLabel(row)}</td>
-                    <td className={NUM_CLASS}>{row.weighted_tokens.toLocaleString()}</td>
-                    <td className={NUM_CLASS}>{row.tokens.toLocaleString()}</td>
-                    <td className={NUM_CLASS}>{formatMicros(row.cost_micros)}</td>
-                    <td className={NUM_CLASS}>{row.turns.toLocaleString()}</td>
-                    <td className="py-1.5 whitespace-nowrap tabular-nums">
-                      {row.last_active ? (
-                        <time dateTime={row.last_active}>{formatLastActive(row.last_active)}</time>
-                      ) : (
-                        ""
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-border font-medium">
-                  <td className="py-1.5 pr-3">Total</td>
-                  <td className={NUM_CLASS}>{state.report.totals.weighted_tokens.toLocaleString()}</td>
-                  <td className={NUM_CLASS}>{state.report.totals.tokens.toLocaleString()}</td>
-                  <td className={NUM_CLASS}>{formatMicros(state.report.totals.cost_micros)}</td>
-                  <td className={NUM_CLASS}>{state.report.totals.turns.toLocaleString()}</td>
-                  <td className="py-1.5" />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-        {exportError && (
-          <p role="alert" className="text-sm text-mw-danger">
-            {exportError}
-          </p>
-        )}
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </PaneSection>
   );
 }
