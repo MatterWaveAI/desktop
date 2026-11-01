@@ -62,3 +62,17 @@ fn the_macos_bundle_may_ask_for_the_microphone() {
         Some("true")
     );
 }
+
+/// The installers a release ships and nothing else: an rpm nobody installs
+/// and the updater feed has no entry for is not built.
+#[test]
+fn the_bundle_targets_are_the_released_installers() {
+    let config = config();
+    let targets: Vec<&str> = config["bundle"]["targets"]
+        .as_array()
+        .expect("an explicit target list, not \"all\"")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(targets, ["msi", "nsis", "app", "dmg", "appimage", "deb"]);
+}

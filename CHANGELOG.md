@@ -20,6 +20,21 @@ the API's `MW_RELEASE` all report it).
   at a time, and CI fails when `web/` is anything other than that commit
   plus those patches (`pnpm spa:check`).
 
+- **Releases cover every desktop target and sign what the secrets
+  allow**: Windows arm64 (NSIS), macOS universal (Apple silicon and Intel
+  in one app) and Linux arm64 join the x64 builds; the rpm nobody
+  installed is gone. With a code-signing certificate the Windows binaries
+  and installers are Authenticode-signed and timestamped; with an Apple
+  Developer ID the macOS app is signed under the hardened runtime and,
+  with the notarization credentials, notarized. Each signing group is all
+  or nothing, and a missing group builds unsigned with a warning.
+- **A release is published only after every packaged app has started**:
+  the installers go to a draft release, each is installed or opened once
+  and must still be running after 20 s
+  (`scripts/smoke-packaged-app.mjs`), and only then is the release made
+  public and the updater feed laid out. CI's packaged build on Windows,
+  macOS and Linux now gates too, with the same start.
+
 ### Security
 
 - **The packaged app's CSP names the one host it talks to**: `connect-src`

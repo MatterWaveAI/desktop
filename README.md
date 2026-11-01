@@ -72,10 +72,24 @@ MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri build --debug
 
 `build:web` runs first (`pnpm --dir web build`: `tsc --noEmit` then the Vite build) and the bundle
 takes `web/dist`. Output: `src-tauri/target/{release,debug}/bundle/` (MSI and NSIS on Windows,
-`.app`/DMG on macOS, AppImage and `.deb` on Linux). Signing and notarisation belong to the
-release job. The macOS bundle merges `src-tauri/Info.plist` (the microphone usage description
-WKWebView requires before dictation may ask) and signs with `src-tauri/Entitlements.plist` (audio
-input under the hardened runtime).
+`.app`/DMG on macOS, AppImage and `.deb` on Linux; no rpm). The macOS bundle merges
+`src-tauri/Info.plist` (the microphone usage description WKWebView requires before dictation may
+ask) and signs with `src-tauri/Entitlements.plist` (audio input under the hardened runtime).
+`node scripts/smoke-packaged-app.mjs --bundle-dir <bundle dir>` installs (Windows, silently, into a
+temporary directory) or opens the packaged app and fails unless it is still running after 20 s;
+CI runs it on every OS.
+
+The release job (`.github/workflows/release.yml`, on a `v*` tag) builds Windows x64 (MSI, NSIS)
+and arm64 (NSIS), macOS universal (app bundle, DMG) and Linux x64 and arm64 (AppImage, `.deb`),
+each into a draft release; every packaged app is started once, and only then is the release
+published and the updater feed laid out. Signing follows the secrets, each group all or nothing:
+the updater key signs the update artifacts, a Windows code-signing certificate
+(`WINDOWS_CERTIFICATE`, its password and the `MW_WINDOWS_TIMESTAMP_URL` variable) signs the
+Windows binaries and installers with Authenticode, and an Apple Developer ID certificate
+(`APPLE_CERTIFICATE`, its password, `APPLE_SIGNING_IDENTITY`) signs the macOS app under the
+hardened runtime, notarized and stapled when `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` are
+set too. A group left out builds unsigned for that platform, with a warning in the run; the full
+table is at the top of the workflow.
 
 ### The bundled SPA
 

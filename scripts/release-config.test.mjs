@@ -96,6 +96,27 @@ describe("release-config", () => {
     assert.equal(loopback.code, 0, loopback.out);
   });
 
+  it("signs the Windows binaries when the job imported a certificate", () => {
+    const signed = generate({ ...SIGNED, MW_WINDOWS_CERT_THUMBPRINT: "ABC123", MW_WINDOWS_TIMESTAMP_URL: "http://ts.example.test" });
+    assert.deepEqual(signed.config.bundle.windows, {
+      certificateThumbprint: "ABC123",
+      digestAlgorithm: "sha256",
+      timestampUrl: "http://ts.example.test",
+    });
+    assert.equal(signed.config.bundle.createUpdaterArtifacts, true);
+    const unsignedUpdater = generate({
+      MW_DESKTOP_BASE_URL: "https://app.example.test",
+      MW_DESKTOP_UNSIGNED: "1",
+      MW_WINDOWS_CERT_THUMBPRINT: "ABC123",
+      MW_WINDOWS_TIMESTAMP_URL: "http://ts.example.test",
+    });
+    assert.equal(unsignedUpdater.config.bundle.windows.certificateThumbprint, "ABC123");
+    assert.equal(generate(SIGNED).config.bundle.windows, undefined, "no certificate, no Authenticode");
+    const noTimestamp = generate({ ...SIGNED, MW_WINDOWS_CERT_THUMBPRINT: "ABC123" });
+    assert.equal(noTimestamp.code, 1);
+    assert.match(noTimestamp.out, /MW_WINDOWS_TIMESTAMP_URL/);
+  });
+
   it("still refuses half a signing setup", () => {
     const { code, out } = generate({ ...SIGNED, MW_UPDATER_PUBKEY: "" });
     assert.equal(code, 1);

@@ -14,6 +14,11 @@
 //   MW_DESKTOP_UNSIGNED      set to 1 to build without the updater when the
 //                            signing secrets are absent (the workflow's
 //                            graceful path); plain installers, no manifests
+//   MW_WINDOWS_CERT_THUMBPRINT  the Authenticode certificate the release job
+//                            imported into the runner's store; with it the
+//                            bundler signs the Windows binaries and installers
+//   MW_WINDOWS_TIMESTAMP_URL the certificate vendor's RFC 3161 timestamp
+//                            server, required with the thumbprint
 //
 // `--out <file>` writes somewhere else (the tests do).
 //
@@ -73,6 +78,24 @@ const security = {
   csp: pinnedCsp(committed.app.security.csp, apiOrigin(process.env.MW_DESKTOP_BASE_URL)),
 };
 
+/**
+ * Authenticode, when the release job has a certificate: SHA-256 and a
+ * timestamp, so the signature outlives the certificate. A thumbprint
+ * without a timestamp server is refused rather than signed in a way that
+ * expires with the certificate.
+ */
+function windowsSigning() {
+  const certificateThumbprint = process.env.MW_WINDOWS_CERT_THUMBPRINT;
+  if (!certificateThumbprint) return undefined;
+  const timestampUrl = process.env.MW_WINDOWS_TIMESTAMP_URL;
+  if (!timestampUrl) {
+    console.error("release-config: MW_WINDOWS_CERT_THUMBPRINT without MW_WINDOWS_TIMESTAMP_URL");
+    process.exit(1);
+  }
+  return { windows: { certificateThumbprint, digestAlgorithm: "sha256", timestampUrl } };
+}
+const windows = windowsSigning();
+
 // Tauri versions must be semver; MW_RELEASE is used when it is one so the
 // app and the API report the same string.
 const version =
@@ -100,7 +123,11 @@ if (missingUpdater.length) {
     "release-config: MW_DESKTOP_UNSIGNED=1 without " +
       `${missingUpdater.join(", ")} -- building UNSIGNED installers without the updater`,
   );
-  const unsigned = { app: { security }, ...(version ? { version } : {}) };
+  const unsigned = {
+    app: { security },
+    ...(windows ? { bundle: windows } : {}),
+    ...(version ? { version } : {}),
+  };
   writeFileSync(out, `${JSON.stringify(unsigned, null, 2)}\n`);
   console.log(`release-config: wrote ${out} (unsigned, no updater)`);
   process.exit(0);
@@ -119,7 +146,7 @@ const base = process.env.MW_DESKTOP_UPDATES_URL.replace(/\/+$/, "");
 
 const config = {
   app: { security },
-  bundle: { createUpdaterArtifacts: true },
+  bundle: { createUpdaterArtifacts: true, ...windows },
   plugins: {
     updater: {
       pubkey: process.env.MW_UPDATER_PUBKEY,

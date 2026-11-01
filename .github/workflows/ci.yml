@@ -1,9 +1,9 @@
 name: CI
 
 # Test + lint on every push and every PR (T-240): the release workflow is
-# tags only, so this is what catches breakage between releases. The web
-# job and the Rust job gate; the tauri build matrix below is allowed to
-# fail while the runners' toolchains mature.
+# tags only, so this is what catches breakage between releases. Every job
+# gates, the packaged build on each OS included: an app that builds but
+# will not start is as broken as one that does not compile.
 on:
   push:
     branches: [main, develop]
@@ -76,14 +76,8 @@ jobs:
       - run: cargo test
 
   tauri-build:
-    name: Tauri build (${{ matrix.os }})
+    name: Tauri build and start (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    # Allowed to fail: the bundled build needs each runner's whole
-    # toolchain (Rust, the OS webview's dev packages, WiX on Windows), and
-    # a runner missing a piece must not hold the branch hostage. Green
-    # here means the web and rust jobs passed; a red matrix entry is a
-    # sign the runner needs work, not that the code does.
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -104,10 +98,19 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir web install --frozen-lockfile
       - run: pnpm build
         env:
           # Read at build time; the release job sets the real one.
-          MW_DESKTOP_BASE_URL: https://app.matterwave.ai
+          MW_DESKTOP_BASE_URL: ${{ vars.MW_DESKTOP_BASE_URL || 'https://app.matterwave.ai' }}
+      # The installer or bundle this produced, started once: it must still
+      # be running after 20 s (scripts/smoke-packaged-app.mjs).
+      - name: Start the packaged app once
+        if: runner.os != 'Linux'
+        shell: bash
+        run: node scripts/smoke-packaged-app.mjs --bundle-dir src-tauri/target/release/bundle
+      - name: Start the packaged app once (virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke-packaged-app.mjs --bundle-dir src-tauri/target/release/bundle
