@@ -1,4 +1,4 @@
-// Vendored from @matterwave/sdk (typescript-sdk, develop 2a0b4b3), src/agent/diff.ts.
+// Vendored from @matterwave/sdk (typescript-sdk, agent-contract-1.1 ab6b87b), src/agent/diff.ts.
 // Do not edit here: change the SDK (or the Python SDK's contract.json it is
 // generated from), then copy the file again. sdk.test.ts checks the copy
 // against src-tauri/agent/contract.json, the file the Rust tool host reads.

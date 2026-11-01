@@ -12,21 +12,26 @@
  *
  * What each mode lets through is the contract's (`allowed`): `plan` is
  * only ever offered the read tools. The approval itself is the desktop
- * app's: the host puts every command in `ask` and `auto-edit`, and every
- * write in `ask`, to the person in a native dialog before it happens, so
- * nothing in this webview can approve on their behalf. What the loop adds
- * is the reading: in `ask` a write's whole diff is shown here first, and
- * only once the person has read it and chosen Apply... does the host ask.
- * A no, here or in the dialog, reaches the model as an answer, not an
- * error. The host enforces the same mode on its side, and confines every
- * path.
+ * app's: the host puts every command in `ask` and `auto-edit`, every write
+ * in `ask`, and every write to a protected file (the instructions, the
+ * deny file, the agent's settings, shell startup files and credential
+ * folders) in every mode, `yolo` included, to the person in a native
+ * dialog before it happens, so nothing in this webview can approve on
+ * their behalf. What the loop adds is the reading: where a write asks,
+ * its whole diff is shown here first, and only once the person has read
+ * it and chosen Apply... does the host ask. A no, here or in the dialog,
+ * reaches the model as the contract's `rejected` answer, not an error.
+ * The host enforces the same mode on its side, confines every path, and
+ * in `plan` and `ask` asks before reading a credentials folder or shell
+ * startup file.
  */
 import { ApiError, apiFetch } from "../../lib/api";
 import { STREAM_ERROR_COPY, classifyStreamError } from "../chat/streamErrors";
 import type { AgentHost, ReadTool, RunStarted, ToolOutput } from "./host";
-import { allowed, systemPrompt, toolsForMode, type Tool } from "./sdk/modes";
+import { allowed, refusal, systemPrompt, toolsForMode, type Tool } from "./sdk/modes";
 import { unifiedDiff } from "./sdk/diff";
-import type { ModeName } from "./sdk/types";
+import { DenyList } from "./sdk/deny";
+import { CONTEXT_FILES, DENY_FILE, PROTECTED, type ContextFile, type ModeName } from "./sdk/types";
 import { mentionsIn, withAttachments } from "./commands";
 
 export interface ToolCall {
@@ -90,14 +95,16 @@ export type ApprovalRequest = {
   created: boolean;
 };
 
-/** The files the host loads into every run as instructions; in auto-edit a write to one still asks. */
-const CONTEXT_FILES: readonly string[] = ["matterwave.md", "agents.md", "matterwave.local.md"];
+/**
+ * The paths the host reads only after the person's yes in a mode they have
+ * not confirmed for the folder (`plan`, `ask`): the protected ones that are
+ * not instructions or the deny file (approval.rs's `read_gate`).
+ */
+const READ_GATE = new DenyList(PROTECTED.filter((p) => p !== DENY_FILE && !CONTEXT_FILES.includes(p)));
 
-/** Whether the host will ask the person natively before this call goes ahead (approval.rs's `needs_native`). */
-export function asksNatively(decision: "allow" | "ask", mode: ModeName, tool: string, path: string | null): boolean {
-  if (decision === "ask") return true;
-  const write = tool === "edit" || tool === "write_file";
-  return write && mode !== "yolo" && path !== null && CONTEXT_FILES.includes(path.toLowerCase());
+/** Whether the host will ask the person natively before a read of `path` in `mode` goes ahead. */
+export function readAsksNatively(mode: ModeName, path: string | null): boolean {
+  return (mode === "plan" || mode === "ask") && path !== null && READ_GATE.matches(path);
 }
 
 export type AgentEvent =
@@ -118,7 +125,7 @@ export type AgentEvent =
   | { kind: "usage"; steps: number; tokens: number }
   | { kind: "notice"; text: string }
   /** The desktop app is asking the person about this call in its own dialog; its result follows. */
-  | { kind: "confirming"; id: string; what: "command" | "write"; text: string };
+  | { kind: "confirming"; id: string; what: "command" | "write" | "read"; text: string };
 
 export type StopReason =
   | "done"
@@ -204,17 +211,15 @@ export function summarize(name: string, args: Record<string, unknown>): string {
   }
 }
 
-/** The system prompt for one run: the contract's, then the trusted folder's context files. */
+/**
+ * The system prompt for one run: the contract's, with the trusted folder's
+ * context files in the contract's "Project instructions" section, each
+ * fenced and cut at its 32768 characters. The host loads them only from a
+ * folder the person trusts.
+ */
 export function runSystemPrompt(mode: ModeName, run: RunStarted): string {
-  let prompt = systemPrompt(mode, run.root, { platform: run.platform });
-  if (run.context.length > 0) {
-    prompt +=
-      "\n\nProject context\nThe user trusts this folder, and these files from it describe the project and how to work in it.";
-    for (const file of run.context) {
-      prompt += `\n\n--- ${file.path}${file.truncated ? " (cut off)" : ""} ---\n${file.text}`;
-    }
-  }
-  return prompt;
+  const contextFiles: ContextFile[] = run.context.map((f) => ({ path: f.path, content: f.text, trusted: true }));
+  return systemPrompt(mode, run.root, { platform: run.platform, contextFiles });
 }
 
 function estimateTokens(messages: readonly AgentMessage[], reply: string): number {
@@ -261,6 +266,7 @@ function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 const READS: readonly string[] = ["read_file", "list_dir", "glob", "grep"];
+const CONTRACT_TOOLS: readonly string[] = [...READS, "edit", "write_file", "run_shell"];
 
 /**
  * One run of the loop. Resolves with why it ended; never rejects for a
@@ -445,6 +451,9 @@ async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): 
 
   // A tool the mode denies -- or one the contract never named -- is
   // refused here, before the host hears of it (which would refuse too).
+  if (!CONTRACT_TOOLS.includes(name)) {
+    return report({ output: refusal("unknown_tool", { tool: name }), is_error: true });
+  }
   let decision: ReturnType<typeof allowed>;
   try {
     decision = allowed(name, mode);
@@ -452,11 +461,16 @@ async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): 
     decision = "deny";
   }
   if (decision === "deny") {
-    return report({ output: `Refused: ${name} is not available in ${mode} mode.`, is_error: true });
+    return report({ output: refusal("mode", { tool: name, mode }), is_error: true });
   }
 
   if (READS.includes(name)) {
-    return report(await untilAborted(host.read(run.run_id, name as ReadTool, args), signal));
+    const path = typeof args.path === "string" ? args.path : null;
+    if (readAsksNatively(mode, path)) {
+      opts.onEvent({ kind: "confirming", id: call.id, what: "read", text: path ?? "" });
+    }
+    const result = await untilAborted(host.read(run.run_id, name as ReadTool, args), signal);
+    return report(result, result.rejected ? { rejected: true } : {});
   }
 
   if (name === "edit" || name === "write_file") {
@@ -465,23 +479,17 @@ async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): 
       return report({ output: preview.output, is_error: true });
     }
     const diff = unifiedDiff(preview.before ?? "", preview.after, preview.relative);
-    if (decision === "ask") {
+    // A protected file asks in every mode that writes, yolo included.
+    const asks = allowed(name, mode, null, { path: preview.relative }) === "ask";
+    if (asks) {
       // The panel's reading of the diff; the desktop app's dialog decides.
       const ok = await untilAborted(
         opts.approve({ kind: "write", tool: name, path: preview.relative, diff, created: preview.before === null }),
         signal,
       );
       if (!ok) {
-        return report(
-          {
-            output: `Rejected by the user: ${preview.relative} was not changed. Do not send the same change again; ask what they want instead, or try another approach.`,
-            is_error: false,
-          },
-          { diff, rejected: true },
-        );
+        return report({ output: refusal("rejected", { tool: name }), is_error: false }, { diff, rejected: true });
       }
-    }
-    if (asksNatively(decision, mode, name, preview.relative)) {
       opts.onEvent({ kind: "confirming", id: call.id, what: "write", text: preview.relative });
     }
     const applied = await untilAborted(
@@ -501,7 +509,7 @@ async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): 
   if (name === "run_shell") {
     // No question here: the host shows the command whole in the desktop
     // app's dialog, which is where the person says yes or no.
-    if (asksNatively(decision, mode, name, null)) {
+    if (decision === "ask") {
       const command = typeof args.command === "string" ? args.command : "";
       opts.onEvent({ kind: "confirming", id: call.id, what: "command", text: command });
     }
@@ -509,5 +517,5 @@ async function runCall(call: ToolCall, run: RunStarted, opts: AgentRunOptions): 
     return report(result, result.rejected ? { rejected: true } : {});
   }
 
-  return report({ output: `Refused: ${name} is not a tool this client has.`, is_error: true });
+  return report({ output: refusal("unknown_tool", { tool: name }), is_error: true });
 }

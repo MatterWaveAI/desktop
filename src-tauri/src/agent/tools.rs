@@ -2,32 +2,33 @@
 //! writes, `edit` and `write_file`, each split into a preview (what the
 //! change would be, for the diff) and an apply (the change, once approved).
 //!
-//! Every path goes through `confine` first; the walks behind `list_dir`,
-//! `glob` and `grep` skip what `.gitignore` and `.matterwaveignore` ignore
-//! and never descend into a denied directory, and a link met on the way is
-//! confined like any other path before it is read. Refusals come back as
-//! the tool's result, in the contract's words, for the model to read.
+//! The read tools are the SDKs' `run_read_file`, `run_list_dir`, `run_glob`
+//! and `run_grep` over the host's own I/O: every path goes through
+//! `confine` first, the walk is search.rs's (ignore files from the root
+//! down, files before subdirectories, links confined), and the text is
+//! output.rs's, so what the model reads is what every client returns
+//! (`conformance.rs` runs the contract's cases against these functions).
+//! The host keeps checks of its own on top: a read stops one byte past the
+//! cap on the handle it reads (a file that grows between the size check and
+//! the read cannot slip a larger read through), only regular files are
+//! read (a FIFO would block for ever), a search stops when the run does,
+//! and a run in a mode the person has not confirmed for the folder leaves
+//! out the read-gated paths (`approval::read_gate`).
 
-use super::confine::{
-    confine, glob_to_regex, relative_to, resolve_links, same_path, within, Confined, DenyList,
-};
-use super::contract::{
-    EditFailure, LIST_MAX_ENTRIES, READ_MAX_BYTES, READ_MAX_LINES, SEARCH_IGNORE_FILES,
-    SEARCH_MAX_RESULTS,
-};
+use super::approval;
+use super::confine::{confine, resolve_links, same_path, within, Access, Confined, DenyList};
+use super::contract::{EditFailure, ToolFailure};
 use super::edit::{apply_edit, EditError};
-use regex::{Regex, RegexBuilder};
+use super::output::{
+    check_lines, decode_text, format_glob, format_grep, format_list_dir, format_read_file,
+    is_binary, text_lines, GlobMatcher, Limits, ToolError,
+};
+use super::search::{entries, walk, SearchIgnore, Walk};
+use regex::RegexBuilder;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-
-/// Files larger than this are not read whole, searched, or snapshotted.
-pub(crate) const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
-/// Bytes looked at to decide that a file is binary (a NUL among them).
-const BINARY_SNIFF_BYTES: usize = 8000;
-/// A grep match line is shown up to this many characters.
-const GREP_LINE_CHARS: usize = 400;
 
 /// What a tool hands back for the model: the text, whether it is an error
 /// (a refusal, a bad argument, a failed edit), and whether the person said
@@ -65,26 +66,64 @@ impl ToolOutput {
     }
 }
 
-/// A workspace: the root the person picked, already canonical, and its
-/// deny list as of this call. `cancelled` lets a long walk stop early when
-/// the run is stopped.
+impl From<ToolError> for ToolOutput {
+    fn from(e: ToolError) -> Self {
+        ToolOutput::error(e.message)
+    }
+}
+
+/// The sentence a search stopped by the run ends with.
+const STOPPED: &str = "Stopped by the user.";
+
+/// A workspace: the root the person picked, already canonical, its deny
+/// list and search rules as of this call, and the limits the tools hold
+/// to. `cancelled` lets a long walk stop early when the run is stopped;
+/// `gated` leaves the read-gated paths out (a run in a mode the person has
+/// not confirmed for the folder, reading without their yes for this path).
 pub(crate) struct Workspace<'a> {
     pub root: &'a Path,
     pub deny: DenyList,
+    pub rules: SearchIgnore,
     pub cancelled: &'a AtomicBool,
+    pub limits: Limits,
+    pub gated: bool,
 }
 
 impl<'a> Workspace<'a> {
     pub fn new(root: &'a Path, cancelled: &'a AtomicBool) -> Self {
+        let deny = DenyList::load(root);
         Workspace {
             root,
-            deny: DenyList::load(root),
+            rules: SearchIgnore::load(root, DenyList::load(root)),
+            deny,
             cancelled,
+            limits: Limits::default(),
+            gated: false,
         }
     }
 
-    fn confine(&self, path: &str, write: bool) -> Result<Confined, ToolOutput> {
-        confine(self.root, path, &self.deny, write).map_err(|r| ToolOutput::error(r.message))
+    /// The same workspace with the read gate closed (`true`) or open.
+    pub fn gated(mut self, gated: bool) -> Self {
+        self.gated = gated;
+        self
+    }
+
+    fn confine(&self, path: &str, access: Access) -> Result<Confined, ToolOutput> {
+        confine(self.root, path, &self.deny, access).map_err(|r| ToolOutput::error(r.message))
+    }
+
+    /// `confine` for a read tool, with the read gate on its path.
+    fn confine_read(&self, path: &str) -> Result<Confined, ToolOutput> {
+        let target = self.confine(path, Access::Read)?;
+        if self.gated && approval::is_read_gated(&target) {
+            return Err(ToolOutput::error(approval::read_gate_refusal(path)));
+        }
+        Ok(target)
+    }
+
+    /// Whether a walk leaves `relative` out besides what the rules ignore.
+    fn hidden(&self, relative: &str, is_dir: bool) -> bool {
+        self.gated && approval::read_gate().matches(relative, is_dir)
     }
 
     fn stopped(&self) -> bool {
@@ -112,8 +151,10 @@ pub(crate) fn parse_args<T: for<'de> Deserialize<'de>>(
 #[serde(deny_unknown_fields)]
 pub(crate) struct ReadFileArgs {
     pub path: String,
-    pub start_line: Option<u64>,
-    pub end_line: Option<u64>,
+    /// Signed, so a zero or a negative line is the contract's `bad_line`
+    /// rather than a type error.
+    pub start_line: Option<i64>,
+    pub end_line: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -157,11 +198,9 @@ pub(crate) struct WriteFileArgs {
 #[serde(deny_unknown_fields)]
 pub(crate) struct RunShellArgs {
     pub command: String,
-    pub timeout_s: Option<u64>,
-}
-
-fn is_binary(bytes: &[u8]) -> bool {
-    bytes[..bytes.len().min(BINARY_SNIFF_BYTES)].contains(&0)
+    /// A number, so a fraction or a value out of range is the contract's
+    /// `bad_timeout` rather than a type error.
+    pub timeout_s: Option<f64>,
 }
 
 /// At most `max` bytes of the file at `path`, or the reason it cannot be
@@ -174,6 +213,9 @@ pub(crate) fn read_capped(path: &Path, max: u64) -> Result<Vec<u8>, ReadRefusal>
     let meta = std::fs::metadata(path).map_err(|_| ReadRefusal::Missing)?;
     if meta.is_dir() {
         return Err(ReadRefusal::Directory);
+    }
+    if !meta.is_file() {
+        return Err(ReadRefusal::NotAFile);
     }
     let file = std::fs::File::open(path).map_err(|e| ReadRefusal::Io(e.to_string()))?;
     let meta = file
@@ -205,283 +247,155 @@ pub(crate) enum ReadRefusal {
     Io(String),
 }
 
-/// The text of a file, or why it cannot be had as text.
-fn read_text(path: &Path, shown: &str) -> Result<String, ToolOutput> {
-    let bytes = read_capped(path, MAX_FILE_BYTES).map_err(|why| {
-        ToolOutput::error(match why {
-            ReadRefusal::Missing => format!("{shown} does not exist."),
-            ReadRefusal::Directory => {
-                format!("{shown} is a directory. Use list_dir to see what is in it.")
+impl ReadRefusal {
+    /// The sentence for the model about the file at `path` (relative).
+    fn message(self, path: &str, max: u64) -> String {
+        match self {
+            ReadRefusal::Missing => ToolFailure::NotFound.message(&[("path", path)]),
+            ReadRefusal::Directory => ToolFailure::IsDirectory.message(&[("path", path)]),
+            ReadRefusal::NotAFile => {
+                format!("{path} is not a regular file; only regular files are read.")
             }
-            ReadRefusal::NotAFile => format!("{shown} is not a regular file."),
-            ReadRefusal::TooLarge(len) => {
-                format!("{shown} is {len} bytes, over the {MAX_FILE_BYTES} bytes a tool reads.")
-            }
-            ReadRefusal::Io(e) => format!("{shown} could not be read: {e}"),
-        })
-    })?;
-    if is_binary(&bytes) {
-        return Err(ToolOutput::error(format!(
-            "{shown} is a binary file, not text."
-        )));
+            ReadRefusal::TooLarge(size) => ToolFailure::TooLarge.message(&[
+                ("path", path),
+                ("size", &size.to_string()),
+                ("limit", &max.to_string()),
+            ]),
+            ReadRefusal::Io(e) => format!("{path} could not be read: {e}"),
+        }
     }
-    String::from_utf8(bytes).map_err(|_| ToolOutput::error(format!("{shown} is not UTF-8 text.")))
 }
 
+/// read_file: the numbered lines of `path`.
 pub(crate) fn read_file(ws: &Workspace, args: ReadFileArgs) -> ToolOutput {
-    let target = match ws.confine(&args.path, false) {
+    if let Err(e) = check_lines(args.start_line, args.end_line) {
+        return e.into();
+    }
+    let target = match ws.confine_read(&args.path) {
         Ok(t) => t,
         Err(e) => return e,
     };
-    let text = match read_text(&target.absolute, &args.path) {
-        Ok(t) => t,
-        Err(e) => return e,
+    let max = ws.limits.read_max_file_bytes;
+    let bytes = match read_capped(&target.absolute, max) {
+        Ok(b) => b,
+        Err(why) => return ToolOutput::error(why.message(&target.relative, max)),
     };
-    if text.is_empty() {
-        return ToolOutput::ok(format!("({} is empty.)", target.relative));
+    if is_binary(&bytes, &ws.limits) {
+        return ToolOutput::error(ToolFailure::Binary.message(&[("path", &target.relative)]));
     }
-    let lines: Vec<&str> = text.split_inclusive('\n').collect();
-    let total = lines.len();
-    let start = args.start_line.unwrap_or(1).max(1) as usize;
-    if start > total {
-        return ToolOutput::error(format!(
-            "start_line {start} is past the end of {} ({total} lines).",
-            target.relative
-        ));
-    }
-    let wanted_end = args
-        .end_line
-        .map(|e| (e as usize).min(total))
-        .unwrap_or(total);
-    if wanted_end < start {
-        return ToolOutput::error(format!(
-            "end_line {wanted_end} is before start_line {start}."
-        ));
-    }
-    let mut out = String::new();
-    let mut last = start - 1;
-    for (n, line) in lines.iter().enumerate().take(wanted_end).skip(start - 1) {
-        let shown = line.trim_end_matches('\n').trim_end_matches('\r');
-        let entry = format!("{}\t{}\n", n + 1, shown);
-        if n + 1 - start >= READ_MAX_LINES || out.len() + entry.len() > READ_MAX_BYTES {
-            break;
-        }
-        out.push_str(&entry);
-        last = n + 1;
-    }
-    if last < wanted_end {
-        out.push_str(&format!(
-            "[Cut off at the read limit: showing lines {start}-{last} of {total}. Pass start_line={} to read on.]\n",
-            last + 1
-        ));
-    }
-    ToolOutput::ok(out)
-}
-
-/// The walker every search uses: `.gitignore` (and git's own excludes) and
-/// `.matterwaveignore` honoured whether or not the folder is a repository,
-/// hidden files included (only ignore files decide what is skipped), links
-/// not followed, and denied directories never entered.
-fn walker(ws: &Workspace, start: &Path, max_depth: Option<usize>) -> ignore::Walk {
-    let root = ws.root.to_path_buf();
-    let deny = DenyList::load(ws.root);
-    let mut builder = ignore::WalkBuilder::new(start);
-    builder
-        .hidden(false)
-        .parents(true)
-        .ignore(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(true)
-        .require_git(false)
-        .follow_links(false)
-        .max_depth(max_depth)
-        .sort_by_file_name(|a, b| a.cmp(b))
-        .filter_entry(move |entry| {
-            let rel = relative_to(entry.path(), &root);
-            let is_dir = entry.file_type().is_some_and(|t| t.is_dir());
-            rel.is_empty() || !deny.matches(&rel, is_dir)
-        });
-    // `.gitignore` is git_ignore's; the contract's other ignore files are
-    // read with the same syntax.
-    for name in SEARCH_IGNORE_FILES.iter().filter(|n| **n != ".gitignore") {
-        builder.add_custom_ignore_filename(name);
-    }
-    builder.build()
-}
-
-/// A walked entry the tools may report: inside the root after its links are
-/// followed and not denied there. `None` for anything else.
-fn admit(ws: &Workspace, entry: &ignore::DirEntry) -> Option<Confined> {
-    let rel = relative_to(entry.path(), ws.root);
-    if rel.is_empty() {
-        return None;
-    }
-    if entry.path_is_symlink() {
-        // A link is a path like any other: confined by where it leads.
-        return confine(ws.root, &rel, &ws.deny, false).ok();
-    }
-    Some(Confined {
-        absolute: entry.path().to_path_buf(),
-        relative: rel,
-    })
-}
-
-fn search_start(ws: &Workspace, path: Option<&str>) -> Result<Confined, ToolOutput> {
-    match path {
-        None => Ok(Confined {
-            absolute: ws.root.to_path_buf(),
-            relative: ".".into(),
-        }),
-        Some(p) if p.trim().is_empty() || p.trim() == "." => Ok(Confined {
-            absolute: ws.root.to_path_buf(),
-            relative: ".".into(),
-        }),
-        Some(p) => ws.confine(p, false),
+    match format_read_file(
+        &decode_text(&bytes),
+        &target.relative,
+        args.start_line,
+        args.end_line,
+        &ws.limits,
+    ) {
+        Ok(text) => ToolOutput::ok(text),
+        Err(e) => e.into(),
     }
 }
 
-pub(crate) fn list_dir(ws: &Workspace, args: ListDirArgs) -> ToolOutput {
-    let dir = match search_start(ws, args.path.as_deref()) {
-        Ok(d) => d,
-        Err(e) => return e,
-    };
-    if !dir.absolute.is_dir() {
-        return ToolOutput::error(format!(
-            "{} is not a directory. Use read_file to read a file.",
-            args.path.as_deref().unwrap_or(".")
-        ));
-    }
-    let mut dirs = Vec::new();
-    let mut files = Vec::new();
-    for entry in walker(ws, &dir.absolute, Some(1)).flatten() {
-        if entry.depth() == 0 {
-            continue;
-        }
-        let Some(admitted) = admit(ws, &entry) else {
-            continue;
-        };
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if admitted.absolute.is_dir() {
-            dirs.push(format!("{name}/"));
-        } else {
-            files.push(name);
-        }
-    }
-    let total = dirs.len() + files.len();
-    if total == 0 {
-        return ToolOutput::ok(format!("({} is empty.)", dir.relative));
-    }
-    let mut out: Vec<String> = dirs
-        .into_iter()
-        .chain(files)
-        .take(LIST_MAX_ENTRIES)
-        .collect();
-    if total > LIST_MAX_ENTRIES {
-        out.push(format!(
-            "[{} more entries not shown.]",
-            total - LIST_MAX_ENTRIES
-        ));
-    }
-    ToolOutput::ok(out.join("\n"))
-}
-
-/// A glob as the search tools apply it: a pattern without `/` matches a
-/// file's name at any depth (`*.ts`); one with `/` matches the path from
-/// the search directory (`src/**/*.ts`).
-struct PathGlob {
-    regex: Regex,
-    by_name: bool,
-}
-
-impl PathGlob {
-    fn new(pattern: &str) -> Result<Self, ToolOutput> {
-        let trimmed = pattern.trim().trim_start_matches("./");
-        if trimmed.is_empty() {
-            return Err(ToolOutput::error("The glob pattern is empty."));
-        }
-        let regex = Regex::new(&format!("^(?:{})$", glob_to_regex(trimmed)))
-            .map_err(|e| ToolOutput::error(format!("Invalid glob pattern {pattern:?}: {e}")))?;
-        Ok(PathGlob {
-            regex,
-            by_name: !trimmed.contains('/'),
-        })
-    }
-
-    fn matches(&self, from_start: &str) -> bool {
-        if self.by_name {
-            let name = from_start.rsplit('/').next().unwrap_or(from_start);
-            self.regex.is_match(name)
-        } else {
-            self.regex.is_match(from_start)
-        }
-    }
-}
-
-fn under(start: &Confined, relative: &str) -> String {
-    if start.relative == "." {
-        relative.to_string()
+/// The directory a search starts from: confined, gated, and a directory.
+fn search_dir(ws: &Workspace, path: Option<&str>) -> Result<Confined, ToolOutput> {
+    let target = ws.confine_read(path.unwrap_or("."))?;
+    let failure = if target.absolute.is_file() {
+        ToolFailure::NotDirectory
+    } else if !target.absolute.is_dir() {
+        ToolFailure::NotFound
     } else {
-        relative
-            .strip_prefix(&format!("{}/", start.relative))
-            .unwrap_or(relative)
-            .to_string()
-    }
+        return Ok(target);
+    };
+    Err(ToolOutput::error(
+        failure.message(&[("path", &target.relative)]),
+    ))
 }
 
+/// list_dir: the entries of `path`, directories first.
+pub(crate) fn list_dir(ws: &Workspace, args: ListDirArgs) -> ToolOutput {
+    let target = match search_dir(ws, args.path.as_deref()) {
+        Ok(t) => t,
+        Err(e) => return e,
+    };
+    let directory = if target.relative == "." {
+        ""
+    } else {
+        target.relative.as_str()
+    };
+    let hidden = |relative: &str, is_dir: bool| ws.hidden(relative, is_dir);
+    let listed: Vec<(String, bool)> = entries(ws.root, directory, &ws.rules, &hidden)
+        .into_iter()
+        .map(|e| {
+            let name = e.relative.rsplit('/').next().unwrap_or("").to_string();
+            (name, e.is_dir)
+        })
+        .collect();
+    ToolOutput::ok(format_list_dir(&target.relative, &listed, &ws.limits))
+}
+
+/// `relative` (to the root) as seen from `base`, a directory it is under.
+fn under<'r>(relative: &'r str, base: &str) -> &'r str {
+    if base.is_empty() {
+        return relative;
+    }
+    relative
+        .strip_prefix(base)
+        .and_then(|r| r.strip_prefix('/'))
+        .unwrap_or(relative)
+}
+
+/// glob: the files under `path` whose path matches `pattern`.
 pub(crate) fn glob(ws: &Workspace, args: GlobArgs) -> ToolOutput {
-    let start = match search_start(ws, args.path.as_deref()) {
-        Ok(s) => s,
+    if args.pattern.trim().is_empty() {
+        return ToolOutput::error(ToolFailure::EmptyPattern.message(&[]));
+    }
+    let target = match search_dir(ws, args.path.as_deref()) {
+        Ok(t) => t,
         Err(e) => return e,
     };
-    let pattern = match PathGlob::new(&args.pattern) {
-        Ok(p) => p,
-        Err(e) => return e,
+    let base = if target.relative == "." {
+        ""
+    } else {
+        target.relative.as_str()
     };
-    let mut hits = Vec::new();
-    let mut more = 0usize;
-    for entry in walker(ws, &start.absolute, None).flatten() {
-        if ws.stopped() {
-            return ToolOutput::error("Stopped by the user.");
-        }
-        if !entry
-            .file_type()
-            .is_some_and(|t| t.is_file() || t.is_symlink())
-        {
-            continue;
-        }
-        let Some(admitted) = admit(ws, &entry) else {
-            continue;
-        };
-        if !admitted.absolute.is_file() {
-            continue;
-        }
-        let shown = relative_to(entry.path(), ws.root);
-        if !pattern.matches(&under(&start, &shown)) {
-            continue;
-        }
-        if hits.len() < SEARCH_MAX_RESULTS {
-            hits.push(shown);
-        } else {
-            more += 1;
-        }
+    let matcher = GlobMatcher::new(&args.pattern);
+    let cap = ws.limits.search_max_results;
+    let mut found: Vec<String> = Vec::new();
+    let (mut truncated, mut stopped) = (false, false);
+    let hidden = |relative: &str, is_dir: bool| ws.hidden(relative, is_dir);
+    walk(
+        ws.root,
+        &target.relative,
+        false,
+        &ws.rules,
+        &hidden,
+        |relative| {
+            if ws.stopped() {
+                stopped = true;
+                return Walk::Stop;
+            }
+            if !matcher.matches(under(relative, base)) {
+                return Walk::Next;
+            }
+            if found.len() == cap {
+                truncated = true;
+                return Walk::Stop;
+            }
+            found.push(relative.to_string());
+            Walk::Next
+        },
+    );
+    if stopped {
+        return ToolOutput::error(STOPPED);
     }
-    if hits.is_empty() {
-        return ToolOutput::ok(format!("No files match {}.", args.pattern));
-    }
-    if more > 0 {
-        hits.push(format!(
-            "[{more} more matches not shown; narrow the pattern.]"
-        ));
-    }
-    ToolOutput::ok(hits.join("\n"))
+    ToolOutput::ok(format_glob(&args.pattern, &found, truncated, &ws.limits))
 }
 
+/// grep: the lines matching `pattern` in the files under `path` (only
+/// those `glob` matches, when given).
 pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
-    let start = match search_start(ws, args.path.as_deref()) {
-        Ok(s) => s,
-        Err(e) => return e,
-    };
+    if args.pattern.is_empty() {
+        return ToolOutput::error(ToolFailure::EmptyPattern.message(&[]));
+    }
     let regex = match RegexBuilder::new(&args.pattern)
         .case_insensitive(args.ignore_case.unwrap_or(false))
         .size_limit(10 * 1024 * 1024)
@@ -489,81 +403,87 @@ pub(crate) fn grep(ws: &Workspace, args: GrepArgs) -> ToolOutput {
     {
         Ok(r) => r,
         Err(e) => {
-            return ToolOutput::error(format!(
-                "Invalid regular expression {:?}: {e}",
-                args.pattern
-            ))
+            return ToolOutput::error(
+                ToolFailure::InvalidRegex
+                    .message(&[("pattern", &args.pattern), ("error", &e.to_string())]),
+            )
         }
     };
-    let filter = match args.glob.as_deref().map(PathGlob::new).transpose() {
-        Ok(f) => f,
+    let target = match ws.confine_read(args.path.as_deref().unwrap_or(".")) {
+        Ok(t) => t,
         Err(e) => return e,
     };
-    // One file named directly is searched as it is; a directory is walked.
-    let files: Vec<(PathBuf, String)> = if start.absolute.is_file() {
-        vec![(start.absolute.clone(), start.relative.clone())]
+    let start_is_file = target.absolute.is_file();
+    if !start_is_file && !target.absolute.is_dir() {
+        return ToolOutput::error(ToolFailure::NotFound.message(&[("path", &target.relative)]));
+    }
+    let base = if start_is_file {
+        target.relative.rsplit_once('/').map_or("", |(dir, _)| dir)
+    } else if target.relative == "." {
+        ""
     } else {
-        let mut files = Vec::new();
-        for entry in walker(ws, &start.absolute, None).flatten() {
-            if !entry
-                .file_type()
-                .is_some_and(|t| t.is_file() || t.is_symlink())
+        target.relative.as_str()
+    };
+    let filter = args
+        .glob
+        .as_deref()
+        .filter(|g| !g.is_empty())
+        .map(GlobMatcher::new);
+    let cap = ws.limits.search_max_results;
+    let max_file = ws.limits.grep_max_file_bytes;
+    let mut found: Vec<(String, usize, String)> = Vec::new();
+    let (mut truncated, mut stopped) = (false, false);
+    let hidden = |relative: &str, is_dir: bool| ws.hidden(relative, is_dir);
+    walk(
+        ws.root,
+        &target.relative,
+        start_is_file,
+        &ws.rules,
+        &hidden,
+        |relative| {
+            if ws.stopped() {
+                stopped = true;
+                return Walk::Stop;
+            }
+            if filter
+                .as_ref()
+                .is_some_and(|f| !f.matches(under(relative, base)))
             {
-                continue;
+                return Walk::Next;
             }
-            let Some(admitted) = admit(ws, &entry) else {
-                continue;
-            };
-            if !admitted.absolute.is_file() {
-                continue;
-            }
-            let shown = relative_to(entry.path(), ws.root);
-            if let Some(f) = &filter {
-                if !f.matches(&under(&start, &shown)) {
-                    continue;
+            let mut file = ws.root.join(relative);
+            // A link is confined again just before it is read, so one
+            // swapped in since the walk listed it cannot lead out.
+            if std::fs::symlink_metadata(&file).is_ok_and(|m| m.file_type().is_symlink()) {
+                match confine(ws.root, relative, &ws.deny, Access::Read) {
+                    Ok(c) => file = c.absolute,
+                    Err(_) => return Walk::Next,
                 }
             }
-            files.push((admitted.absolute, shown));
-        }
-        files
-    };
-    let mut hits = Vec::new();
-    let mut more = 0usize;
-    for (path, shown) in files {
-        if ws.stopped() {
-            return ToolOutput::error("Stopped by the user.");
-        }
-        let Ok(bytes) = read_capped(&path, MAX_FILE_BYTES) else {
-            continue;
-        };
-        if is_binary(&bytes) {
-            continue;
-        }
-        let text = String::from_utf8_lossy(&bytes);
-        for (n, line) in text.lines().enumerate() {
-            if !regex.is_match(line) {
-                continue;
+            let Ok(bytes) = read_capped(&file, max_file) else {
+                return Walk::Next;
+            };
+            if is_binary(&bytes, &ws.limits) {
+                return Walk::Next;
             }
-            if hits.len() >= SEARCH_MAX_RESULTS {
-                more += 1;
-                continue;
+            let text = decode_text(&bytes);
+            for (n, line) in text_lines(&text).into_iter().enumerate() {
+                if !regex.is_match(line) {
+                    continue;
+                }
+                if found.len() == cap {
+                    truncated = true;
+                    return Walk::Stop;
+                }
+                found.push((relative.to_string(), n + 1, line.to_string()));
             }
-            let mut shown_line: String = line.chars().take(GREP_LINE_CHARS).collect();
-            if line.chars().count() > GREP_LINE_CHARS {
-                shown_line.push('…');
-            }
-            hits.push(format!("{shown}:{}: {}", n + 1, shown_line.trim_end()));
-        }
+            Walk::Next
+        },
+    );
+    if stopped {
+        return ToolOutput::error(STOPPED);
     }
-    if hits.is_empty() {
-        return ToolOutput::ok(format!("No matches for {}.", args.pattern));
-    }
-    if more > 0 {
-        hits.push(format!(
-            "[{more} more matches not shown; narrow the search.]"
-        ));
-    }
-    ToolOutput::ok(hits.join("\n"))
+    ToolOutput::ok(format_grep(&args.pattern, &found, truncated, &ws.limits))
 }
 
 /// What a write would do, for the approval's diff: the file as it is (none
@@ -580,35 +500,58 @@ pub(crate) struct WritePreview {
 
 /// The fingerprint of a file's current bytes; `absent` when there is none.
 /// Never a whole read past the cap: such a file has no preview anyway.
-pub(crate) fn fingerprint(path: &Path) -> String {
-    match read_capped(path, MAX_FILE_BYTES) {
+pub(crate) fn fingerprint(path: &Path, max: u64) -> String {
+    match read_capped(path, max) {
         Ok(bytes) => hex(&Sha256::digest(&bytes)),
         Err(ReadRefusal::Missing) => "absent".to_string(),
         Err(why) => format!("unreadable: {why:?}"),
     }
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The new content an `edit` produces, or why it cannot.
+/// The text of a file a write would change, or why it cannot be had as
+/// text: the read tools' refusals, and invalid UTF-8, which an edit would
+/// otherwise rewrite with replacement characters.
+fn read_text(ws: &Workspace, target: &Confined) -> Result<String, ToolOutput> {
+    let max = ws.limits.read_max_file_bytes;
+    let bytes = read_capped(&target.absolute, max)
+        .map_err(|why| ToolOutput::error(why.message(&target.relative, max)))?;
+    if is_binary(&bytes, &ws.limits) {
+        return Err(ToolOutput::error(
+            ToolFailure::Binary.message(&[("path", &target.relative)]),
+        ));
+    }
+    String::from_utf8(bytes).map_err(|_| {
+        ToolOutput::error(format!(
+            "{} is not UTF-8 text, so it is not changed.",
+            target.relative
+        ))
+    })
+}
+
+/// The new content an `edit` produces, or why it cannot. `access` is
+/// `ApprovedWrite` for a preview (nothing is written; the apply asks) and
+/// for an apply the person said yes to, `Write` otherwise.
 pub(crate) fn preview_edit(
     ws: &Workspace,
     args: &EditArgs,
+    access: Access,
 ) -> Result<(Confined, WritePreview), ToolOutput> {
-    let target = ws.confine(&args.path, true)?;
+    let target = ws.confine(&args.path, access)?;
     if !target.absolute.exists() {
         return Err(ToolOutput::error(
             EditError::new(EditFailure::Missing, &args.path, 0).message,
         ));
     }
-    let before = read_text(&target.absolute, &args.path)?;
+    let before = read_text(ws, &target)?;
     let after = apply_edit(&before, &args.old_string, &args.new_string, &args.path)
         .map_err(|e| ToolOutput::error(e.message))?;
     let preview = WritePreview {
         relative: target.relative.clone(),
-        before_sha256: fingerprint(&target.absolute),
+        before_sha256: fingerprint(&target.absolute, ws.limits.read_max_file_bytes),
         before: Some(before),
         after,
     };
@@ -619,28 +562,30 @@ pub(crate) fn preview_edit(
 pub(crate) fn preview_write(
     ws: &Workspace,
     args: &WriteFileArgs,
+    access: Access,
 ) -> Result<(Confined, WritePreview), ToolOutput> {
-    if args.content.len() as u64 > MAX_FILE_BYTES {
+    let max = ws.limits.read_max_file_bytes;
+    if args.content.len() as u64 > max {
         return Err(ToolOutput::error(format!(
-            "The content is {} bytes, over the {MAX_FILE_BYTES} bytes a tool writes.",
+            "The content is {} bytes, over the {max} bytes a tool writes.",
             args.content.len()
         )));
     }
-    let target = ws.confine(&args.path, true)?;
+    let target = ws.confine(&args.path, access)?;
     if target.absolute.is_dir() {
         return Err(ToolOutput::error(format!(
             "{} is a directory; write_file writes files.",
-            args.path
+            target.relative
         )));
     }
     let before = if target.absolute.exists() {
-        Some(read_text(&target.absolute, &args.path)?)
+        Some(read_text(ws, &target)?)
     } else {
         None
     };
     let preview = WritePreview {
         relative: target.relative.clone(),
-        before_sha256: fingerprint(&target.absolute),
+        before_sha256: fingerprint(&target.absolute, max),
         before,
         after: args.content.clone(),
     };
@@ -711,6 +656,7 @@ pub(crate) fn write_confined(target: &Confined, root: &Path, content: &[u8]) -> 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     pub(crate) fn ws_files(files: &[(&str, &str)]) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -723,43 +669,41 @@ pub(crate) mod tests {
     }
 
     fn canonical(dir: &tempfile::TempDir) -> PathBuf {
-        super::super::confine::resolve_links(dir.path()).unwrap()
+        resolve_links(dir.path()).unwrap()
     }
 
     static RUNNING: AtomicBool = AtomicBool::new(false);
+
+    fn read(path: &str, start_line: Option<i64>, end_line: Option<i64>) -> ReadFileArgs {
+        ReadFileArgs {
+            path: path.into(),
+            start_line,
+            end_line,
+        }
+    }
 
     #[test]
     fn read_file_numbers_lines_and_honours_the_range() {
         let dir = ws_files(&[("a.txt", "one\r\ntwo\nthree\n")]);
         let root = canonical(&dir);
         let ws = Workspace::new(&root, &RUNNING);
-        let all = read_file(
-            &ws,
-            ReadFileArgs {
-                path: "a.txt".into(),
-                start_line: None,
-                end_line: None,
-            },
-        );
-        assert_eq!(all, ToolOutput::ok("1\tone\n2\ttwo\n3\tthree\n"));
-        let some = read_file(
-            &ws,
-            ReadFileArgs {
-                path: "a.txt".into(),
-                start_line: Some(2),
-                end_line: Some(2),
-            },
-        );
-        assert_eq!(some.output, "2\ttwo\n");
-        let past = read_file(
-            &ws,
-            ReadFileArgs {
-                path: "a.txt".into(),
-                start_line: Some(9),
-                end_line: None,
-            },
-        );
+        let all = read_file(&ws, read("a.txt", None, None));
+        assert_eq!(all, ToolOutput::ok("1\tone\n2\ttwo\n3\tthree"));
+        let some = read_file(&ws, read("a.txt", Some(2), Some(2)));
+        assert_eq!(some.output, "2\ttwo");
+        let past = read_file(&ws, read("a.txt", Some(9), None));
         assert!(past.is_error);
+        assert_eq!(
+            past.output,
+            "start_line 9 is past the end of a.txt (3 lines)."
+        );
+        let backwards = read_file(&ws, read("a.txt", Some(3), Some(2)));
+        assert_eq!(backwards.output, "end_line 2 is before start_line 3.");
+        let zero = read_file(&ws, read("a.txt", Some(-1), None));
+        assert_eq!(
+            zero.output,
+            "start_line counts lines from 1; -1 is not a line number."
+        );
     }
 
     #[test]
@@ -768,17 +712,12 @@ pub(crate) mod tests {
         let dir = ws_files(&[("big.txt", &body)]);
         let root = canonical(&dir);
         let ws = Workspace::new(&root, &RUNNING);
-        let out = read_file(
-            &ws,
-            ReadFileArgs {
-                path: "big.txt".into(),
-                start_line: None,
-                end_line: None,
-            },
-        );
+        let out = read_file(&ws, read("big.txt", None, None));
         assert!(out.output.contains("2000\tline 2000\n"));
         assert!(!out.output.contains("2001\tline 2001"));
-        assert!(out.output.contains("Pass start_line=2001"));
+        assert!(out.output.ends_with(
+            "[Cut off at the read limit: showing lines 1-2000 of 2500. Pass start_line=2001 to read on.]"
+        ));
     }
 
     #[test]
@@ -786,66 +725,49 @@ pub(crate) mod tests {
         let dir = ws_files(&[(".env", "KEY=1"), ("bin.dat", "a\0b")]);
         let root = canonical(&dir);
         let ws = Workspace::new(&root, &RUNNING);
-        let env = read_file(
-            &ws,
-            ReadFileArgs {
-                path: ".env".into(),
-                start_line: None,
-                end_line: None,
-            },
-        );
+        let env = read_file(&ws, read(".env", None, None));
         assert!(env.is_error);
         assert!(
             env.output.starts_with("Refused: .env is protected"),
             "{}",
             env.output
         );
-        let bin = read_file(
-            &ws,
-            ReadFileArgs {
-                path: "bin.dat".into(),
-                start_line: None,
-                end_line: None,
-            },
+        let bin = read_file(&ws, read("bin.dat", None, None));
+        assert_eq!(
+            bin,
+            ToolOutput::error("bin.dat is a binary file; only text files are read.")
         );
-        assert!(bin.is_error && bin.output.contains("binary"));
     }
 
     /// Attack: a file past the cap (read whole, it would be in memory and
     /// sent on), and a write of content past it.
     #[test]
     fn a_huge_file_is_neither_read_nor_written() {
+        let max = crate::agent::contract::READ_MAX_FILE_BYTES;
         let dir = ws_files(&[("small.txt", "s\n")]);
         let root = canonical(&dir);
         let big = std::fs::File::create(root.join("big.log")).unwrap();
-        big.set_len(MAX_FILE_BYTES + 1).unwrap();
+        big.set_len(max + 1).unwrap();
         drop(big);
         let ws = Workspace::new(&root, &RUNNING);
-        let out = read_file(
-            &ws,
-            ReadFileArgs {
-                path: "big.log".into(),
-                start_line: None,
-                end_line: None,
-            },
-        );
-        assert!(
-            out.is_error && out.output.contains("over the 16777216 bytes"),
-            "{}",
-            out.output
+        let out = read_file(&ws, read("big.log", None, None));
+        assert_eq!(
+            out.output,
+            "big.log is 16777217 bytes, over the 16777216 bytes read_file reads."
         );
         assert_eq!(
-            read_capped(&root.join("big.log"), MAX_FILE_BYTES),
-            Err(ReadRefusal::TooLarge(MAX_FILE_BYTES + 1))
+            read_capped(&root.join("big.log"), max),
+            Err(ReadRefusal::TooLarge(max + 1))
         );
-        assert!(fingerprint(&root.join("big.log")).starts_with("unreadable"));
-        let huge = "x".repeat(MAX_FILE_BYTES as usize + 1);
+        assert!(fingerprint(&root.join("big.log"), max).starts_with("unreadable"));
+        let huge = "x".repeat(max as usize + 1);
         let refused = preview_write(
             &ws,
             &WriteFileArgs {
                 path: "small.txt".into(),
                 content: huge,
             },
+            Access::Write,
         )
         .err()
         .unwrap();
@@ -870,6 +792,12 @@ pub(crate) mod tests {
         // SAFETY: a plain mkfifo(3) on a path this test owns.
         assert_eq!(unsafe { libc::mkfifo(c.as_ptr(), 0o600) }, 0);
         assert_eq!(read_capped(&fifo, 10), Err(ReadRefusal::NotAFile));
+        let ws = Workspace::new(&root, &RUNNING);
+        // Not listed, and not searched.
+        assert_eq!(
+            list_dir(&ws, ListDirArgs { path: None }).output,
+            "(. has nothing to list: it is empty or holds only ignored entries.)"
+        );
     }
 
     #[test]
@@ -877,6 +805,7 @@ pub(crate) mod tests {
         let dir = ws_files(&[
             ("src/main.rs", "fn main() {}"),
             ("README.md", "# hi"),
+            ("AGENTS.md", "Be brief."),
             (".env", "KEY=1"),
             (".git/HEAD", "ref"),
             ("target/out.bin", "x"),
@@ -887,8 +816,9 @@ pub(crate) mod tests {
         let root = canonical(&dir);
         let ws = Workspace::new(&root, &RUNNING);
         let out = list_dir(&ws, ListDirArgs { path: None });
+        // Protected entries (AGENTS.md, .matterwaveignore) are listed.
         assert_eq!(
-            out.output, "src/\n.gitignore\n.matterwaveignore\nREADME.md",
+            out.output, "src/\n.gitignore\n.matterwaveignore\nAGENTS.md\nREADME.md",
             "{}",
             out.output
         );
@@ -904,6 +834,7 @@ pub(crate) mod tests {
             ("node_modules/x/e.ts", ""),
             (".gitignore", "node_modules/\n"),
             ("keys/k.pem", ""),
+            ("top.TS", ""),
         ]);
         let root = canonical(&dir);
         let ws = Workspace::new(&root, &RUNNING);
@@ -914,7 +845,8 @@ pub(crate) mod tests {
                 path: None,
             },
         );
-        assert_eq!(names.output, "lib/c.ts\nsrc/a.ts\nsrc/deep/b.ts");
+        // Files before subdirectories in each directory, case ignored.
+        assert_eq!(names.output, "top.TS\nlib/c.ts\nsrc/a.ts\nsrc/deep/b.ts");
         let rooted = glob(
             &ws,
             GlobArgs {
@@ -938,7 +870,7 @@ pub(crate) mod tests {
                 path: None,
             },
         );
-        assert!(pem.output.starts_with("No files match"), "{}", pem.output);
+        assert_eq!(pem.output, "No files match *.pem.");
     }
 
     #[test]
@@ -983,6 +915,50 @@ pub(crate) mod tests {
             },
         );
         assert!(bad.is_error);
+        assert!(bad
+            .output
+            .starts_with("The pattern ( is not a valid regular expression: "));
+    }
+
+    /// A run whose mode the person has not confirmed for the folder reads
+    /// the credential folders and shell startup files only with a yes: the
+    /// tools refuse them by name, and a search leaves them out.
+    #[test]
+    fn a_gated_workspace_leaves_out_credential_folders_and_startup_files() {
+        let dir = ws_files(&[
+            (".aws/credentials", "aws_secret_access_key = SECRET\n"),
+            (".bashrc", "export TOKEN=SECRET\n"),
+            ("src/a.py", "SECRET = None\n"),
+            ("AGENTS.md", "Be brief.\n"),
+        ]);
+        let root = canonical(&dir);
+        let gated = Workspace::new(&root, &RUNNING).gated(true);
+        let found = grep(
+            &gated,
+            GrepArgs {
+                pattern: "SECRET".into(),
+                path: None,
+                glob: None,
+                ignore_case: None,
+            },
+        );
+        assert_eq!(found.output, "src/a.py:1: SECRET = None");
+        let refused = read_file(&gated, read(".aws/credentials", None, None));
+        assert!(refused.is_error && refused.output.starts_with("Refused: .aws/credentials"));
+        assert_eq!(
+            list_dir(&gated, ListDirArgs { path: None }).output,
+            "src/\nAGENTS.md"
+        );
+        // The context files are read as before.
+        assert_eq!(
+            read_file(&gated, read("AGENTS.md", None, None)).output,
+            "1\tBe brief."
+        );
+        let open = Workspace::new(&root, &RUNNING);
+        assert_eq!(
+            read_file(&open, read(".bashrc", None, None)).output,
+            "1\texport TOKEN=SECRET"
+        );
     }
 
     #[test]
@@ -1015,6 +991,7 @@ pub(crate) mod tests {
                 old_string: "1".into(),
                 new_string: "2".into(),
             },
+            Access::Write,
         )
         .unwrap();
         assert_eq!(preview.before.as_deref(), Some("x = 1\n"));
@@ -1023,11 +1000,14 @@ pub(crate) mod tests {
             std::fs::read_to_string(root.join("a.py")).unwrap(),
             "x = 1\n"
         );
-        assert_eq!(preview.before_sha256, fingerprint(&root.join("a.py")));
+        assert_eq!(
+            preview.before_sha256,
+            fingerprint(&root.join("a.py"), ws.limits.read_max_file_bytes)
+        );
     }
 
     #[test]
-    fn an_edit_of_a_missing_file_or_a_protected_one_is_refused() {
+    fn an_edit_of_a_missing_file_or_an_unapproved_protected_one_is_refused() {
         let dir = ws_files(&[(".matterwaveignore", "secret/\n")]);
         let root = canonical(&dir);
         let ws = Workspace::new(&root, &RUNNING);
@@ -1038,6 +1018,7 @@ pub(crate) mod tests {
                 old_string: "a".into(),
                 new_string: "b".into(),
             },
+            Access::Write,
         )
         .err()
         .unwrap();
@@ -1045,15 +1026,13 @@ pub(crate) mod tests {
             missing.output,
             "nope.py does not exist. Use write_file to create it."
         );
-        let protected = preview_write(
-            &ws,
-            &WriteFileArgs {
-                path: ".matterwaveignore".into(),
-                content: "".into(),
-            },
-        )
-        .err()
-        .unwrap();
+        let args = WriteFileArgs {
+            path: ".matterwaveignore".into(),
+            content: "".into(),
+        };
+        let protected = preview_write(&ws, &args, Access::Write).err().unwrap();
         assert!(protected.output.contains("can be read but not changed"));
+        // With the person's yes it can be previewed and applied.
+        assert!(preview_write(&ws, &args, Access::ApprovedWrite).is_ok());
     }
 }

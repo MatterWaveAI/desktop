@@ -10,7 +10,7 @@
 //! is not covered: a command can touch anything, and there is no knowing
 //! what to snapshot before it runs.
 
-use super::confine::{confine, DenyList};
+use super::confine::{confine, Access, DenyList};
 use super::tools::write_confined;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -177,7 +177,9 @@ impl Store {
             };
             let dir = self.dir.join(cid.to_string());
             for (n, entry) in checkpoint.files.iter().enumerate() {
-                let target = confine(root, &entry.relative, &deny, true)
+                // The restore was confirmed natively with this file named,
+                // which is the approval a protected path needs.
+                let target = confine(root, &entry.relative, &deny, Access::ApprovedWrite)
                     .map_err(|r| format!("checkpoint {cid}: {}", r.message))?;
                 if entry.existed {
                     // Written as the tools write (beside, then renamed over),

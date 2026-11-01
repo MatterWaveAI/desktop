@@ -111,7 +111,12 @@ async fn get_access_token(
     state: State<'_, AppState>,
     force: Option<bool>,
 ) -> Result<Option<AccessToken>, String> {
-    let mut session = loaded_session(&state).await?;
+    current_token(&state, force.unwrap_or(false)).await
+}
+
+/// `get_access_token`'s answer, for the native side's own requests too.
+async fn current_token(state: &AppState, force: bool) -> Result<Option<AccessToken>, String> {
+    let mut session = loaded_session(state).await?;
     if let Some(key) = session.api_key.clone() {
         return Ok(Some(AccessToken {
             access_token: key,
@@ -122,8 +127,8 @@ async fn get_access_token(
         return Ok(None);
     };
     let mut set = current;
-    if tokens::should_refresh(&set, now(), force.unwrap_or(false)) {
-        let refreshed = match native_client(&state).await {
+    if tokens::should_refresh(&set, now(), force) {
+        let refreshed = match native_client(state).await {
             Ok(client) => {
                 oidc::refresh(
                     &state.http,
@@ -159,6 +164,87 @@ async fn get_access_token(
         access_token: set.access_token,
         expires_at: set.expires_at,
     }))
+}
+
+/// What MatterWave says of the person's organisation and local agent tools
+/// (`/api/me`'s `local_agent_tools`), asked by the native side itself with
+/// the stored credential, so the agent host never takes the webview's word
+/// for it. One retry after a 401 with a forced refresh, as the SPA's fetch
+/// does; signed out, offline or any other answer is an error, which the
+/// host treats as a no.
+async fn org_allows_local_tools(state: &AppState) -> Result<Option<bool>, String> {
+    let url = format!("{}/api/me", base_url()?.trim_end_matches('/'));
+    let mut force = false;
+    loop {
+        let token = current_token(state, force)
+            .await?
+            .ok_or_else(|| "you are signed out".to_string())?;
+        let response = state
+            .http
+            .get(&url)
+            .bearer_auth(&token.access_token)
+            .send()
+            .await
+            .map_err(|e| format!("MatterWave could not be reached: {e}"))?;
+        let status = response.status();
+        if status == reqwest::StatusCode::UNAUTHORIZED && !force {
+            force = true;
+            continue;
+        }
+        if !status.is_success() {
+            return Err(format!("MatterWave answered {status}"));
+        }
+        let me: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| format!("MatterWave's answer could not be read: {e}"))?;
+        return Ok(agent::local_agent_tools_of(&me));
+    }
+}
+
+/// The agent host's org check: `org_allows_local_tools` on the app's state.
+fn org_check(app: AppHandle) -> agent::OrgCheck {
+    std::sync::Arc::new(move || {
+        let app = app.clone();
+        Box::pin(async move { org_allows_local_tools(&app.state::<AppState>()).await })
+    })
+}
+
+/// The page's CSP with `connect-src` narrowed to the page itself, the IPC
+/// bridge and the origin of the API the build talks to (`base`), and
+/// nothing else, so script in the page -- injected, or the model's output
+/// made script -- cannot send what it reads anywhere but MatterWave. The
+/// webview talks to nothing else: sign-in, refresh, the updater and the
+/// agent's org check are native requests, which the CSP does not govern.
+/// A build without a base keeps the page's own origin alone. Applied at
+/// launch over whatever the config says (`run`), for every build.
+pub(crate) fn pin_connect_src(csp: &str, base: Option<&str>) -> String {
+    let origin = base
+        .and_then(|b| url::Url::parse(b).ok())
+        .filter(|u| matches!(u.scheme(), "https" | "http"))
+        .map(|u| u.origin().ascii_serialization());
+    let connect = match origin {
+        Some(origin) => format!("connect-src 'self' ipc: http://ipc.localhost {origin}"),
+        None => "connect-src 'self' ipc: http://ipc.localhost".to_string(),
+    };
+    let mut seen = false;
+    let mut directives: Vec<String> = csp
+        .split(';')
+        .map(str::trim)
+        .filter(|d| !d.is_empty())
+        .map(|d| {
+            if d.split_whitespace().next() == Some("connect-src") {
+                seen = true;
+                connect.clone()
+            } else {
+                d.to_string()
+            }
+        })
+        .collect();
+    if !seen {
+        directives.push(connect);
+    }
+    directives.join("; ")
 }
 
 /// Whether `matterwave://` reaches this process. When it does not, sign-in
@@ -639,6 +725,20 @@ pub fn run() {
         pending: std::sync::Mutex::new(None),
     };
 
+    // The page may connect to the API this build talks to and nowhere else
+    // (pin_connect_src); the committed config cannot name it.
+    let mut context = tauri::generate_context!();
+    let pinned = context
+        .config()
+        .app
+        .security
+        .csp
+        .as_ref()
+        .map(|csp| pin_connect_src(&csp.to_string(), BASE_URL));
+    if let Some(pinned) = pinned {
+        context.config_mut().app.security.csp = Some(tauri::utils::config::Csp::Policy(pinned));
+    }
+
     let mut builder = tauri::Builder::default()
         // First, per the plugin's docs: a second launch (including the one a
         // deep link starts on Windows and Linux) is folded into this one.
@@ -692,11 +792,16 @@ pub fn run() {
             // directory, and it stays off until the person turns it on.
             // Its questions (each command, each write in `ask`) are native
             // dialogs, which script in the webview cannot answer.
+            // Before a run starts, the host asks MatterWave itself whether
+            // the org allows local agent tools (org_check), and every
+            // answer to a native question goes to the approval log in the
+            // data directory.
             let paths = app.path();
             app.manage(agent::AgentState::new(
                 paths.app_config_dir()?,
                 paths.app_data_dir()?,
                 agent::approval::native(app.handle().clone()),
+                org_check(app.handle().clone()),
             ));
             Ok(())
         })
@@ -735,8 +840,98 @@ pub fn run() {
             agent::agent_checkpoints,
             agent::agent_restore
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running the MatterWave desktop app");
+}
+
+/// The page's CSP: no host but the API's, in the config and at launch.
+#[cfg(test)]
+mod csp_tests {
+    use super::pin_connect_src;
+
+    fn connect_src(csp: &str) -> Vec<String> {
+        csp.split(';')
+            .map(str::trim)
+            .find(|d| d.starts_with("connect-src"))
+            .unwrap()
+            .split_whitespace()
+            .skip(1)
+            .map(str::to_string)
+            .collect()
+    }
+
+    fn committed() -> String {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        config["app"]["security"]["csp"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn the_committed_csp_names_no_remote_host() {
+        let csp = committed();
+        assert_eq!(
+            connect_src(&csp),
+            ["'self'", "ipc:", "http://ipc.localhost"]
+        );
+        for directive in csp.split(';') {
+            let sources: Vec<&str> = directive.split_whitespace().skip(1).collect();
+            assert!(
+                !sources
+                    .iter()
+                    .any(|s| matches!(*s, "https:" | "http:" | "*" | "wss:" | "ws:")),
+                "a scheme-wide source in {directive:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_csp_at_launch_adds_the_apis_origin_and_nothing_else() {
+        let csp = committed();
+        let pinned = pin_connect_src(&csp, Some("https://app.example.test/some/path"));
+        assert_eq!(
+            connect_src(&pinned),
+            [
+                "'self'",
+                "ipc:",
+                "http://ipc.localhost",
+                "https://app.example.test"
+            ]
+        );
+        // Every other directive is as committed.
+        let others = |c: &str| -> Vec<String> {
+            c.split(';')
+                .map(|d| d.trim().to_string())
+                .filter(|d| !d.is_empty() && !d.starts_with("connect-src"))
+                .collect()
+        };
+        assert_eq!(others(&pinned), others(&csp));
+        // A config that still allows any https host is narrowed too.
+        let wide = "default-src 'self'; connect-src 'self' https: ipc: http://ipc.localhost";
+        assert_eq!(
+            connect_src(&pin_connect_src(wide, Some("http://127.0.0.1:8000"))),
+            [
+                "'self'",
+                "ipc:",
+                "http://ipc.localhost",
+                "http://127.0.0.1:8000"
+            ]
+        );
+        // No base, or one that is not a web origin: the page's own alone.
+        for base in [None, Some("file:///etc"), Some("not a url")] {
+            assert_eq!(
+                connect_src(&pin_connect_src(wide, base)),
+                ["'self'", "ipc:", "http://ipc.localhost"]
+            );
+        }
+        let none = "default-src 'self'";
+        assert_eq!(
+            connect_src(&pin_connect_src(none, Some("https://a.test"))),
+            ["'self'", "ipc:", "http://ipc.localhost", "https://a.test"]
+        );
+    }
 }
 
 /// The sign-in flow against a fake issuer: discovery through

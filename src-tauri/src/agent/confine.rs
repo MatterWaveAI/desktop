@@ -2,17 +2,21 @@
 //!
 //! A port of the SDKs' `confine` (Python `matterwave_sdk.agent.confine`,
 //! TypeScript `src/agent/confine.ts`), run against the same conformance
-//! cases (`agent/conformance.json`). Every path the webview sends is
-//! resolved against the workspace root here, never trusted as given:
+//! cases (`agent/contract.json`'s `conformance.paths` and
+//! `agent/conformance.json`). Every path the webview sends is resolved
+//! against the workspace root here, never trusted as given:
 //!
 //! - an empty path, and a path with a `..` segment, are refused outright;
+//! - so, on every platform, is a name Windows would read as another file
+//!   or a device (`windows_alias`);
 //! - an absolute path is allowed only when it lies under the root;
 //! - links (symbolic links, and junctions on Windows) are followed, and
 //!   the place they lead must still be under the root;
 //! - the deny list (the contract's defaults plus `.matterwaveignore`)
 //!   refuses a path by its own name or by where its links lead, for
-//!   reading as well as writing;
-//! - a write also refuses the protected paths, which can be read only.
+//!   reading as well as writing, ignoring case;
+//! - a write also refuses the protected paths unless the person approved
+//!   it in the native dialog.
 //!
 //! Confinement is not a sandbox: it keeps the file tools inside the root,
 //! and `run_shell` can reach anything the user can, which is why commands
@@ -134,7 +138,8 @@ fn compile(pattern: &str) -> Option<Pattern> {
 
 /// Patterns a path may not match: the contract's defaults plus the
 /// workspace's `.matterwaveignore` lines. The syntax is the contract's
-/// `pattern_syntax`, a subset of .gitignore's without negation.
+/// `pattern_syntax`, a subset of .gitignore's without negation; matching
+/// ignores case. The protected list is matched the same way.
 pub(crate) struct DenyList {
     compiled: Vec<Pattern>,
 }
@@ -157,8 +162,8 @@ impl DenyList {
 
     /// The defaults plus `<root>/.matterwaveignore`, when there is one.
     pub fn load(root: &Path) -> Self {
-        match std::fs::read_to_string(root.join(DENY_FILE)) {
-            Ok(text) => Self::with_ignore_file(&text),
+        match std::fs::read(root.join(DENY_FILE)) {
+            Ok(bytes) => Self::with_ignore_file(&String::from_utf8_lossy(&bytes)),
             Err(_) => Self::defaults(),
         }
     }
@@ -197,6 +202,12 @@ impl DenyList {
     }
 }
 
+/// Whether `relative` (to the root, `/`-separated) is protected, so a write
+/// to it asks the person first in every mode that writes.
+pub(crate) fn is_protected(relative: &str, is_dir: bool) -> bool {
+    DenyList::protected().matches(relative, is_dir)
+}
+
 /// Absolute on any platform: a leading `/` or `\`, or a drive letter, so a
 /// Windows path is not taken for a relative one on POSIX, nor `/etc` for a
 /// relative one on Windows.
@@ -205,6 +216,80 @@ pub(crate) fn is_absolute_any(path: &str) -> bool {
     path.starts_with('/')
         || path.starts_with('\\')
         || (b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':')
+}
+
+/// The refusal for a path Windows could read as something other than the
+/// file it seems to name, or `None`; the SDKs' `windows_alias`, applied on
+/// every platform so the clients agree on what they refuse:
+///
+/// - `unc` for a path whose first two characters are both separators
+///   (`\\server\share`, `\\?\C:\x`, `\\.\pipe\x`, `//server/x`) or that
+///   starts `\??\`;
+/// - then, after a leading drive (`C:` followed by a separator or the end),
+///   name by name: `stream` for a `:` (an alternate data stream such as
+///   `key.pem:x`, which writes data no listing, diff or git shows, or a
+///   drive-relative `C:foo`), `trailing` for a name that ends in a dot or a
+///   space (Windows drops them: `key.pem.` is `key.pem`), and `device` for
+///   CON, PRN, AUX, NUL, COM1-9, LPT1-9, CONIN$ or CONOUT$ (any case, the
+///   superscript digits too, with or without an extension).
+///
+/// Each is a way for the path the person approved to differ from the one
+/// touched.
+pub(crate) fn windows_alias(path: &str) -> Option<Refusal> {
+    let mut chars = path.chars();
+    let separator = |c: Option<char>| matches!(c, Some('\\' | '/'));
+    if separator(chars.next()) && separator(chars.next()) {
+        return Some(Refusal::Unc);
+    }
+    if path.starts_with("\\??\\") || path.starts_with("/??/") {
+        return Some(Refusal::Unc);
+    }
+    let b = path.as_bytes();
+    let rest = if b.len() >= 2
+        && b[0].is_ascii_alphabetic()
+        && b[1] == b':'
+        && matches!(b.get(2), None | Some(b'\\' | b'/'))
+    {
+        &path[2..]
+    } else {
+        path
+    };
+    for name in rest.split(['\\', '/']) {
+        if name.is_empty() || name == "." {
+            continue;
+        }
+        if name.contains(':') {
+            return Some(Refusal::Stream);
+        }
+        if name.ends_with('.') || name.ends_with(' ') {
+            return Some(Refusal::Trailing);
+        }
+        let stem = name.split('.').next().unwrap_or("").trim_end_matches(' ');
+        if is_device(stem) {
+            return Some(Refusal::Device);
+        }
+    }
+    None
+}
+
+/// CON, PRN, AUX, NUL, COM1-9, LPT1-9 (¹ ² ³ too), CONIN$, CONOUT$, any case.
+fn is_device(stem: &str) -> bool {
+    let upper = stem.to_uppercase();
+    if matches!(
+        upper.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+    ) {
+        return true;
+    }
+    ["COM", "LPT"].iter().any(|prefix| {
+        upper.strip_prefix(prefix).is_some_and(|digit| {
+            let mut d = digit.chars();
+            matches!(
+                (d.next(), d.next()),
+                (Some('1'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
+            )
+        })
+    })
 }
 
 /// `\\?\C:\x` -> `C:\x`, `\\?\UNC\host\share` -> `\\host\share`: what
@@ -332,67 +417,51 @@ pub(crate) fn relative_to(child: &Path, parent: &Path) -> String {
         .to_string()
 }
 
-/// The device names Windows reserves in every folder, with or without an
-/// extension (`nul`, `con.txt`, `COM1.log`).
-const WINDOWS_DEVICES: &[&str] = &["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$", "CLOCK$"];
-
-/// Whether Windows would store `segment` as something other than the file
-/// it names: an alternate data stream (`a.txt:s`, which writes data no
-/// listing, diff or git shows, or rewrites a download's
-/// `:Zone.Identifier`), a device (`NUL`, `com1.txt`), or a name ending in a
-/// dot or a space, which Windows drops (`key.pem.` is `key.pem`). Each is a
-/// way for the path the person approved to differ from the one touched.
-pub(crate) fn windows_unsafe_segment(segment: &str) -> bool {
-    if segment.contains(':') {
-        return true;
-    }
-    if segment != "." && (segment.ends_with('.') || segment.ends_with(' ')) {
-        return true;
-    }
-    let stem = segment
-        .split('.')
-        .next()
-        .unwrap_or("")
-        .trim_end_matches(' ')
-        .to_ascii_uppercase();
-    if WINDOWS_DEVICES.contains(&stem.as_str()) {
-        return true;
-    }
-    let numbered = |prefix: &str| {
-        stem.strip_prefix(prefix).is_some_and(|rest| {
-            let mut chars = rest.chars();
-            matches!(
-                (chars.next(), chars.next()),
-                (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
-            )
-        })
-    };
-    numbered("COM") || numbered("LPT")
-}
-
-fn has_windows_unsafe_segment(relative: &str) -> bool {
-    relative
-        .split(['/', '\\'])
-        .filter(|s| !s.is_empty())
-        .any(windows_unsafe_segment)
+/// What a path is confined for: a read, a write, or a write the person has
+/// approved in the native dialog. Only the last reaches a protected path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Access {
+    Read,
+    Write,
+    ApprovedWrite,
 }
 
 /// Where a tool's path really leads: `absolute`, with every link followed,
 /// and `relative`, the same place relative to the resolved root (`.` for
-/// the root itself).
+/// the root itself). `lexical` is the path as given, relative to the root
+/// before any link is followed (`.` for the root), which a check by name
+/// (the protected list, the read gate) looks at as well as `relative`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Confined {
     pub absolute: PathBuf,
     pub relative: String,
+    pub lexical: String,
+}
+
+impl Confined {
+    /// Whether `list` matches this path by its own name or by where its
+    /// links lead.
+    pub fn matched_by(&self, list: &DenyList) -> bool {
+        let is_dir = self.absolute.is_dir();
+        [&self.lexical, &self.relative]
+            .into_iter()
+            .any(|rel| rel != "." && list.matches(rel, is_dir))
+    }
 }
 
 /// Where `path` leads inside `root`, or the refusal. `deny` is the root's
-/// deny list (`DenyList::load`); `write` also refuses the protected paths.
+/// deny list (`DenyList::load`). A write also refuses the protected paths
+/// unless the person approved it (`Access::ApprovedWrite`).
+///
+/// In order, as the SDKs check: an empty path, a NUL, a `..` segment, a
+/// Windows alias (`windows_alias`), then the path against the root, its
+/// links, the deny list and, for a write, the protected list. No I/O or
+/// path error escapes as anything but a refusal.
 pub(crate) fn confine(
     root: &Path,
     path: &str,
     deny: &DenyList,
-    write: bool,
+    access: Access,
 ) -> Result<Confined, PathRefused> {
     if path.trim().is_empty() {
         return Err(PathRefused::new(Refusal::Empty, path));
@@ -402,6 +471,9 @@ pub(crate) fn confine(
     }
     if path.split(['/', '\\']).any(|segment| segment == "..") {
         return Err(PathRefused::new(Refusal::Parent, path));
+    }
+    if let Some(alias) = windows_alias(path) {
+        return Err(PathRefused::new(alias, path));
     }
     let outside = || PathRefused::new(Refusal::Outside, path);
 
@@ -433,20 +505,17 @@ pub(crate) fn confine(
         (lexical, rel)
     };
 
-    // Before anything is resolved: Windows would resolve these to a
-    // stream, a device or another name, and the answer would say so less
-    // plainly.
-    if cfg!(windows) && has_windows_unsafe_segment(&lexical_rel) {
-        return Err(PathRefused::new(Refusal::WindowsName, path));
-    }
-
     let real = resolve_links(&lexical).map_err(|_| PathRefused::new(Refusal::Symlink, path))?;
     if !within(&real, &real_root) {
         return Err(PathRefused::new(Refusal::Symlink, path));
     }
     let real_rel = relative_to(&real, &real_root);
-    if cfg!(windows) && has_windows_unsafe_segment(&real_rel) {
-        return Err(PathRefused::new(Refusal::WindowsName, path));
+    // The host's own, beyond the SDKs': on Windows the place a link leads
+    // is held to the same rule as the path given.
+    if cfg!(windows) {
+        if let Some(alias) = windows_alias(&real_rel) {
+            return Err(PathRefused::new(alias, path));
+        }
     }
 
     let is_dir = real.is_dir();
@@ -455,7 +524,7 @@ pub(crate) fn confine(
             return Err(PathRefused::new(Refusal::Denied, path));
         }
     }
-    if write {
+    if access == Access::Write {
         let protected = DenyList::protected();
         for rel in [&lexical_rel, &real_rel] {
             if !rel.is_empty() && protected.matches(rel, is_dir) {
@@ -463,13 +532,11 @@ pub(crate) fn confine(
             }
         }
     }
+    let dot = |rel: String| if rel.is_empty() { ".".to_string() } else { rel };
     Ok(Confined {
         absolute: real,
-        relative: if real_rel.is_empty() {
-            ".".to_string()
-        } else {
-            real_rel
-        },
+        relative: dot(real_rel),
+        lexical: dot(lexical_rel),
     })
 }
 
@@ -480,6 +547,7 @@ pub(crate) mod tests {
 
     pub(crate) const CONFORMANCE: &str = include_str!("../../agent/conformance.json");
 
+    /// The SDKs' helper conformance file (`tests/agent_conformance.json`).
     pub(crate) fn conformance() -> Value {
         serde_json::from_str(CONFORMANCE).expect("agent/conformance.json parses")
     }
@@ -524,8 +592,12 @@ pub(crate) mod tests {
         let deny = DenyList::load(root);
         for case in c["confinement"]["cases"].as_array().unwrap() {
             let path = case["path"].as_str().unwrap();
-            let write = case["write"].as_bool().unwrap_or(false);
-            let got = confine(root, path, &deny, write);
+            let access = if case["write"].as_bool().unwrap_or(false) {
+                Access::Write
+            } else {
+                Access::Read
+            };
+            let got = confine(root, path, &deny, access);
             match case["refused"].as_str() {
                 Some(code) => {
                     let err = got.expect_err(path);
@@ -543,11 +615,56 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn the_protected_list_is_the_contracts_with_its_home_folder_entries() {
+        for (path, is_dir) in [
+            (".matterwaveignore", false),
+            (".matterwave/settings.json", false),
+            ("AGENTS.md", false),
+            ("docs/agents.md", false),
+            ("MATTERWAVE.local.md", false),
+            (".bashrc", false),
+            (".zprofile", false),
+            (".ssh/config", false),
+            (".ssh", true),
+            ("me/.aws/credentials", false),
+            (".config/matterwave/settings.json", false),
+            ("home/me/.config/matterwave", true),
+        ] {
+            assert!(is_protected(path, is_dir), "{path}");
+        }
+        for (path, is_dir) in [
+            ("src/app.py", false),
+            (".matterwave", false),
+            (".ssh", false),
+            ("bashrc", false),
+            (".config/other/x", false),
+            ("AGENTS.md.bak", false),
+        ] {
+            assert!(!is_protected(path, is_dir), "{path}");
+        }
+    }
+
+    #[test]
+    fn an_approved_write_reaches_a_protected_path_and_an_unapproved_one_does_not() {
+        let ws = tempfile::tempdir().unwrap();
+        std::fs::write(ws.path().join("AGENTS.md"), "Be brief.\n").unwrap();
+        let deny = DenyList::load(ws.path());
+        let err = confine(ws.path(), "AGENTS.md", &deny, Access::Write).unwrap_err();
+        assert_eq!(err.reason, Refusal::Protected);
+        let ok = confine(ws.path(), "AGENTS.md", &deny, Access::ApprovedWrite).unwrap();
+        assert_eq!(ok.relative, "AGENTS.md");
+        assert!(confine(ws.path(), "AGENTS.md", &deny, Access::Read).is_ok());
+        // An approval never reaches past the deny list.
+        let err = confine(ws.path(), ".env", &deny, Access::ApprovedWrite).unwrap_err();
+        assert_eq!(err.reason, Refusal::Denied);
+    }
+
+    #[test]
     fn dot_dot_is_refused_in_any_spelling() {
         let ws = tempfile::tempdir().unwrap();
         let deny = DenyList::defaults();
         for path in ["..", "../x", "a/../../x", r"a\..\..\x", "a/..", "./../x"] {
-            let err = confine(ws.path(), path, &deny, false).unwrap_err();
+            let err = confine(ws.path(), path, &deny, Access::Read).unwrap_err();
             assert_eq!(err.reason, Refusal::Parent, "{path}");
         }
     }
@@ -562,12 +679,12 @@ pub(crate) mod tests {
         let deny = DenyList::defaults();
 
         let outside = outer.path().join("secret.txt");
-        let err = confine(&root, &outside.to_string_lossy(), &deny, false).unwrap_err();
+        let err = confine(&root, &outside.to_string_lossy(), &deny, Access::Read).unwrap_err();
         assert_eq!(err.reason, Refusal::Outside);
         // A sibling whose name starts with the root's is still outside.
         std::fs::create_dir_all(outer.path().join("ws-other")).unwrap();
         let sibling = outer.path().join("ws-other");
-        let err = confine(&root, &sibling.to_string_lossy(), &deny, false).unwrap_err();
+        let err = confine(&root, &sibling.to_string_lossy(), &deny, Access::Read).unwrap_err();
         assert_eq!(err.reason, Refusal::Outside);
         let system = if cfg!(windows) {
             r"C:\Windows\win.ini"
@@ -575,18 +692,20 @@ pub(crate) mod tests {
             "/etc/passwd"
         };
         assert_eq!(
-            confine(&root, system, &deny, false).unwrap_err().reason,
+            confine(&root, system, &deny, Access::Read)
+                .unwrap_err()
+                .reason,
             Refusal::Outside
         );
 
         let inside = root.join("src").join("a.txt");
-        let ok = confine(&root, &inside.to_string_lossy(), &deny, false).unwrap();
+        let ok = confine(&root, &inside.to_string_lossy(), &deny, Access::Read).unwrap();
         assert_eq!(ok.relative, "src/a.txt");
         // Rooted without a drive, on Windows: the root's own drive.
         if cfg!(windows) {
             let real = resolve_links(&inside).unwrap();
             let rooted = real.to_string_lossy()[2..].to_string();
-            let ok = confine(&root, &rooted, &deny, false).unwrap();
+            let ok = confine(&root, &rooted, &deny, Access::Read).unwrap();
             assert_eq!(ok.relative, "src/a.txt", "{rooted}");
         }
     }
@@ -596,13 +715,13 @@ pub(crate) mod tests {
         let ws = tempfile::tempdir().unwrap();
         std::fs::write(ws.path().join(".env"), "KEY=1").unwrap();
         let deny = DenyList::load(ws.path());
-        for (path, write) in [
-            (".env", false),
-            (".env", true),
-            (".env.local", true),
-            ("app/.env", false),
+        for (path, access) in [
+            (".env", Access::Read),
+            (".env", Access::Write),
+            (".env.local", Access::Write),
+            ("app/.env", Access::Read),
         ] {
-            let err = confine(ws.path(), path, &deny, write).unwrap_err();
+            let err = confine(ws.path(), path, &deny, access).unwrap_err();
             assert_eq!(err.reason, Refusal::Denied, "{path}");
         }
     }
@@ -611,7 +730,7 @@ pub(crate) mod tests {
     /// needs Developer Mode or the privilege for a symbolic link, so a
     /// directory junction stands in there, which is the link a Windows
     /// user's tooling makes anyway.
-    fn link_dir(target: &Path, link: &Path) -> Result<(), String> {
+    pub(crate) fn link_dir(target: &Path, link: &Path) -> Result<(), String> {
         #[cfg(unix)]
         {
             std::os::unix::fs::symlink(target, link).map_err(|e| e.to_string())
@@ -649,12 +768,12 @@ pub(crate) mod tests {
             return;
         }
         let deny = DenyList::defaults();
-        for (path, write) in [
-            ("escape/secret.txt", false),
-            ("escape/new.txt", true),
-            ("escape", false),
+        for (path, access) in [
+            ("escape/secret.txt", Access::Read),
+            ("escape/new.txt", Access::Write),
+            ("escape", Access::Read),
         ] {
-            let err = confine(&root, path, &deny, write).unwrap_err();
+            let err = confine(&root, path, &deny, access).unwrap_err();
             assert_eq!(err.reason, Refusal::Symlink, "{path}");
         }
     }
@@ -672,11 +791,31 @@ pub(crate) mod tests {
         }
         link_dir(&root.join(".git"), &root.join("gitlink")).unwrap();
         let deny = DenyList::defaults();
-        let ok = confine(root, "alias/a.txt", &deny, false).unwrap();
+        let ok = confine(root, "alias/a.txt", &deny, Access::Read).unwrap();
         assert_eq!(ok.relative, "real/a.txt");
+        assert_eq!(ok.lexical, "alias/a.txt");
         // Denied by where it leads, not by its own name.
-        let err = confine(root, "gitlink", &deny, false).unwrap_err();
+        let err = confine(root, "gitlink", &deny, Access::Read).unwrap_err();
         assert_eq!(err.reason, Refusal::Denied);
+    }
+
+    /// A link with an innocent name that leads to a protected path is
+    /// protected for writing too.
+    #[test]
+    fn a_link_to_a_protected_path_is_protected_by_where_it_leads() {
+        let ws = tempfile::tempdir().unwrap();
+        let root = ws.path();
+        std::fs::create_dir_all(root.join(".ssh")).unwrap();
+        std::fs::write(root.join(".ssh/config"), "Host x\n").unwrap();
+        if let Err(why) = link_dir(&root.join(".ssh"), &root.join("plain")) {
+            eprintln!("skipped: cannot make a directory link here ({why})");
+            return;
+        }
+        let deny = DenyList::defaults();
+        let err = confine(root, "plain/config", &deny, Access::Write).unwrap_err();
+        assert_eq!(err.reason, Refusal::Protected);
+        let read = confine(root, "plain/config", &deny, Access::Read).unwrap();
+        assert!(read.matched_by(&DenyList::protected()));
     }
 
     #[cfg(unix)]
@@ -686,76 +825,93 @@ pub(crate) mod tests {
         let root = outer.path().join("ws");
         std::fs::create_dir_all(&root).unwrap();
         std::os::unix::fs::symlink(outer.path().join("not-yet"), root.join("out.txt")).unwrap();
-        let err = confine(&root, "out.txt", &DenyList::defaults(), true).unwrap_err();
+        let err = confine(&root, "out.txt", &DenyList::defaults(), Access::Write).unwrap_err();
         assert_eq!(err.reason, Refusal::Symlink);
     }
 
     #[test]
-    fn windows_names_that_are_not_plain_files_are_spotted() {
-        for s in [
-            "a.txt:s",
-            "a.txt::$DATA",
-            "f:Zone.Identifier",
-            "nul",
-            "NUL.txt",
-            "con",
-            "Com1",
-            "lpt9.log",
-            "COM\u{b9}",
-            "CONIN$",
-            "aux .py",
-            "key.pem.",
-            "key.pem ",
-            "dir.",
+    fn windows_aliases_are_spotted_and_look_alikes_pass() {
+        for (path, code) in [
+            ("a.txt:s", Refusal::Stream),
+            ("a.txt::$DATA", Refusal::Stream),
+            ("f:Zone.Identifier", Refusal::Stream),
+            ("C:foo", Refusal::Stream),
+            ("nul", Refusal::Device),
+            ("NUL.txt", Refusal::Device),
+            ("Com1", Refusal::Device),
+            ("lpt9.log", Refusal::Device),
+            ("COM\u{b9}", Refusal::Device),
+            ("CONIN$", Refusal::Device),
+            ("aux .py", Refusal::Device),
+            ("src/con.h", Refusal::Device),
+            ("key.pem.", Refusal::Trailing),
+            ("key.pem ", Refusal::Trailing),
+            ("dir./x.txt", Refusal::Trailing),
+            ("...", Refusal::Trailing),
+            (r"\\server\share", Refusal::Unc),
+            (r"\\?\C:\x", Refusal::Unc),
+            (r"\\.\pipe\x", Refusal::Unc),
+            ("//server/x", Refusal::Unc),
+            (r"\??\C:\x", Refusal::Unc),
+            (r"/\server\x", Refusal::Unc),
         ] {
-            assert!(windows_unsafe_segment(s), "{s}");
+            assert_eq!(windows_alias(path), Some(code), "{path}");
         }
-        for s in [
+        for path in [
             "a.txt",
             ".env",
             "console.log",
             "nullable.rs",
             "com10",
+            "lpt0.txt",
             "lpt",
             ".",
+            "./src/x",
             "auxiliary.py",
             "conf",
+            "clock$",
             ".gitignore",
+            r"C:\Users\me\x.txt",
+            "C:",
+            "/etc/passwd",
+            r"\Users\me",
         ] {
-            assert!(!windows_unsafe_segment(s), "{s}");
+            assert_eq!(windows_alias(path), None, "{path}");
         }
     }
 
-    /// Attack (Windows): alternate data streams, device names, and names
-    /// Windows silently shortens -- each a path whose approval would name
-    /// one thing while another is touched. Refused before anything is
-    /// resolved.
-    #[cfg(windows)]
+    /// Attack: alternate data streams, device names, and names Windows
+    /// silently shortens -- each a path whose approval would name one thing
+    /// while another is touched. Refused before anything is resolved, on
+    /// every platform.
     #[test]
-    fn streams_devices_and_dropped_dots_are_refused_on_windows() {
+    fn streams_devices_and_dropped_dots_are_refused() {
         let ws = tempfile::tempdir().unwrap();
         let root = resolve_links(ws.path()).unwrap();
         std::fs::write(root.join("notes.txt"), "n").unwrap();
         std::fs::write(root.join("key.pem"), "PEM").unwrap();
         let deny = DenyList::load(&root);
-        for (path, write) in [
-            ("notes.txt:hidden", true),
-            ("notes.txt:hidden", false),
-            ("download.exe:Zone.Identifier", true),
-            ("key.pem::$DATA", false),
-            ("notes.txt::$DATA", false),
-            ("NUL", true),
-            ("con.txt", false),
-            ("aux.py", true),
-            ("sub/COM1", true),
-            ("secrets.pem.", true),
-            ("new.txt ", true),
-            ("dir./x.txt", true),
+        for (path, access, code) in [
+            ("notes.txt:hidden", Access::Write, Refusal::Stream),
+            ("notes.txt:hidden", Access::Read, Refusal::Stream),
+            (
+                "download.exe:Zone.Identifier",
+                Access::Write,
+                Refusal::Stream,
+            ),
+            ("key.pem::$DATA", Access::Read, Refusal::Stream),
+            ("NUL", Access::Write, Refusal::Device),
+            ("con.txt", Access::Read, Refusal::Device),
+            ("aux.py", Access::ApprovedWrite, Refusal::Device),
+            ("sub/COM1", Access::Write, Refusal::Device),
+            ("secrets.pem.", Access::Write, Refusal::Trailing),
+            ("new.txt ", Access::Write, Refusal::Trailing),
+            ("dir./x.txt", Access::Write, Refusal::Trailing),
         ] {
-            let err = confine(&root, path, &deny, write).unwrap_err();
-            assert_eq!(err.reason, Refusal::WindowsName, "{path}");
+            let err = confine(&root, path, &deny, access).unwrap_err();
+            assert_eq!(err.reason, code, "{path}");
         }
-        assert!(confine(&root, "notes.txt", &deny, true).is_ok());
+        assert!(confine(&root, "notes.txt", &deny, Access::Write).is_ok());
     }
 
     /// Attack (Windows): the deny list matched in another case, through an
@@ -778,7 +934,7 @@ pub(crate) mod tests {
             ".GIT/config",
             ".Git\\CONFIG",
         ] {
-            let err = confine(&root, path, &deny, false).unwrap_err();
+            let err = confine(&root, path, &deny, Access::Read).unwrap_err();
             assert_eq!(err.reason, Refusal::Denied, "{path}");
         }
         // The short names Windows gave the files, when it gives them.
@@ -794,7 +950,7 @@ pub(crate) mod tests {
         for name in [".env.production", ".git"] {
             match short(name) {
                 Some(s) => {
-                    let err = confine(&root, &s, &deny, false).unwrap_err();
+                    let err = confine(&root, &s, &deny, Access::Read).unwrap_err();
                     assert_eq!(err.reason, Refusal::Denied, "{name} as {s}");
                 }
                 None => eprintln!("skipped: no 8.3 name for {name} on this volume"),
@@ -807,13 +963,15 @@ pub(crate) mod tests {
             format!("\\\\localhost\\C$\\{}\\notes.txt", &r[3..]),
             format!("//?/{}/notes.txt", r.replace('\\', "/")),
         ] {
-            let err = confine(&root, &path, &deny, false).unwrap_err();
-            assert_eq!(err.reason, Refusal::Outside, "{path}");
+            let err = confine(&root, &path, &deny, Access::Read).unwrap_err();
+            assert_eq!(err.reason, Refusal::Unc, "{path}");
         }
         // The same path in another case is the same file.
         let upper = format!("{}\\NOTES.TXT", r.to_uppercase());
         assert_eq!(
-            confine(&root, &upper, &deny, false).unwrap().relative,
+            confine(&root, &upper, &deny, Access::Read)
+                .unwrap()
+                .relative,
             "notes.txt"
         );
     }

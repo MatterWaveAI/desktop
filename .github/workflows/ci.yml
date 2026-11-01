@@ -31,6 +31,22 @@ jobs:
       - run: pnpm exec tsc --noEmit
       - run: pnpm vitest run
       - run: pnpm build
+      # The SPA's copy of the SDK's agent helpers against the SDK itself
+      # (sdk.test.ts): informative, since the SDK's develop can be ahead of
+      # or behind the contract this branch carries.
+      - name: Check out the TypeScript SDK
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: MatterWaveAI/typescript-sdk
+          ref: develop
+          path: typescript-sdk
+      - name: The vendored agent helpers match the TypeScript SDK
+        continue-on-error: true
+        if: hashFiles('typescript-sdk/src/agent/contract.ts') != ''
+        run: pnpm vitest run src/apps/agent/sdk.test.ts
+        env:
+          MATTERWAVE_TS_SDK: ${{ github.workspace }}/typescript-sdk
 
   rust:
     name: Rust (fmt, clippy, tests)
@@ -38,14 +54,16 @@ jobs:
     defaults:
       run:
         working-directory: src-tauri
-    env:
+    steps:
+      - uses: actions/checkout@v4
       # Build out of tree. Windows Application Control refuses to run
       # freshly built executables under the repo path (os error 4551); a
       # target directory in the runner's temp works everywhere and keeps
-      # the checkout clean. See README.md, "Develop".
-      CARGO_TARGET_DIR: ${{ runner.temp }}/cargo-target
-    steps:
-      - uses: actions/checkout@v4
+      # the checkout clean. See README.md, "Develop". Set from a step: the
+      # runner context does not exist at job level, and a job-level
+      # `runner.temp` makes GitHub reject the whole workflow.
+      - name: Build out of tree
+        run: echo "CARGO_TARGET_DIR=$RUNNER_TEMP/cargo-target" >> "$GITHUB_ENV"
       - name: Install Tauri's Linux build dependencies
         run: |
           sudo apt-get update
@@ -53,6 +71,44 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets
       - run: cargo test
+      # The host's copies of the contract and the shared conformance cases
+      # against the Python SDK, their source (contract.rs's parity tests).
+      # Informative: the SDK's develop moves on its own schedule.
+      - name: Check out the Python SDK
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: MatterWaveAI/python-sdk
+          ref: develop
+          path: python-sdk
+      - name: The agent contract copies match the Python SDK
+        continue-on-error: true
+        if: hashFiles('python-sdk/src/matterwave_sdk/agent/contract.json') != ''
+        run: cargo test matches_the_python_sdks -- --nocapture
+        env:
+          MATTERWAVE_AGENT_CONTRACT: ${{ github.workspace }}/python-sdk/src/matterwave_sdk/agent/contract.json
+          MATTERWAVE_AGENT_CONFORMANCE: ${{ github.workspace }}/python-sdk/tests/agent_conformance.json
+
+  agent-host:
+    # The agent tool host's own suite where its platform code differs:
+    # Windows (the job object and suspended start, junctions, streams,
+    # device names, 8.3 names, the approval log's DACL) and macOS (the
+    # process group, case-insensitive paths). Linux runs it in the rust job.
+    name: Agent host tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build out of tree
+        shell: bash
+        run: echo "CARGO_TARGET_DIR=$RUNNER_TEMP/cargo-target" >> "$GITHUB_ENV"
+      - run: cargo test agent
 
   tauri-build:
     name: Tauri build (${{ matrix.os }})

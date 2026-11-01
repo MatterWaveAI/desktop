@@ -18,6 +18,16 @@
 //! - **Unix**: a process group (`setpgid(0, 0)` at spawn), killed with
 //!   `SIGKILL` to the group. A process that calls `setsid` to leave the
 //!   group escapes it; that is a daemon, and confinement is not a sandbox.
+//! - **Linux**, besides, best effort: when the app runs in a cgroup v2 the
+//!   person owns (a systemd user session delegates one to each app), the
+//!   command starts in a cgroup of its own under it, joined in the child
+//!   before `exec`, and Stop writes `cgroup.kill`, which ends every process
+//!   in it, `setsid` or double fork included. Where the cgroup cannot be
+//!   made (no delegation, cgroup v1, a container) the process group is all
+//!   there is. A child subreaper (`PR_SET_CHILD_SUBREAPER`) is not used: it
+//!   would adopt every detached process the app starts, the browser opened
+//!   for sign-in among them, and still could not tell one run's from
+//!   another's.
 //!
 //! When the command exits on its own the rest of its tree is ended too:
 //! a background process it left behind would keep the pipes open and run
@@ -30,6 +40,8 @@
 //! a key the person exported for the SDK. That is hygiene, not a wall: a
 //! command runs as the person and can read their keychain too.
 
+use super::output::{format_shell, format_shell_parts, Limits, ShellEnd};
+use std::collections::VecDeque;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -48,8 +60,10 @@ pub(crate) enum Ended {
 #[derive(Debug)]
 pub(crate) struct ShellResult {
     pub ended: Ended,
-    /// stdout and stderr together, in arrival order, up to the cap.
-    pub output: String,
+    /// stdout and stderr together, in arrival order: the first `cap` bytes.
+    pub head: Vec<u8>,
+    /// The last `cap` bytes, for output longer than the cap (else empty).
+    pub tail: Vec<u8>,
     /// Bytes the command wrote in all, kept or not.
     pub total_bytes: usize,
 }
@@ -59,42 +73,53 @@ impl ShellResult {
         self.total_bytes > cap
     }
 
-    /// The tool result the model reads.
+    /// The tool result the model reads, as the contract's `outputs.shell`
+    /// spells it: the status line, then the output, its middle cut out
+    /// past `cap` with the marker counting the bytes left out.
     pub fn render(&self, cap: usize, timeout: Duration) -> String {
-        let head = match self.ended {
-            Ended::Exited(Some(code)) => format!("Exit code: {code}"),
-            Ended::Exited(None) => "Exit code: none (the process was ended by a signal)".into(),
-            Ended::TimedOut => format!(
-                "Stopped after {} s: the command ran past its timeout, and it and its child processes were ended.",
-                timeout.as_secs()
-            ),
-            Ended::Stopped => {
-                "Stopped by the user: the command and its child processes were ended.".into()
-            }
+        let end = match self.ended {
+            Ended::Exited(code) => ShellEnd::Exited(code),
+            Ended::TimedOut => ShellEnd::TimedOut(timeout.as_secs()),
+            Ended::Stopped => ShellEnd::Stopped,
         };
-        let mut out = head;
-        out.push('\n');
-        if self.output.is_empty() {
-            out.push_str("(no output)");
-        } else {
-            out.push_str(&self.output);
+        let limits = Limits {
+            shell_output_max_bytes: cap,
+            ..Limits::default()
+        };
+        if !self.truncated(cap) {
+            return format_shell(&String::from_utf8_lossy(&self.head), end, &limits);
         }
-        if self.truncated(cap) {
-            out.push_str(&format!(
-                "\n[Output cut off at {cap} bytes; the command wrote {} bytes in all.]",
-                self.total_bytes
-            ));
-        }
-        out
+        format_shell_parts(
+            end,
+            &String::from_utf8_lossy(&self.head),
+            &String::from_utf8_lossy(&self.tail),
+            self.total_bytes,
+            &limits,
+        )
     }
 }
 
-/// The command's output, kept up to `cap` bytes; the rest is read and
-/// counted but dropped, so a chatty command never blocks on a full pipe.
+/// The command's output as it is kept: its first `cap` bytes and its last
+/// `cap` bytes; the rest is read and counted but dropped, so a chatty
+/// command never blocks on a full pipe and memory stays bounded.
 struct Capped {
-    kept: Vec<u8>,
+    head: Vec<u8>,
+    tail: VecDeque<u8>,
     total: usize,
     cap: usize,
+}
+
+impl Capped {
+    fn take(&mut self, chunk: &[u8]) {
+        self.total += chunk.len();
+        let room = self.cap.saturating_sub(self.head.len());
+        self.head.extend_from_slice(&chunk[..room.min(chunk.len())]);
+        self.tail.extend(chunk.iter().copied());
+        if self.tail.len() > self.cap {
+            let extra = self.tail.len() - self.cap;
+            self.tail.drain(..extra);
+        }
+    }
 }
 
 async fn drain(mut pipe: impl tokio::io::AsyncRead + Unpin, sink: Arc<Mutex<Capped>>) {
@@ -102,13 +127,10 @@ async fn drain(mut pipe: impl tokio::io::AsyncRead + Unpin, sink: Arc<Mutex<Capp
     loop {
         match pipe.read(&mut chunk).await {
             Ok(0) | Err(_) => return,
-            Ok(n) => {
-                let mut s = sink.lock().unwrap_or_else(|e| e.into_inner());
-                s.total += n;
-                let room = s.cap.saturating_sub(s.kept.len());
-                let take = room.min(n);
-                s.kept.extend_from_slice(&chunk[..take]);
-            }
+            Ok(n) => sink
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .take(&chunk[..n]),
         }
     }
 }
@@ -121,6 +143,8 @@ async fn drain(mut pipe: impl tokio::io::AsyncRead + Unpin, sink: Arc<Mutex<Capp
 struct Tree {
     #[cfg(unix)]
     pgid: Option<i32>,
+    #[cfg(target_os = "linux")]
+    cgroup: Option<cgroup::Group>,
     #[cfg(windows)]
     job: Option<job::Job>,
 }
@@ -134,6 +158,10 @@ impl Tree {
             unsafe {
                 libc::kill(-pgid, libc::SIGKILL);
             }
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(group) = &self.cgroup {
+            group.kill();
         }
         #[cfg(windows)]
         if let Some(job) = &self.job {
@@ -281,6 +309,119 @@ mod job {
     }
 }
 
+/// Linux: the command's own cgroup v2, under the app's, when the app's is
+/// the person's to divide (delegated, as a systemd user session does for
+/// each app). Best effort throughout: any step that fails leaves the
+/// command with its process group alone.
+#[cfg(target_os = "linux")]
+pub(crate) mod cgroup {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::{Path, PathBuf};
+
+    pub(crate) struct Group {
+        path: PathBuf,
+        /// `<group>/cgroup.procs`, ready for the child to open between
+        /// fork and exec, where nothing may allocate.
+        procs: CString,
+    }
+
+    impl Group {
+        /// A fresh, empty group under the app's own, or `None` where one
+        /// cannot be made.
+        pub fn new() -> Option<Group> {
+            let own = std::fs::read_to_string("/proc/self/cgroup").ok()?;
+            // cgroup v2 alone: one line, `0::/the/path`.
+            let relative = own.lines().find_map(|l| l.strip_prefix("0::"))?;
+            let base = Path::new("/sys/fs/cgroup").join(relative.trim_start_matches('/'));
+            let path = base.join(format!("matterwave-agent-{:016x}", rand::random::<u64>()));
+            std::fs::create_dir(&path).ok()?;
+            let procs = CString::new(path.join("cgroup.procs").as_os_str().as_bytes()).ok();
+            match procs {
+                Some(procs) => Some(Group { path, procs }),
+                None => {
+                    let _ = std::fs::remove_dir(&path);
+                    None
+                }
+            }
+        }
+
+        /// The path the child writes its pid to.
+        pub fn procs(&self) -> CString {
+            self.procs.clone()
+        }
+
+        /// Moves the calling process into the group whose `cgroup.procs` is
+        /// `procs`. Called in the child after fork and before exec, so it
+        /// uses only async-signal-safe calls and no allocation.
+        pub fn join(procs: &CString) {
+            // SAFETY: getpid, open, write and close are async-signal-safe;
+            // the buffer is on the stack.
+            unsafe {
+                let mut digits = [0u8; 20];
+                let mut pid = libc::getpid() as u64;
+                let mut at = digits.len();
+                loop {
+                    at -= 1;
+                    digits[at] = b'0' + (pid % 10) as u8;
+                    pid /= 10;
+                    if pid == 0 {
+                        break;
+                    }
+                }
+                let fd = libc::open(procs.as_ptr(), libc::O_WRONLY | libc::O_CLOEXEC);
+                if fd >= 0 {
+                    libc::write(fd, digits[at..].as_ptr().cast(), digits.len() - at);
+                    libc::close(fd);
+                }
+            }
+        }
+
+        /// Ends every process in the group: `cgroup.kill` (Linux 5.14) at
+        /// once, else each pid `cgroup.procs` lists, until it lists none.
+        pub fn kill(&self) {
+            if std::fs::write(self.path.join("cgroup.kill"), "1").is_ok() {
+                return;
+            }
+            for _ in 0..20 {
+                let Ok(listed) = std::fs::read_to_string(self.path.join("cgroup.procs")) else {
+                    return;
+                };
+                let pids: Vec<i32> = listed
+                    .lines()
+                    .filter_map(|l| l.trim().parse().ok())
+                    .collect();
+                if pids.is_empty() {
+                    return;
+                }
+                for pid in pids {
+                    // SAFETY: kill(2) on a pid the group lists.
+                    unsafe {
+                        libc::kill(pid, libc::SIGKILL);
+                    }
+                }
+            }
+        }
+    }
+
+    impl Drop for Group {
+        /// The group is removed once it is empty, on a thread of its own
+        /// so the wait never holds the async runtime.
+        fn drop(&mut self) {
+            self.kill();
+            let path = self.path.clone();
+            std::thread::spawn(move || {
+                for _ in 0..50 {
+                    if std::fs::remove_dir(&path).is_ok() || !path.exists() {
+                        return;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            });
+        }
+    }
+}
+
 /// Resolves once the run's stop flag is set (or its sender is gone, which
 /// means the run is over too).
 pub(crate) async fn stopped(mut stop: watch::Receiver<bool>) {
@@ -321,6 +462,20 @@ pub(crate) async fn run(
     }
     #[cfg(unix)]
     cmd.process_group(0);
+    #[cfg(target_os = "linux")]
+    let group = cgroup::Group::new();
+    #[cfg(target_os = "linux")]
+    if let Some(group) = &group {
+        let procs = group.procs();
+        // SAFETY: the closure runs in the child between fork and exec and
+        // does only what `Group::join` documents as safe there.
+        unsafe {
+            cmd.pre_exec(move || {
+                cgroup::Group::join(&procs);
+                Ok(())
+            });
+        }
+    }
     #[cfg(windows)]
     {
         // No console window flashing up behind a GUI app; and suspended,
@@ -360,10 +515,13 @@ pub(crate) async fn run(
     #[cfg(unix)]
     let mut tree = Tree {
         pgid: child.id().map(|id| id as i32),
+        #[cfg(target_os = "linux")]
+        cgroup: group,
     };
 
     let sink = Arc::new(Mutex::new(Capped {
-        kept: Vec::new(),
+        head: Vec::new(),
+        tail: VecDeque::new(),
         total: 0,
         cap,
     }));
@@ -401,9 +559,15 @@ pub(crate) async fn run(
     let _ = tokio::time::timeout(Duration::from_secs(1), readers).await;
 
     let captured = sink.lock().unwrap_or_else(|e| e.into_inner());
+    let truncated = captured.total > cap;
     Ok(ShellResult {
         ended,
-        output: String::from_utf8_lossy(&captured.kept).into_owned(),
+        head: captured.head.clone(),
+        tail: if truncated {
+            captured.tail.iter().copied().collect()
+        } else {
+            Vec::new()
+        },
         total_bytes: captured.total,
     })
 }
@@ -471,11 +635,44 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(r.ended, Ended::Exited(Some(3)));
-        assert!(r.output.contains("out"), "{}", r.output);
-        assert!(r.output.contains("err"), "{}", r.output);
-        assert!(r
-            .render(1024, Duration::from_secs(60))
-            .starts_with("Exit code: 3\n"));
+        let text = r.render(1024, Duration::from_secs(60));
+        assert!(text.starts_with("Exit code 3\n"), "{text}");
+        assert!(text.contains("out") && text.contains("err"), "{text}");
+    }
+
+    #[test]
+    fn the_capture_keeps_the_first_and_last_cap_bytes() {
+        let mut c = Capped {
+            head: Vec::new(),
+            tail: VecDeque::new(),
+            total: 0,
+            cap: 10,
+        };
+        c.take(b"0123456");
+        c.take(b"789ABC");
+        assert_eq!(c.total, 13);
+        assert_eq!(c.head, b"0123456789");
+        assert_eq!(c.tail.iter().copied().collect::<Vec<u8>>(), b"3456789ABC");
+        let r = ShellResult {
+            ended: Ended::Exited(Some(0)),
+            head: c.head.clone(),
+            tail: c.tail.iter().copied().collect(),
+            total_bytes: c.total,
+        };
+        assert_eq!(
+            r.render(10, Duration::from_secs(1)),
+            "Exit code 0\n01234\n[... 3 bytes of output cut from the middle ...]\n89ABC"
+        );
+        let quiet = ShellResult {
+            ended: Ended::Exited(None),
+            head: Vec::new(),
+            tail: Vec::new(),
+            total_bytes: 0,
+        };
+        assert_eq!(
+            quiet.render(10, Duration::from_secs(1)),
+            "Exit code none: the process was ended by a signal.\n(no output)"
+        );
     }
 
     #[test]
@@ -525,7 +722,8 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(r.output.contains("key=[] plain=[kept]"), "{}", r.output);
+        let text = r.render(1024, Duration::from_secs(60));
+        assert!(text.contains("key=[] plain=[kept]"), "{text}");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -547,7 +745,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(r.output.contains("here"), "{}", r.output);
+        assert!(r.render(1024, Duration::from_secs(60)).contains("here"));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -568,11 +766,21 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(r.output.len(), 65_536);
+        assert_eq!((r.head.len(), r.tail.len()), (65_536, 65_536));
         assert!(r.total_bytes >= 200_000, "{}", r.total_bytes);
-        assert!(r
-            .render(65_536, Duration::from_secs(60))
-            .contains("[Output cut off at 65536 bytes"));
+        let text = r.render(65_536, Duration::from_secs(60));
+        let omitted = r.total_bytes - 65_536;
+        assert!(
+            text.contains(&format!(
+                "\n[... {omitted} bytes of output cut from the middle ...]\n"
+            )),
+            "{}",
+            &text[..200]
+        );
+        // The head and the tail, a half each, around the marker.
+        let (head, rest) = text.split_once("\n[...").unwrap();
+        assert_eq!(head.len(), "Exit code 0\n".len() + 32_768);
+        assert!(rest.trim_end().ends_with('x'));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -595,6 +803,9 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(r.ended, Ended::TimedOut);
+        assert!(r
+            .render(1024, Duration::from_secs(1))
+            .starts_with("Stopped after 1 s: the command ran past its timeout"));
         assert!(
             started.elapsed() < Duration::from_secs(10),
             "{:?}",
@@ -652,5 +863,49 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
         assert!(stopped_at.elapsed() < Duration::from_secs(2));
+    }
+
+    /// Linux, where the app's cgroup is the person's to divide: a process
+    /// that leaves the process group with `setsid` still ends on Stop.
+    /// Skipped (and says so) where no cgroup can be made, as on CI runners.
+    #[cfg(target_os = "linux")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn stop_ends_a_process_that_called_setsid_when_a_cgroup_can_be_made() {
+        if cgroup::Group::new().is_none() {
+            eprintln!("skipped: no delegated cgroup v2 here");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let command = "setsid sleep 60 & echo $! > child.pid; sleep 60";
+        let (tx, rx) = watch::channel(false);
+        let cwd = dir.path().to_path_buf();
+        let task = tokio::spawn(async move {
+            run(argv(), command, &cwd, Duration::from_secs(120), 1024, rx).await
+        });
+        let pid_file = dir.path().join("child.pid");
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let child_pid = loop {
+            if let Some(pid) = std::fs::read_to_string(&pid_file)
+                .ok()
+                .and_then(|s| s.trim().parse::<u32>().ok())
+            {
+                break pid;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the command never started its child"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        };
+        tx.send(true).unwrap();
+        task.await.unwrap().unwrap();
+        let gone_by = Instant::now() + Duration::from_secs(2);
+        while alive(child_pid) {
+            assert!(
+                Instant::now() < gone_by,
+                "the setsid child {child_pid} outlived Stop"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
     }
 }

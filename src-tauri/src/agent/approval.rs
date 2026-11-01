@@ -4,17 +4,24 @@
 //! likes; it still cannot make a command run, or a file change, without
 //! the person choosing the dialog's yes.
 //!
-//! What is asked, and when (`needs_native`):
+//! What is asked, and when (`decision`, the contract's `allowed`):
 //!
 //! - every `run_shell` in `ask` and `auto-edit`, with the command shown
 //!   whole (a command too long to show whole is refused, not shortened);
 //! - every applied `edit` and `write_file` in `ask`, with the file's full
 //!   path and the changed lines (the panel's diff is for reading; this is
 //!   the gate);
-//! - in `auto-edit` too, a write to the files the app loads into every
-//!   run's prompt as the person's own instructions (MATTERWAVE.md,
-//!   AGENTS.md, MATTERWAVE.local.md), so a run cannot plant instructions
-//!   for the next one unasked;
+//! - in every mode that writes, `yolo` included, a write to a protected
+//!   path: the deny file, the agent's settings (`.matterwave/`), the files
+//!   the app loads into every run's prompt as the person's instructions
+//!   (MATTERWAVE.md, MATTERWAVE.local.md, AGENTS.md), shell startup files
+//!   and credential folders (`.bashrc`, `.ssh/`, `.aws/` ...), so a run
+//!   cannot plant instructions for the next one, or a login hook, unasked;
+//! - in a run whose mode the person has not confirmed for the folder this
+//!   session (`plan` and `ask`, which start unasked), a read of a
+//!   read-gated path (`read_gate`: the settings, startup files and
+//!   credential folders), which is how webview script that starts such a
+//!   run is kept from them; reads elsewhere in the root are not asked;
 //! - starting `auto-edit` or `yolo` (once per folder per app session),
 //!   turning agent mode on, trusting a folder, and restoring a checkpoint.
 //!
@@ -23,11 +30,12 @@
 //! command shown is the command run. "Cancel" is the dialog's default
 //! button: Enter, Space and Escape all answer no, so a dialog raised under
 //! the person's typing is not answered by it. One question is on screen at
-//! a time (`AgentState::ask`).
+//! a time (`AgentState::ask`), and every answer is written to the approval
+//! log (audit.rs).
 
-use super::contract::{self, ModeSpec, ToolKind};
+use super::confine::{Confined, DenyList};
+use super::contract::{self, ModeSpec, ToolKind, CONTEXT_FILES, DENY_FILE, PROTECTED};
 use super::tools::WritePreview;
-use super::CONTEXT_FILES;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -290,6 +298,8 @@ pub(crate) fn write_ask(root: &Path, preview: &WritePreview) -> Ask {
     };
     let context = if is_context_file(&preview.relative) {
         "\n\nThis file is sent to the model as your instructions at the start of every agent run in this folder."
+    } else if super::confine::is_protected(&preview.relative, false) {
+        "\n\nThis file is protected (the agent's settings or instructions, .matterwaveignore, a shell startup file or a credentials folder), so the agent asks before every change to it, in every mode."
     } else {
         ""
     };
@@ -339,7 +349,7 @@ pub(crate) fn mode_ask(mode: &ModeSpec, root: &Path) -> Ask {
         Ask {
             title: "Allow yolo for this session?".into(),
             body: format!(
-                "In yolo mode the agent changes files and runs commands in {root} without asking you first, for the rest of this session. Commands are not sandboxed."
+                "In yolo mode the agent changes files and runs commands in {root} without asking you first, for the rest of this session. Commands are not sandboxed. It still asks before changing a protected file (MATTERWAVE.md, AGENTS.md, .matterwaveignore, shell startup files, .ssh and .aws)."
             ),
             accept: "Allow yolo".into(),
         }
@@ -347,7 +357,7 @@ pub(crate) fn mode_ask(mode: &ModeSpec, root: &Path) -> Ask {
         Ask {
             title: format!("Allow {} for this session?", mode.name),
             body: format!(
-                "In {} mode the agent changes files in {root} without asking you first, for the rest of this session. It still asks before each command, and before changing MATTERWAVE.md or AGENTS.md.",
+                "In {} mode the agent changes files in {root} without asking you first, for the rest of this session. It still asks before each command, and before changing a protected file (MATTERWAVE.md, AGENTS.md, .matterwaveignore, shell startup files, .ssh and .aws).",
                 mode.name
             ),
             accept: format!("Allow {}", mode.name),
@@ -355,22 +365,110 @@ pub(crate) fn mode_ask(mode: &ModeSpec, root: &Path) -> Ask {
     }
 }
 
-/// Whether `relative` is one of the root's context files.
+/// Whether `relative` is one of the root's context files, the ones loaded
+/// into every run's prompt.
 pub(crate) fn is_context_file(relative: &str) -> bool {
     CONTEXT_FILES
         .iter()
         .any(|name| name.eq_ignore_ascii_case(relative))
 }
 
+/// What a mode does with a call: let it through, ask the person first, or
+/// refuse it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Decision {
+    Allow,
+    Ask,
+    Deny,
+}
+
+impl Decision {
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn code(self) -> &'static str {
+        match self {
+            Decision::Allow => "allow",
+            Decision::Ask => "ask",
+            Decision::Deny => "deny",
+        }
+    }
+}
+
+/// The contract's `allowed(tool, mode, path=...)` for the contract's own
+/// tools: the mode's lists decide, a tool the contract does not name is
+/// denied, and a write the mode would let through asks when `relative`
+/// (the file it changes, `/`-separated) is protected -- in every mode,
+/// `yolo` included.
+pub(crate) fn decision(mode: &ModeSpec, tool: &str, relative: Option<&str>) -> Decision {
+    let protected = relative.is_some_and(|r| super::confine::is_protected(r, false));
+    decision_for(mode, tool, protected)
+}
+
+/// `decision` with the protected check already made: the host makes it on
+/// the confined target, by its own name and by where its links lead.
+pub(crate) fn decision_for(mode: &ModeSpec, tool: &str, protected: bool) -> Decision {
+    let Some(spec) = contract::tool(tool) else {
+        return Decision::Deny;
+    };
+    let decided = if mode.allow.contains(&tool) {
+        Decision::Allow
+    } else if mode.ask.contains(&tool) {
+        Decision::Ask
+    } else {
+        Decision::Deny
+    };
+    if decided == Decision::Allow && spec.kind == ToolKind::Write && protected {
+        return Decision::Ask;
+    }
+    decided
+}
+
 /// Whether `tool` (on `relative`, for a write) needs the person's native
 /// yes in `mode`. A tool the mode does not offer at all is refused before
 /// this is asked.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn needs_native(mode: &ModeSpec, tool: &str, relative: Option<&str>) -> bool {
-    if mode.ask.contains(&tool) {
-        return true;
+    decision(mode, tool, relative) == Decision::Ask
+}
+
+/// The read-gated paths: the protected ones that are not the deny file or
+/// a context file, i.e. the agent's settings folder, the shell startup
+/// files and the credential folders. A run in a mode the person has not
+/// confirmed for the folder this session reads one only after their native
+/// yes, and its searches leave them out.
+pub(crate) fn read_gate() -> &'static DenyList {
+    static GATE: std::sync::OnceLock<DenyList> = std::sync::OnceLock::new();
+    GATE.get_or_init(|| {
+        DenyList::new(
+            PROTECTED
+                .iter()
+                .copied()
+                .filter(|p| *p != DENY_FILE && !CONTEXT_FILES.contains(p)),
+        )
+    })
+}
+
+/// Whether a confined path is read-gated, by its own name or where its
+/// links lead.
+pub(crate) fn is_read_gated(target: &Confined) -> bool {
+    target.matched_by(read_gate())
+}
+
+/// What a read tool answers for a read-gated path it was not let read.
+pub(crate) fn read_gate_refusal(path: &str) -> String {
+    format!(
+        "Refused: {path} is the agent's settings, a shell startup file or a credentials folder, which this mode reads only with the user's approval, which it did not get."
+    )
+}
+
+pub(crate) fn read_ask(root: &Path, tool: &str, relative: &str, mode: &str) -> Ask {
+    Ask {
+        title: "Let the agent read this?".into(),
+        body: format!(
+            "{tool} {}\n\nThis is the agent's settings, a shell startup file or a credentials folder. In {mode} mode the agent reads it only with your yes, and what it reads is sent to MatterWave and the model's provider.\n\nNothing is read unless you choose Allow read.",
+            visible(&full_path(root, relative)),
+        ),
+        accept: "Allow read".into(),
     }
-    let writes = contract::tool(tool).is_some_and(|t| t.kind == ToolKind::Write);
-    writes && !mode.requires_flag && relative.is_some_and(is_context_file)
 }
 
 #[cfg(test)]
@@ -503,7 +601,7 @@ mod tests {
         assert!(needs_native(m("ask"), "edit", Some("a.py")));
         assert!(needs_native(m("ask"), "write_file", Some("a.py")));
         assert!(!needs_native(m("ask"), "read_file", Some("a.py")));
-        // auto-edit: commands, and writes to the context files only.
+        // auto-edit: commands, and writes to protected files only.
         assert!(needs_native(m("auto-edit"), "run_shell", None));
         assert!(!needs_native(m("auto-edit"), "edit", Some("src/a.py")));
         assert!(needs_native(
@@ -512,18 +610,25 @@ mod tests {
             Some("MATTERWAVE.md")
         ));
         assert!(needs_native(m("auto-edit"), "edit", Some("agents.md")));
-        assert!(!needs_native(
-            m("auto-edit"),
-            "edit",
-            Some("docs/AGENTS.md")
-        ));
-        // yolo: nothing.
-        for tool in ["run_shell", "edit", "write_file"] {
-            assert!(
-                !needs_native(m("yolo"), tool, Some("MATTERWAVE.md")),
-                "{tool}"
-            );
+        assert!(needs_native(m("auto-edit"), "edit", Some("docs/AGENTS.md")));
+        assert!(needs_native(m("auto-edit"), "edit", Some(".bashrc")));
+        // yolo: protected writes only.
+        assert!(!needs_native(m("yolo"), "run_shell", None));
+        assert!(!needs_native(m("yolo"), "edit", Some("src/a.py")));
+        for path in [
+            "MATTERWAVE.md",
+            ".matterwaveignore",
+            ".ssh/config",
+            ".matterwave/x.json",
+        ] {
+            assert!(needs_native(m("yolo"), "write_file", Some(path)), "{path}");
         }
+        // plan: nothing to ask; writes are refused before this.
+        assert_eq!(
+            decision(m("plan"), "edit", Some("AGENTS.md")),
+            Decision::Deny
+        );
+        assert_eq!(decision(m("yolo"), "web_fetch", None), Decision::Deny);
         assert!(!widens(m("plan")) && !widens(m("ask")));
         assert!(widens(m("auto-edit")) && widens(m("yolo")));
         assert_eq!(
@@ -531,5 +636,32 @@ mod tests {
             "Allow auto-edit"
         );
         assert_eq!(mode_ask(m("yolo"), Path::new("/w")).accept, "Allow yolo");
+    }
+
+    #[test]
+    fn the_read_gate_is_the_protected_list_less_the_instructions_and_the_deny_file() {
+        let gate = read_gate();
+        for path in [
+            ".ssh/config",
+            ".aws/credentials",
+            ".bashrc",
+            ".zshrc",
+            ".matterwave/s.json",
+            "me/.config/matterwave/x",
+        ] {
+            assert!(gate.matches(path, false), "{path}");
+        }
+        for path in [
+            "AGENTS.md",
+            "MATTERWAVE.md",
+            ".matterwaveignore",
+            "src/a.py",
+            ".config/other",
+        ] {
+            assert!(!gate.matches(path, false), "{path}");
+        }
+        let ask = read_ask(Path::new("/w"), "read_file", ".aws/credentials", "plan");
+        assert_eq!(ask.accept, "Allow read");
+        assert!(ask.body.contains("In plan mode"));
     }
 }

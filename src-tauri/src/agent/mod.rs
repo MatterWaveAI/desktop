@@ -10,34 +10,48 @@
 //! folder", and `auto-edit` and `yolo` each ask natively once per folder
 //! per app session (`yolo` is never saved).
 //!
+//! **The org's switch is the host's to check.** Before a run starts the
+//! host asks MatterWave itself, with the stored credential, whether the
+//! person's organisation allows local agent tools (`/api/me`'s
+//! `local_agent_tools`), and refuses the run when it says no -- the
+//! webview's own greyed-out toggle is a courtesy, not the control.
+//!
 //! The webview gets one narrow command per tool (`agent_read_file` ...
 //! `agent_run_shell`) plus start/stop of a run, the root picker and the
 //! checkpoints -- each in the capability file by name, with no `fs`,
 //! `shell` or `dialog` plugin behind them. Every path it sends is confined
 //! here (confine.rs); every tool a run's mode does not offer is refused
-//! here (`plan` is read-only whatever the webview asks); and every command
-//! and write the mode asks about is approved in a native dialog here
-//! (approval.rs), not in the webview: the SPA's diff is for reading, and
-//! script in the webview that calls the commands directly still meets the
-//! dialog.
+//! here (`plan` is read-only whatever the webview asks); every command and
+//! write the mode asks about, every protected write in every mode, and
+//! every read of a read-gated path in a mode not confirmed for the folder,
+//! is approved in a native dialog here (approval.rs), not in the webview;
+//! and every answer is written to the approval log (audit.rs).
 //!
 //! The commands are thin: each hands its arguments to a method of
 //! `AgentState`, which is what the tests drive, with a scripted
-//! `Confirmer` in place of the dialog.
+//! `Confirmer` in place of the dialog and a scripted org check.
 
 pub(crate) mod approval;
+pub(crate) mod audit;
 pub(crate) mod checkpoints;
 pub(crate) mod confine;
 pub(crate) mod contract;
 pub(crate) mod edit;
+pub(crate) mod output;
+pub(crate) mod search;
 pub(crate) mod shell;
 pub(crate) mod tools;
 
-use approval::{Ask, Confirmer};
-use contract::ModeSpec;
+use approval::{Ask, Confirmer, Decision};
+use audit::{Answer, Asked, AuditLog};
+use confine::{Access, DenyList};
+use contract::{ApprovalRefusal, ModeSpec, ToolFailure, CONTEXT_FILES};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -48,12 +62,17 @@ use tools::{ToolOutput, Workspace, WritePreview};
 /// The settings file, in the app's config directory.
 const SETTINGS_FILE: &str = "agent.json";
 
-/// The context files read from a trusted root, in order: the project's,
-/// the cross-tool one, and the person's own override (which they keep out
-/// of git themselves).
-pub(crate) const CONTEXT_FILES: &[&str] = &["MATTERWAVE.md", "AGENTS.md", "MATTERWAVE.local.md"];
-/// How much of each context file goes to the model.
-const CONTEXT_MAX_BYTES: usize = 64 * 1024;
+/// How much of each context file is read. The prompt keeps the contract's
+/// 32768 characters of each (the SPA's `systemPrompt` cuts it, with the
+/// contract's marker); this is that many characters at four bytes each, so
+/// the host never cuts first.
+const CONTEXT_MAX_BYTES: usize = 32_768 * 4;
+
+/// What follows a tool's result when the person approved the call in the
+/// native dialog and the run is stored, so the conversation on the server
+/// keeps the record too.
+pub(crate) const APPROVED_NOTE: &str =
+    "[The user approved this call in the MatterWave desktop app's own dialog.]";
 
 /// What persists: whether agent mode is on, and the folders whose context
 /// files the person trusts. Never the mode, and never `yolo`.
@@ -77,6 +96,26 @@ pub(crate) fn save_settings_to(dir: &Path, settings: &Settings) -> Result<(), St
     let raw = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     std::fs::write(dir.join(SETTINGS_FILE), raw).map_err(|e| e.to_string())
 }
+
+/// What MatterWave says of the person's organisation and local agent
+/// tools: `Some(false)` is the org's no, `Some(true)` its yes, `None` an
+/// API that does not say (an older one, which counts as allowed), and an
+/// error that the host could not ask (signed out, offline), which refuses
+/// the run: a check that cannot be made is not passed.
+pub(crate) type OrgVerdict = Pin<Box<dyn Future<Output = Result<Option<bool>, String>> + Send>>;
+
+/// Asks MatterWave for the org's verdict. The app's (lib.rs) fetches
+/// `/api/me` with the stored credential; the tests' is a script.
+pub(crate) type OrgCheck = Arc<dyn Fn() -> OrgVerdict + Send + Sync>;
+
+/// `/api/me`'s `local_agent_tools`, read as the SDKs' `local_agent_tools_of`
+/// reads it: only an explicit boolean says anything.
+pub(crate) fn local_agent_tools_of(me: &serde_json::Value) -> Option<bool> {
+    me.get("local_agent_tools")
+        .and_then(serde_json::Value::as_bool)
+}
+
+const ORG_OFF: &str = "Your organisation has turned off local agent tools, so agent mode cannot run. The desktop app asked MatterWave itself; ask an organisation admin if you need it.";
 
 /// One agent run: its mode, fixed at the start, and its stop switch.
 struct Run {
@@ -105,6 +144,28 @@ impl Run {
     fn stopped(&self) -> bool {
         self.cancelled.load(Ordering::Relaxed)
     }
+
+    /// A question about one of this run's calls, as the approval log
+    /// records it.
+    fn asked(&self, question: &'static str, tool: &str, root: &Path) -> Asked {
+        Asked {
+            question,
+            tool: Some(tool.to_string()),
+            mode: Some(self.mode.name.to_string()),
+            root: Some(root.display().to_string()),
+            conversation: self.label.clone(),
+            ..Asked::default()
+        }
+    }
+
+    /// `output` with the approval note when the run is stored.
+    fn noted(&self, output: String) -> String {
+        if self.label.is_some() {
+            format!("{output}\n{APPROVED_NOTE}")
+        } else {
+            output
+        }
+    }
 }
 
 const STOPPED: &str = "This agent run was stopped.";
@@ -124,6 +185,8 @@ pub(crate) struct AgentState {
     /// the question it was shown with.
     asking: tokio::sync::Mutex<()>,
     confirmer: Confirmer,
+    audit: AuditLog,
+    org: OrgCheck,
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -140,10 +203,27 @@ async fn blocking<T: Send + 'static>(
         .map_err(|e| e.to_string())
 }
 
+/// What the read gate makes of one call.
+enum Gate {
+    /// Not a read-gated path, or the run's mode is confirmed: go on, with
+    /// a walk still leaving gated paths out when the run is gated.
+    Clear,
+    /// The person said yes to reading this path: go on, gate open.
+    Approved,
+    /// The person said no: the answer for the model.
+    Refused(ToolOutput),
+}
+
 impl AgentState {
-    pub fn new(config_dir: PathBuf, data_dir: PathBuf, confirmer: Confirmer) -> Self {
+    pub fn new(
+        config_dir: PathBuf,
+        data_dir: PathBuf,
+        confirmer: Confirmer,
+        org: OrgCheck,
+    ) -> Self {
         let settings = load_settings_from(&config_dir);
         AgentState {
+            audit: AuditLog::new(data_dir.clone()),
             config_dir,
             data_dir,
             settings: Mutex::new(settings),
@@ -152,6 +232,7 @@ impl AgentState {
             runs: Mutex::new(HashMap::new()),
             asking: tokio::sync::Mutex::new(()),
             confirmer,
+            org,
         }
     }
 
@@ -170,6 +251,13 @@ impl AgentState {
 
     fn widened_to(&self, mode: &str) -> bool {
         lock(&self.widened).contains(&mode)
+    }
+
+    /// Whether a run in `mode` reads the read-gated paths only with the
+    /// person's yes: every mode they have not confirmed natively for this
+    /// folder this session (`plan` and `ask`, which start unasked).
+    fn gated(&self, mode: &ModeSpec) -> bool {
+        !self.widened_to(mode.name)
     }
 
     fn stop_all(&self) {
@@ -225,10 +313,16 @@ impl AgentState {
         if run.stopped() {
             return Err(STOPPED.into());
         }
-        if contract::tool(tool).is_none() || !run.mode.offers(tool) {
-            return Ok(Err(ToolOutput::error(format!(
-                "Refused: {tool} is not available in {} mode.",
-                run.mode.name
+        if contract::tool(tool).is_none() {
+            return Ok(Err(ToolOutput::error(
+                ApprovalRefusal::UnknownTool.message(tool, run.mode.name, ""),
+            )));
+        }
+        if !run.mode.offers(tool) {
+            return Ok(Err(ToolOutput::error(ApprovalRefusal::Mode.message(
+                tool,
+                run.mode.name,
+                "",
             ))));
         }
         Ok(Ok((run, root)))
@@ -246,25 +340,83 @@ impl AgentState {
         }
     }
 
-    /// Puts one question to the person, after any already on screen.
-    async fn ask(&self, ask: Ask) -> bool {
+    /// Puts one question to the person, after any already on screen, and
+    /// writes the answer to the approval log. A yes that cannot be written
+    /// there is not acted on.
+    async fn ask(&self, ask: Ask, asked: Asked) -> Result<bool, String> {
         let _turn = self.asking.lock().await;
-        (self.confirmer)(ask).await
+        let yes = (self.confirmer)(ask).await;
+        let answer = if yes {
+            Answer::Approved
+        } else {
+            Answer::Rejected
+        };
+        match self.audit.append(&asked, answer, crate::now()) {
+            Ok(()) => Ok(yes),
+            Err(e) if yes => Err(format!(
+                "Nothing was done: your yes could not be written to the approval log ({e})."
+            )),
+            Err(_) => Ok(false),
+        }
     }
 
     /// A question about one call of `run`. Stopping the run answers it: a
     /// stopped run's call does not go ahead whatever is clicked later (the
-    /// dialog itself stays until it is answered; its answer is dropped).
-    async fn ask_for(&self, run: &Run, ask: Ask) -> Result<bool, String> {
+    /// dialog itself stays until it is answered; its answer is dropped, and
+    /// the log says the run stopped).
+    async fn ask_for(&self, run: &Run, ask: Ask, asked: Asked) -> Result<bool, String> {
+        let on_stop = asked.clone();
         let answer = tokio::select! {
             biased;
-            _ = shell::stopped(run.stop.subscribe()) => return Err(STOPPED.into()),
-            answer = self.ask(ask) => answer,
+            _ = shell::stopped(run.stop.subscribe()) => {
+                let _ = self.audit.append(&on_stop, Answer::Stopped, crate::now());
+                return Err(STOPPED.into());
+            }
+            answer = self.ask(ask, asked) => answer?,
         };
         if run.stopped() {
             return Err(STOPPED.into());
         }
         Ok(answer)
+    }
+
+    /// The read gate for one call that reads `path` (or, for a write's
+    /// preview, hands its current text to the webview): in a gated run, a
+    /// read-gated path is read only after the person's native yes.
+    async fn read_gate(
+        &self,
+        run: &Run,
+        root: &Path,
+        tool: &str,
+        path: Option<String>,
+    ) -> Result<Gate, String> {
+        let Some(path) = path.filter(|_| self.gated(run.mode)) else {
+            return Ok(Gate::Clear);
+        };
+        let at = root.to_path_buf();
+        let gated = blocking(move || {
+            let deny = DenyList::load(&at);
+            confine::confine(&at, &path, &deny, Access::Read)
+                .ok()
+                .filter(approval::is_read_gated)
+                .map(|c| c.relative)
+        })
+        .await?;
+        let Some(relative) = gated else {
+            return Ok(Gate::Clear);
+        };
+        let asked = Asked {
+            path: Some(relative.clone()),
+            ..run.asked("read", tool, root)
+        };
+        let ask = approval::read_ask(root, tool, &relative, run.mode.name);
+        if self.ask_for(run, ask, asked).await? {
+            Ok(Gate::Approved)
+        } else {
+            Ok(Gate::Refused(ToolOutput::rejected(
+                ApprovalRefusal::Rejected.message(tool, run.mode.name, &relative),
+            )))
+        }
     }
 
     pub(crate) async fn set_enabled(&self, enabled: bool) -> Result<AgentStatus, String> {
@@ -273,12 +425,18 @@ impl AgentState {
         }
         if enabled
             && !self
-                .ask(Ask {
-                    title: "Turn on agent mode?".into(),
-                    body: ENABLE_BODY.into(),
-                    accept: "Turn on".into(),
-                })
-                .await
+                .ask(
+                    Ask {
+                        title: "Turn on agent mode?".into(),
+                        body: ENABLE_BODY.into(),
+                        accept: "Turn on".into(),
+                    },
+                    Asked {
+                        question: "enable",
+                        ..Asked::default()
+                    },
+                )
+                .await?
         {
             return Ok(self.status());
         }
@@ -300,7 +458,7 @@ impl AgentState {
             return Ok(self.status());
         }
         let body = format!(
-            "{}\n\nIts MATTERWAVE.md and AGENTS.md will be sent to the model with every agent run as instructions. A cloned project can put anything in them. Trust this folder only if you trust whoever wrote those files.",
+            "{}\n\nIts MATTERWAVE.md, MATTERWAVE.local.md and AGENTS.md will be sent to the model with every agent run as instructions. A cloned project can put anything in them. Trust this folder only if you trust whoever wrote those files.",
             approval::visible(&root.display().to_string())
         );
         let ask = Ask {
@@ -308,7 +466,12 @@ impl AgentState {
             body,
             accept: "Trust".into(),
         };
-        if !self.ask(ask).await || self.root().as_deref() != Some(root.as_path()) {
+        let asked = Asked {
+            question: "trust",
+            root: Some(root.display().to_string()),
+            ..Asked::default()
+        };
+        if !self.ask(ask, asked).await? || self.root().as_deref() != Some(root.as_path()) {
             return Ok(self.status());
         }
         let next = {
@@ -322,9 +485,10 @@ impl AgentState {
         Ok(self.status())
     }
 
-    /// Starts a run in `mode` in the picked root. A mode that lets writes
-    /// through unasked is allowed natively first, once per root per app
-    /// session.
+    /// Starts a run in `mode` in the picked root, once MatterWave has said
+    /// the person's organisation allows local agent tools. A mode that lets
+    /// writes through unasked is allowed natively first, once per root per
+    /// app session.
     pub(crate) async fn start_run(
         &self,
         mode: &str,
@@ -332,9 +496,25 @@ impl AgentState {
     ) -> Result<RunStarted, String> {
         let root = self.workspace_root()?;
         let spec = contract::mode(mode).ok_or_else(|| format!("unknown approval mode {mode:?}"))?;
+        match (self.org)().await {
+            Ok(Some(false)) => return Err(ORG_OFF.into()),
+            Ok(_) => {}
+            Err(e) => {
+                return Err(format!(
+                    "The run did not start: the desktop app could not ask MatterWave whether your organisation allows local agent tools ({e})."
+                ))
+            }
+        }
         let allowed = !approval::widens(spec) || self.widened_to(spec.name);
         if !allowed {
-            if !self.ask(approval::mode_ask(spec, &root)).await {
+            let asked = Asked {
+                question: "mode",
+                mode: Some(spec.name.to_string()),
+                root: Some(root.display().to_string()),
+                conversation: label.clone(),
+                ..Asked::default()
+            };
+            if !self.ask(approval::mode_ask(spec, &root), asked).await? {
                 return Err(format!("{} was not allowed. Pick another mode.", spec.name));
             }
             if self.workspace_root()? != root {
@@ -370,6 +550,9 @@ impl AgentState {
         }
     }
 
+    /// One read tool. In a run whose mode the person has not confirmed for
+    /// the folder, a read-gated `path` asks natively first, and a search
+    /// leaves the gated paths out.
     pub(crate) async fn read(
         &self,
         run_id: &str,
@@ -381,24 +564,42 @@ impl AgentState {
             Ok(found) => found,
             Err(refused) => return Ok(refused),
         };
-        blocking(move || {
-            let ws = Workspace::new(&root, &run.cancelled);
+        let path = args
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
+        let (gated, approved) = match self.read_gate(&run, &root, tool, path).await? {
+            Gate::Refused(no) => return Ok(no),
+            Gate::Approved => {
+                self.still(run_id, tool, &root)?;
+                (false, true)
+            }
+            Gate::Clear => (self.gated(run.mode), false),
+        };
+        let worker = run.clone();
+        let mut out = blocking(move || {
+            let ws = Workspace::new(&root, &worker.cancelled).gated(gated);
             work(&ws, args)
         })
-        .await
+        .await?;
+        if approved {
+            out.output = run.noted(out.output);
+        }
+        Ok(out)
     }
 
     /// Preview or apply one write.
     ///
     /// An apply names the preview it applies by the fingerprint of the
     /// bytes that preview saw (`expected_sha256`); without one it is
-    /// refused. When the mode asks, the person is asked natively with the
-    /// full path and the changed lines as they are now; after a yes the
-    /// change is computed once more and written only if the file is still
-    /// byte for byte what the question showed, so neither the webview nor a
-    /// change on disk while the question was open can slip in something
-    /// else. A checkpoint of the file is taken first, and without one
-    /// nothing is written.
+    /// refused. When the mode asks, or the file is protected, the person is
+    /// asked natively with the full path and the changed lines as they are
+    /// now; after a yes the change is computed once more and written only
+    /// if the file is still byte for byte what the question showed, so
+    /// neither the webview nor a change on disk while the question was open
+    /// can slip in something else. A checkpoint of the file is taken first,
+    /// and without one nothing is written. A preview hands the file's text
+    /// to the webview, so in a gated run it is held to the read gate.
     pub(crate) async fn write(
         &self,
         run_id: &str,
@@ -424,10 +625,20 @@ impl AgentState {
             blocking(move || work(&Workspace::new(&root, &run.cancelled)))
         };
         if !apply {
+            match self
+                .read_gate(&run, &root, tool, Some(change.path().to_string()))
+                .await?
+            {
+                Gate::Refused(no) => return Ok(WriteOutcome::Rejected { output: no.output }),
+                Gate::Approved => self.still(run_id, tool, &root)?,
+                Gate::Clear => {}
+            }
             let change = change.clone();
-            return in_ws(Box::new(move |ws| match change.preview(ws) {
-                Ok((_, shown)) => WriteOutcome::Preview(shown),
-                Err(e) => WriteOutcome::Error { output: e.output },
+            return in_ws(Box::new(move |ws| {
+                match change.preview(ws, Access::ApprovedWrite) {
+                    Ok((_, shown)) => WriteOutcome::Preview(shown),
+                    Err(e) => WriteOutcome::Error { output: e.output },
+                }
             }))
             .await;
         }
@@ -436,36 +647,64 @@ impl AgentState {
                 output: "Nothing was written: an apply must name the preview it applies (expected_sha256).".into(),
             });
         };
-        let shown = {
+        let prepared = {
             let change = change.clone();
             let (run, root) = (run.clone(), root.clone());
             blocking(move || prepare(&Workspace::new(&root, &run.cancelled), &change, &expected))
                 .await?
         };
-        let shown = match shown {
-            Ok(shown) => shown,
+        let (protected, shown) = match prepared {
+            Ok(prepared) => prepared,
             Err(outcome) => return Ok(outcome),
         };
-        if approval::needs_native(run.mode, tool, Some(&shown.relative)) {
+        let mut approved = false;
+        if approval::decision_for(run.mode, tool, protected) == Decision::Ask {
+            let asked = Asked {
+                path: Some(shown.relative.clone()),
+                ..run.asked("tool", tool, &root)
+            };
             if !self
-                .ask_for(&run, approval::write_ask(&root, &shown))
+                .ask_for(&run, approval::write_ask(&root, &shown), asked)
                 .await?
             {
                 return Ok(WriteOutcome::Rejected {
-                    output: format!(
-                        "Rejected by the user: {} was not changed. Do not send the same change again; ask what they want instead, or try another approach.",
-                        shown.relative
-                    ),
+                    output: ApprovalRefusal::Rejected.message(tool, run.mode.name, &shown.relative),
                 });
             }
             self.still(run_id, tool, &root)?;
+            approved = true;
         }
+        let access = if approved {
+            Access::ApprovedWrite
+        } else {
+            Access::Write
+        };
         let data_dir = self.data_dir.clone();
         let label = run.label.clone();
-        in_ws(Box::new(move |ws| {
-            commit(ws, &data_dir, label.as_deref(), tool, &change, &shown)
+        let outcome = in_ws(Box::new(move |ws| {
+            commit(
+                ws,
+                &data_dir,
+                label.as_deref(),
+                tool,
+                &change,
+                &shown,
+                access,
+            )
         }))
-        .await
+        .await?;
+        Ok(match outcome {
+            WriteOutcome::Applied {
+                output,
+                relative,
+                checkpoint,
+            } if approved => WriteOutcome::Applied {
+                output: run.noted(output),
+                relative,
+                checkpoint,
+            },
+            other => other,
+        })
     }
 
     /// Runs one command in the root with the platform's shell, after the
@@ -491,17 +730,25 @@ impl AgentState {
             Ok(t) => t,
             Err(e) => return Ok(e),
         };
-        if approval::needs_native(run.mode, "run_shell", None) {
+        let mut approved = false;
+        if approval::decision(run.mode, "run_shell", None) == Decision::Ask {
             if let Err(why) = approval::command_fits(&args.command) {
                 return Ok(ToolOutput::error(why));
             }
+            let asked = Asked {
+                command_sha256: Some(tools::hex(&Sha256::digest(args.command.as_bytes()))),
+                ..run.asked("tool", "run_shell", &root)
+            };
             let ask = approval::shell_ask(&args.command, &root, timeout);
-            if !self.ask_for(&run, ask).await? {
-                return Ok(ToolOutput::rejected(
-                    "Rejected by the user: the command was not run. Do not send the same command again; ask what they want instead, or try another approach.",
-                ));
+            if !self.ask_for(&run, ask, asked).await? {
+                return Ok(ToolOutput::rejected(ApprovalRefusal::Rejected.message(
+                    "run_shell",
+                    run.mode.name,
+                    "",
+                )));
             }
             self.still(run_id, "run_shell", &root)?;
+            approved = true;
         }
         let cap = contract::SHELL_OUTPUT_MAX_BYTES;
         let result = shell::run(
@@ -514,11 +761,14 @@ impl AgentState {
         )
         .await;
         Ok(match result {
-            Ok(r) => ToolOutput {
-                is_error: !matches!(r.ended, shell::Ended::Exited(Some(0))),
-                output: r.render(cap, timeout),
-                rejected: false,
-            },
+            Ok(r) => {
+                let output = r.render(cap, timeout);
+                ToolOutput {
+                    is_error: !matches!(r.ended, shell::Ended::Exited(Some(0))),
+                    output: if approved { run.noted(output) } else { output },
+                    rejected: false,
+                }
+            }
             Err(e) => ToolOutput::error(format!("The command could not run: {e}")),
         })
     }
@@ -530,14 +780,21 @@ impl AgentState {
 
     /// Puts the root's files back as they were before `checkpoint_id` (and
     /// undoes every later one with it), once the person says yes natively
-    /// to the list of files it puts back.
+    /// to the list of files it puts back. That yes covers protected files
+    /// among them.
     pub(crate) async fn restore(&self, checkpoint_id: u64) -> Result<Restored, String> {
         let root = self.workspace_root()?;
         let store = checkpoints::Store::for_root(&self.data_dir, &root);
         let files = store.files_restored_by(checkpoint_id)?;
+        let asked = Asked {
+            question: "restore",
+            path: Some(files.join(", ")),
+            root: Some(root.display().to_string()),
+            ..Asked::default()
+        };
         if !self
-            .ask(approval::restore_ask(&root, checkpoint_id, &files))
-            .await
+            .ask(approval::restore_ask(&root, checkpoint_id, &files), asked)
+            .await?
         {
             return Err("Nothing was restored: you cancelled it.".into());
         }
@@ -636,8 +893,8 @@ pub(crate) async fn agent_pick_root(
     Ok(state.status())
 }
 
-/// Trust the root's context files (MATTERWAVE.md, AGENTS.md and the local
-/// override), after a native confirmation; remembered for this folder.
+/// Trust the root's context files (MATTERWAVE.md, MATTERWAVE.local.md and
+/// AGENTS.md), after a native confirmation; remembered for this folder.
 #[tauri::command]
 pub(crate) async fn agent_trust_root(state: State<'_, AgentState>) -> Result<AgentStatus, String> {
     state.trust_root().await
@@ -656,21 +913,23 @@ pub(crate) struct RunStarted {
     mode: &'static str,
     root: String,
     platform: &'static str,
-    /// The trusted root's context files, in order.
+    /// The trusted root's context files, in the contract's order.
     context: Vec<ContextFile>,
     /// Context files that exist but were not loaded: the root is not trusted.
     untrusted_context: Vec<String>,
 }
 
-/// The context files of `root`: loaded when it is trusted, only named when
-/// it is not. Each goes through confinement like any tool path, and only
-/// the first `CONTEXT_MAX_BYTES` of each is read.
+/// The context files of `root`, in the contract's order (MATTERWAVE.md,
+/// MATTERWAVE.local.md, AGENTS.md; where two disagree the later wins):
+/// loaded when it is trusted, only named when it is not. Each goes through
+/// confinement like any tool path, and only the first `CONTEXT_MAX_BYTES`
+/// of each is read.
 pub(crate) fn context_files(root: &Path, trusted: bool) -> (Vec<ContextFile>, Vec<String>) {
-    let deny = confine::DenyList::load(root);
+    let deny = DenyList::load(root);
     let mut loaded = Vec::new();
     let mut skipped = Vec::new();
     for name in CONTEXT_FILES {
-        let Ok(target) = confine::confine(root, name, &deny, false) else {
+        let Ok(target) = confine::confine(root, name, &deny, Access::Read) else {
             continue;
         };
         if !target.absolute.is_file() {
@@ -711,9 +970,10 @@ pub(crate) fn context_files(root: &Path, trusted: bool) -> (Vec<ContextFile>, Ve
     (loaded, skipped)
 }
 
-/// Start a run in `mode` in the picked root. `auto-edit` and `yolo` ask
-/// natively the first time for the root in an app session. `label` is the
-/// conversation the run is stored in, which its checkpoints carry.
+/// Start a run in `mode` in the picked root. The org's switch is checked
+/// with MatterWave first; `auto-edit` and `yolo` ask natively the first
+/// time for the root in an app session. `label` is the conversation the
+/// run is stored in, which its checkpoints and approval log lines carry.
 #[tauri::command(rename_all = "snake_case")]
 pub(crate) async fn agent_start_run(
     state: State<'_, AgentState>,
@@ -827,10 +1087,21 @@ impl WriteArgs {
         }
     }
 
-    fn preview(&self, ws: &Workspace) -> Result<(confine::Confined, WritePreview), ToolOutput> {
+    fn path(&self) -> &str {
         match self {
-            WriteArgs::Edit(a) => tools::preview_edit(ws, a),
-            WriteArgs::Write(a) => tools::preview_write(ws, a),
+            WriteArgs::Edit(a) => &a.path,
+            WriteArgs::Write(a) => &a.path,
+        }
+    }
+
+    fn preview(
+        &self,
+        ws: &Workspace,
+        access: Access,
+    ) -> Result<(confine::Confined, WritePreview), ToolOutput> {
+        match self {
+            WriteArgs::Edit(a) => tools::preview_edit(ws, a, access),
+            WriteArgs::Write(a) => tools::preview_write(ws, a, access),
         }
     }
 }
@@ -844,24 +1115,28 @@ fn changed_since(relative: &str) -> WriteOutcome {
 }
 
 /// The change as it would be made now, held to the preview it applies: the
-/// file's bytes must be the ones that preview saw.
+/// file's bytes must be the ones that preview saw. Also whether the file is
+/// protected, by its name or where its links lead, which makes the write
+/// ask in every mode.
 pub(crate) fn prepare(
     ws: &Workspace,
     change: &WriteArgs,
     expected_sha256: &str,
-) -> Result<WritePreview, WriteOutcome> {
-    let (_, shown) = change
-        .preview(ws)
+) -> Result<(bool, WritePreview), WriteOutcome> {
+    let (target, shown) = change
+        .preview(ws, Access::ApprovedWrite)
         .map_err(|e| WriteOutcome::Error { output: e.output })?;
     if shown.before_sha256 != expected_sha256 {
         return Err(changed_since(&shown.relative));
     }
-    Ok(shown)
+    Ok((target.matched_by(&DenyList::protected()), shown))
 }
 
 /// Writes the change, computed once more, if it is still exactly the one
 /// approved: the same file, the same bytes before, the same bytes after.
-/// Checkpoints the file first; without a checkpoint nothing is written.
+/// `access` is `ApprovedWrite` only after the person's native yes, so a
+/// protected path is never reached otherwise. Checkpoints the file first;
+/// without a checkpoint nothing is written.
 pub(crate) fn commit(
     ws: &Workspace,
     data_dir: &Path,
@@ -869,8 +1144,9 @@ pub(crate) fn commit(
     tool: &'static str,
     change: &WriteArgs,
     approved: &WritePreview,
+    access: Access,
 ) -> WriteOutcome {
-    let (target, now) = match change.preview(ws) {
+    let (target, now) = match change.preview(ws, access) {
         Ok(p) => p,
         Err(e) => return WriteOutcome::Error { output: e.output },
     };
@@ -937,16 +1213,19 @@ pub(crate) async fn agent_write_file(
         .await
 }
 
-/// The timeout a `run_shell` call asked for, checked against the schema.
-pub(crate) fn shell_timeout(asked: Option<u64>) -> Result<Duration, ToolOutput> {
-    let secs = asked.unwrap_or(contract::SHELL_TIMEOUT_S_DEFAULT);
-    if !(1..=contract::SHELL_TIMEOUT_S_MAX).contains(&secs) {
-        return Err(ToolOutput::error(format!(
-            "timeout_s must be between 1 and {} seconds.",
-            contract::SHELL_TIMEOUT_S_MAX
-        )));
+/// The timeout a `run_shell` call asked for, checked against the schema:
+/// a whole number of seconds from 1 to the contract's maximum.
+pub(crate) fn shell_timeout(asked: Option<f64>) -> Result<Duration, ToolOutput> {
+    let max = contract::SHELL_TIMEOUT_S_MAX;
+    let Some(secs) = asked else {
+        return Ok(Duration::from_secs(contract::SHELL_TIMEOUT_S_DEFAULT));
+    };
+    if secs.fract() != 0.0 || !(1.0..=max as f64).contains(&secs) {
+        return Err(ToolOutput::error(
+            ToolFailure::BadTimeout.message(&[("max", &max.to_string())]),
+        ));
     }
-    Ok(Duration::from_secs(secs))
+    Ok(Duration::from_secs(secs as u64))
 }
 
 /// Run one command in the root with the platform's shell, once approved.
@@ -1005,5 +1284,7 @@ pub(crate) const COMMANDS: &[&str] = &[
     "agent_restore",
 ];
 
+#[cfg(test)]
+mod conformance;
 #[cfg(test)]
 mod tests;

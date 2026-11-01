@@ -39,6 +39,21 @@ the API's `MW_RELEASE` all report it).
 
 ### Changed
 
+- **Agent mode speaks agent contract 1.1.0** (none of it released). The host and the SPA take the
+  SDKs' 1.1 contract (`contract.json` and the shared conformance cases, copied byte for byte; the
+  TypeScript helpers re-vendored with `web/scripts/vendor-agent-sdk.mjs`), and the Rust host runs
+  every one of the contract's conformance cases (`paths`, `tools`, `ignore`, `shell`) in
+  `cargo test`. Visible to the model: read_file has no LF after its last line; list_dir lists
+  protected entries and says "has nothing to list" when empty; glob matches a pattern without `/`
+  at any depth and ignores case; grep cuts lines at 400 characters and skips files over 4 MiB;
+  search reads `.gitignore` and `.matterwaveignore` in every folder from the root down (and no
+  longer `.git/info/exclude` or files above the root), case-insensitively, files before
+  subfolders; run_shell says `Exit code N` and keeps the head and tail of long output around a
+  middle marker; refusals and the person's no use the contract's sentences (`rejected`,
+  `unknown_tool`, `mode`); a whole-number `timeout_s` is required. Context files go in the
+  contract's fenced "Project instructions" section in its order (MATTERWAVE.md,
+  MATTERWAVE.local.md, AGENTS.md), 32,768 characters each. Windows aliases are refused on every
+  platform with the contract's `stream`, `trailing`, `device` and `unc` codes.
 - **A send that folds first says so.** The API now opens such a send with a `compacting` frame
   and folds inside the stream; the chat restarts its one-minute wait for the first token on it
   and says the earlier messages are being summarised, instead of giving up on a turn that was
@@ -46,6 +61,21 @@ the API's `MW_RELEASE` all report it).
 
 ### Security
 
+- **Agent mode: the gaps the T-406 security test left** (none of it released). The org's
+  `local_agent_tools` switch is enforced by the native host, which asks `/api/me` itself with the
+  stored credential before every run and refuses when the org says no or cannot be asked. Every
+  native answer goes to an owner-only, size-rotated approval log in the app's data directory
+  (`agent-approvals.log`: time, question, tool, path or command hash, mode, result), a yes the log
+  cannot record is not acted on, and a stored run's results say what the person approved. The
+  page's CSP `connect-src` is pinned at launch to the API's origin (the committed config no longer
+  allows any `https:` host). A write to a protected file -- the contract's 1.1 list, now with
+  `.matterwave/`, shell startup files, `.ssh/`, `.aws/` and `.config/matterwave` -- asks natively
+  in every mode, yolo included (`.matterwaveignore`, refused outright before, now asks too), and in
+  plan and ask reading the settings folder, a startup file or a credentials folder asks natively
+  and search leaves them out. On Linux a command also runs in a cgroup of its own where the app's
+  cgroup is delegated, so Stop ends processes that called `setsid`. CI runs the agent host's suite
+  on Windows and macOS too. `docs/agent-mode-security.md` holds the design pattern and the
+  prompt-injection analysis T-406 asks for.
 - **Agent mode, from an adversarial review of the tool host** (none of it released): on Windows,
   a path naming an alternate data stream (`notes.txt:hidden`, `x:Zone.Identifier`) could be
   written, and device names and trailing dots or spaces were let through -- all now refused; a

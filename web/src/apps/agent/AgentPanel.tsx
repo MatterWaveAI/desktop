@@ -557,7 +557,9 @@ export function ConfirmingCard(props: { event: Extract<AgentEvent, { kind: "conf
       <p className="font-medium">
         {event.what === "command"
           ? "Run this command? Answer in the desktop app's dialog."
-          : "Confirm the change in the desktop app's dialog."}
+          : event.what === "read"
+            ? "Let the agent read this? Answer in the desktop app's dialog."
+            : "Confirm the change in the desktop app's dialog."}
       </p>
       <pre className="mt-1 overflow-auto whitespace-pre-wrap rounded border border-mw-border px-2 py-1 font-mono text-xs">
         {event.text}

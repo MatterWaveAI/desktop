@@ -1,12 +1,15 @@
 /**
  * Test doubles for agent mode: an in-memory tool host with the native
  * host's shape (preview, then apply against the previewed fingerprint;
- * the desktop app's own dialog before a command in ask and auto-edit and
- * before a write in ask), and a scripted `/v1`. Not a test file itself;
- * the suites import it.
+ * the desktop app's own dialog before a command in ask and auto-edit,
+ * before a write in ask, before a write to a protected file in every
+ * mode, and before a read of a credentials folder in plan and ask), and a
+ * scripted `/v1`. Not a test file itself; the suites import it.
  */
 import type { AgentHost, AgentStatus, ReadTool, RunStarted, ToolOutput, WriteOutcome, WriteTool } from "./host";
-import type { CompletionRequest, CompletionResponse, ModelTransport, ToolCall } from "./loop";
+import { readAsksNatively, type CompletionRequest, type CompletionResponse, type ModelTransport, type ToolCall } from "./loop";
+import { isProtected } from "./sdk/deny";
+import { refusal } from "./sdk/modes";
 import type { ModeName } from "./sdk/types";
 
 export interface HostCall {
@@ -50,7 +53,7 @@ export class FakeHost implements AgentHost {
       trusted: false,
       platform: "linux",
       shell: "sh",
-      contract_version: "1.0.0",
+      contract_version: "1.1.0",
       yolo_confirmed: false,
       auto_edit_confirmed: false,
     });
@@ -89,6 +92,9 @@ export class FakeHost implements AgentHost {
   read(_runId: string, tool: ReadTool, args: unknown): Promise<ToolOutput> {
     this.calls.push({ kind: "read", tool, args });
     const path = (args as { path?: string }).path ?? ".";
+    if (readAsksNatively(this.mode, path) && !this.native(path)) {
+      return Promise.resolve({ output: refusal("rejected", { tool }), is_error: false, rejected: true });
+    }
     if (tool === "read_file") {
       if (path === ".env") {
         return Promise.resolve({
@@ -100,7 +106,7 @@ export class FakeHost implements AgentHost {
       return Promise.resolve(
         text === undefined
           ? { output: `${path} does not exist.`, is_error: true }
-          : { output: text.split("\n").filter(Boolean).map((l, i) => `${i + 1}\t${l}`).join("\n") + "\n", is_error: false },
+          : { output: text.split("\n").filter(Boolean).map((l, i) => `${i + 1}\t${l}`).join("\n"), is_error: false },
       );
     }
     return Promise.resolve({ output: [...this.files.keys()].join("\n"), is_error: false });
@@ -142,9 +148,8 @@ export class FakeHost implements AgentHost {
     if (step.expectedSha256 !== sha(before)) {
       return Promise.resolve({ status: "error", output: `${a.path} changed after the change was shown.` });
     }
-    const context = ["matterwave.md", "agents.md", "matterwave.local.md"].includes(a.path.toLowerCase());
-    if ((this.mode === "ask" || (this.mode === "auto-edit" && context)) && !this.native(a.path)) {
-      return Promise.resolve({ status: "rejected", output: `Rejected by the user: ${a.path} was not changed.` });
+    if ((this.mode === "ask" || isProtected(a.path)) && !this.native(a.path)) {
+      return Promise.resolve({ status: "rejected", output: refusal("rejected", { tool }) });
     }
     this.files.set(a.path, after);
     return Promise.resolve({ status: "applied", output: `Edited ${a.path}.`, relative: a.path, checkpoint: 1 });
@@ -154,10 +159,10 @@ export class FakeHost implements AgentHost {
     const command = (args as { command?: string }).command ?? "";
     if (this.shellGate) await this.shellGate;
     if ((this.mode === "ask" || this.mode === "auto-edit") && !this.native(command)) {
-      return { output: "Rejected by the user: the command was not run.", is_error: false, rejected: true };
+      return { output: refusal("rejected", { tool: "run_shell" }), is_error: false, rejected: true };
     }
     this.ran.push(command);
-    return { output: "Exit code: 0\nok", is_error: false };
+    return { output: "Exit code 0\nok", is_error: false };
   }
   checkpoints() {
     return Promise.resolve([]);
