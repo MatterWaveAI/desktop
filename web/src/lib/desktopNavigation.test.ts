@@ -110,6 +110,27 @@ describe("installDesktopNavigation", () => {
     expect(navigate).toHaveBeenCalledTimes(2);
   });
 
+  it("hands a conversation to the signed-in shell, and everything else to the router", async () => {
+    const bridge = fakeBridge(null);
+    const { installDesktopNavigation, registerDesktopShell } = await load();
+    const navigate = vi.fn();
+    const openConversation = vi.fn();
+    const unregister = registerDesktopShell({ openConversation });
+    installDesktopNavigation(navigate);
+    await vi.waitFor(() => expect(bridge.listening()).toBe(true));
+
+    bridge.request({ kind: "conversation", id: "c3", message: "m2" });
+    await vi.waitFor(() => expect(openConversation).toHaveBeenCalledWith("c3", "m2"));
+    bridge.request({ kind: "share", token: "t2" });
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/share/t2"));
+
+    // Signed out again: the route is the way in, for the front door to keep.
+    unregister();
+    bridge.request({ kind: "conversation", id: "c4" });
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/apps/chat?c=c4"));
+    expect(openConversation).toHaveBeenCalledTimes(1);
+  });
+
   it("ignores a target it cannot route", async () => {
     const bridge = fakeBridge({ kind: "conversation", id: "c1/../../x" });
     const { installDesktopNavigation } = await load();

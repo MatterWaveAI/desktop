@@ -1,0 +1,173 @@
+import { act, useEffect } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AuthConfig, Principal } from "../types";
+import { apps } from "../apps/registry";
+import { Shell } from "./Shell";
+import { useShell } from "./shellContext";
+import { JUMP_TO_MESSAGE_EVENT, type JumpToMessageDetail } from "./useConversationSearch";
+import { installDesktopNavigation } from "../lib/desktopNavigation";
+
+/**
+ * A `matterwave://conversation/...` link followed while the desktop app
+ * already shows another conversation: the shell selects the linked one, as
+ * a sidebar search hit does, rather than leaving the chat page on the old
+ * one with a new `?c=` it never reads. Same harness as Shell.test.tsx.
+ */
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+window.scrollTo = () => undefined;
+
+const authConfig: AuthConfig = { auth_mode: "none", csrf_cookie: "mw_csrf", default_model: "fake-mini" };
+const principal: Principal = {
+  subject: "dev@localhost",
+  kind: "dev",
+  email: "dev@localhost",
+  name: null,
+  roles: [],
+  org_id: "dev-org",
+  org_name: null,
+  org_role: null,
+};
+
+const CONVERSATIONS = [
+  { id: "c1", title: "Quarterly velocity planning", created_at: "2026-09-01T00:00:00Z", updated_at: "2026-09-01T00:00:00Z" },
+  { id: "c2", title: "Hiring loop notes", created_at: "2026-09-02T00:00:00Z", updated_at: "2026-09-02T00:00:00Z" },
+];
+
+/** The chat page in miniature: opens `?c=` on mount only, as the real one does. */
+function ChatStandIn() {
+  const { selectConversation } = useShell();
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get("c");
+    if (id) selectConversation(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <textarea data-mw-composer="" aria-label="Message" />;
+}
+
+/**
+ * The native side: one pending target, announced as `navigate`. One bridge
+ * for the whole file -- desktopAuth keeps the first invoke it finds -- with
+ * its state reset per test.
+ */
+let pending: unknown = null;
+const callbacks = new Map<number, (event: unknown) => void>();
+const listeners: ((event: unknown) => void)[] = [];
+const invoke = vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
+  if (cmd === "take_navigation") {
+    const taken = pending;
+    pending = null;
+    return taken;
+  }
+  if (cmd === "plugin:event|listen") {
+    const cb = callbacks.get(args?.handler as number);
+    if (cb && args?.event === "navigate") listeners.push(cb);
+    return listeners.length;
+  }
+  return null;
+});
+
+function fakeBridge() {
+  pending = null;
+  listeners.splice(0);
+  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+    invoke,
+    transformCallback: (cb: (event: unknown) => void) => {
+      const id = callbacks.size + 1;
+      callbacks.set(id, cb);
+      return id;
+    },
+  };
+  return {
+    request(target: unknown) {
+      pending = target;
+      for (const cb of listeners) cb({ event: "navigate", id: 1, payload: null });
+    },
+    listening: () => listeners.length > 0,
+  };
+}
+
+let root: Root | null = null;
+let container: HTMLElement | null = null;
+
+async function mount(path: string): Promise<{ el: HTMLElement; navigate: (href: string) => void }> {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const ok = (body: unknown) => ({ ok: true, status: 200, statusText: "OK", headers: new Headers(), json: async () => body });
+      if (url.startsWith("/api/conversations")) return ok({ data: CONVERSATIONS });
+      if (url === "/readyz") return ok({ status: "ok" });
+      return { ok: false, status: 404, statusText: "Not Found", headers: new Headers(), json: async () => ({ detail: url }) };
+    }),
+  );
+  const rootRoute = createRootRoute({ component: () => <Shell authConfig={authConfig} principal={principal} /> });
+  const index = createRoute({ getParentRoute: () => rootRoute, path: "/", component: () => <p>home</p> });
+  const chat = createRoute({ getParentRoute: () => rootRoute, path: apps[0].path, component: ChatStandIn });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([index, chat]),
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+  history.replaceState(null, "", path);
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  await act(async () => {
+    root!.render(<RouterProvider router={router} />);
+  });
+  await act(async () => {
+    await router.load();
+  });
+  return { el: container, navigate: (href) => void router.navigate({ href }) };
+}
+
+afterEach(() => {
+  act(() => root?.unmount());
+  container?.remove();
+  root = null;
+  container = null;
+  vi.unstubAllGlobals();
+  history.replaceState(null, "", "/");
+  delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+});
+
+const title = (el: HTMLElement) => el.querySelector("[data-mw-header-title]")?.textContent;
+
+describe("a conversation link in the desktop app", () => {
+  it("opens the linked conversation while another one is on screen", async () => {
+    const bridge = fakeBridge();
+    const { el, navigate } = await mount(`${apps[0].path}?c=c1`);
+    await vi.waitFor(() => expect(title(el)).toBe("Quarterly velocity planning"));
+    installDesktopNavigation(navigate);
+    await vi.waitFor(() => expect(bridge.listening()).toBe(true));
+
+    await act(async () => bridge.request({ kind: "conversation", id: "c2" }));
+    await vi.waitFor(() => expect(title(el)).toBe("Hiring loop notes"));
+    expect(new URLSearchParams(location.search).get("c")).toBe("c2");
+  });
+
+  it("puts the message on the address and asks the chat page to scroll to it", async () => {
+    const bridge = fakeBridge();
+    const { el, navigate } = await mount(`${apps[0].path}?c=c1`);
+    await vi.waitFor(() => expect(title(el)).toBe("Quarterly velocity planning"));
+    const jumps: JumpToMessageDetail[] = [];
+    const onJump = (event: Event) => jumps.push((event as CustomEvent<JumpToMessageDetail>).detail);
+    window.addEventListener(JUMP_TO_MESSAGE_EVENT, onJump);
+    installDesktopNavigation(navigate);
+    await vi.waitFor(() => expect(bridge.listening()).toBe(true));
+
+    await act(async () => bridge.request({ kind: "conversation", id: "c2", message: "m9" }));
+    await vi.waitFor(() => expect(title(el)).toBe("Hiring loop notes"));
+    expect(location.search).toBe("?c=c2&m=m9");
+    expect(jumps).toEqual([{ conversationId: "c2", messageId: "m9" }]);
+    window.removeEventListener(JUMP_TO_MESSAGE_EVENT, onJump);
+  });
+});

@@ -1,9 +1,9 @@
 diff --git a/src/lib/desktopNavigation.test.ts b/src/lib/desktopNavigation.test.ts
 new file mode 100644
-index 0000000..7cccd5b
+index 0000000..642de26
 --- /dev/null
 +++ b/src/lib/desktopNavigation.test.ts
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,151 @@
 +import { afterEach, describe, expect, it, vi } from "vitest";
 +import { apps } from "../apps/registry";
 +
@@ -114,6 +114,27 @@ index 0000000..7cccd5b
 +    bridge.request({ kind: "conversation", id: "c2", message: "m1" });
 +    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/apps/chat?c=c2&m=m1"));
 +    expect(navigate).toHaveBeenCalledTimes(2);
++  });
++
++  it("hands a conversation to the signed-in shell, and everything else to the router", async () => {
++    const bridge = fakeBridge(null);
++    const { installDesktopNavigation, registerDesktopShell } = await load();
++    const navigate = vi.fn();
++    const openConversation = vi.fn();
++    const unregister = registerDesktopShell({ openConversation });
++    installDesktopNavigation(navigate);
++    await vi.waitFor(() => expect(bridge.listening()).toBe(true));
++
++    bridge.request({ kind: "conversation", id: "c3", message: "m2" });
++    await vi.waitFor(() => expect(openConversation).toHaveBeenCalledWith("c3", "m2"));
++    bridge.request({ kind: "share", token: "t2" });
++    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/share/t2"));
++
++    // Signed out again: the route is the way in, for the front door to keep.
++    unregister();
++    bridge.request({ kind: "conversation", id: "c4" });
++    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/apps/chat?c=c4"));
++    expect(openConversation).toHaveBeenCalledTimes(1);
 +  });
 +
 +  it("ignores a target it cannot route", async () => {

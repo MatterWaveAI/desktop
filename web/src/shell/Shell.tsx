@@ -11,7 +11,9 @@ import type { AuthConfig, Principal } from "../types";
 import { useFlags } from "../lib/flags";
 import { apps, type AppDescriptor } from "../apps/registry";
 import { ShellContext, useShell, type ShellContextValue } from "./shellContext";
-import { useShellState, writeConversationUrl } from "./useShellState";
+import { useShellState, writeChatHref, writeConversationUrl } from "./useShellState";
+import { JUMP_TO_MESSAGE_EVENT, type JumpToMessageDetail } from "./useConversationSearch";
+import { registerDesktopShell } from "../lib/desktopNavigation";
 import { useVisualViewportFix } from "./useVisualViewport";
 import { AccountSummary, UserMenu } from "./UserMenu";
 import { usePlan } from "./account";
@@ -110,6 +112,37 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
       }
     },
     [context, navigate],
+  );
+
+  // A conversation link opened from outside the desktop app: selected the
+  // way a sidebar search hit is, so it opens even while another one is on
+  // screen, with `?m=` on the address for the chat page to scroll to.
+  useEffect(
+    () =>
+      registerDesktopShell({
+        openConversation: (id, message) => {
+          if (!message) {
+            openConversation(id);
+            return;
+          }
+          const search = { c: id, m: message };
+          if (window.location.pathname !== apps[0].path) {
+            context.selectConversation(id);
+            setSidebarOpen(false);
+            void navigate({ to: apps[0].path, search });
+            return;
+          }
+          writeChatHref(`${apps[0].path}?${new URLSearchParams(search)}`, "push");
+          context.selectConversation(id);
+          setSidebarOpen(false);
+          window.dispatchEvent(
+            new CustomEvent<JumpToMessageDetail>(JUMP_TO_MESSAGE_EVENT, {
+              detail: { conversationId: id, messageId: message },
+            }),
+          );
+        },
+      }),
+    [context, navigate, openConversation],
   );
 
   // An answer that finished while the tab was hidden marks the title and
