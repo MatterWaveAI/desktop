@@ -282,6 +282,14 @@
   --mw-color-inverse-foreground: var(--color-mw-neutral-925);
   --mw-color-inverse-border: var(--color-mw-brand-200);
 
+  /* Code: the brand's syntax colours, keywords in the link blue and
+     strings in emerald, on the raised surface a code block sits on. */
+  --mw-color-code-text: var(--color-mw-neutral-925);
+  --mw-color-code-keyword: var(--color-mw-brand-700);
+  --mw-color-code-string: var(--color-mw-emerald-700);
+  --mw-color-code-constant: var(--color-mw-brand-800);
+  --mw-color-code-comment: var(--color-mw-neutral-600);
+
   /* Scrims: black in both themes by design -- they dim what is behind,
      they do not re-theme. Dark's are denser (below). */
   --mw-color-scrim: rgb(0 0 0 / 0.4);        /* sheets, mobile overlays */
@@ -352,6 +360,12 @@
   --mw-color-inverse: var(--color-mw-brand-925);
   --mw-color-inverse-foreground: var(--color-mw-neutral-75);
   --mw-color-inverse-border: var(--color-mw-brand-930);
+
+  --mw-color-code-text: var(--color-mw-neutral-75);
+  --mw-color-code-keyword: var(--color-mw-brand-400);
+  --mw-color-code-string: var(--color-mw-emerald-300);
+  --mw-color-code-constant: var(--color-mw-brand-300);
+  --mw-color-code-comment: var(--color-mw-neutral-400);
 
   /* Darker than light's: on a near-black page a 0.4 scrim barely shows. */
   --mw-color-scrim: rgb(0 0 0 / 0.6);

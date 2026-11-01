@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { formatDateTime } from "../i18n/format";
 import { POLICY_PATH } from "./frontDoor";
 import { enforcementHeadline, fetchMyEnforcement, STATE_LABEL, type MyEnforcement } from "./policy";
 
@@ -22,6 +24,7 @@ import { enforcementHeadline, fetchMyEnforcement, STATE_LABEL, type MyEnforcemen
 const REFRESH_MS = 120_000;
 
 export function EnforcementBanner() {
+  const { t, i18n } = useLingui();
   const [me, setMe] = useState<MyEnforcement | null>(null);
 
   useEffect(() => {
@@ -50,19 +53,25 @@ export function EnforcementBanner() {
       ? "border-mw-warning bg-mw-warning-subtle text-mw-text"
       : "border-mw-border bg-mw-surface-raised text-mw-text";
   const appeal = me.appeal_path ?? `${POLICY_PATH}#appeal`;
+  const standing = i18n._(STATE_LABEL[me.state]);
+  const ends = me.expires_at ? formatWhen(me.expires_at) : null;
   return (
     <section
       role="status"
-      aria-label={`${STATE_LABEL[me.state]} under the Acceptable Use Policy`}
+      aria-label={t`${standing} under the Acceptable Use Policy`}
       data-enforcement-state={me.state}
       className={`border-b px-4 py-2 text-sm ${tone}`}
     >
       <p className="mx-auto flex max-w-5xl flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-medium">{enforcementHeadline(me)}</span>
         {me.reason && <span>{me.reason}</span>}
-        {me.expires_at && <span className="text-mw-text-muted">Ends {formatWhen(me.expires_at)}.</span>}
+        {ends !== null && (
+          <span className="text-mw-text-muted">
+            <Trans>Ends {ends}.</Trans>
+          </span>
+        )}
         <a href={appeal} className="underline underline-offset-2">
-          Read the policy and how to appeal
+          <Trans>Read the policy and how to appeal</Trans>
         </a>
       </p>
     </section>
@@ -72,5 +81,5 @@ export function EnforcementBanner() {
 function formatWhen(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return formatDateTime(date);
 }

@@ -76,6 +76,14 @@ describe("whether a fold has anything to do", () => {
     expect(canCompact(4, 2)).toBe(false);
     expect(canCompact(5, 2)).toBe(true);
   });
+
+  it("takes the server's answer once it has one, since the kept count depends on sizes", () => {
+    // Two exchanges, one of them huge: the server keeps only the last.
+    expect(canCompact(4, 1, true)).toBe(true);
+    // Five short turns the server still keeps whole.
+    expect(canCompact(5, 2, false)).toBe(false);
+    expect(canCompact(0, 1, true)).toBe(false);
+  });
 });
 
 describe("the nothing-to-compact notice", () => {

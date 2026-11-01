@@ -136,7 +136,7 @@ function failure(err: unknown, email: string): LoginState {
 /**
  * Decided once, at the top: the page is one or the other for its whole
  * life, so neither branch's hooks are ever conditional. The desktop shell
- * (clients/desktop) has no cookie and must never be sent on the browser
+ * (MatterWaveAI/desktop) has no cookie and must never be sent on the browser
  * redirect (`startLogin` would navigate the webview to the API's login route
  * and Zitadel, with no session cookie to come back to).
  */
@@ -413,9 +413,10 @@ function BrowserLoginPage() {
       reloadAsSwitchedAccount();
     } catch {
       setParked((list) => list.filter((a) => a.slot !== account.slot));
+      const accountName = accountLabel(account);
       setState({
         phase: "error",
-        message: t`${accountLabel(account)} is no longer signed in on this browser. Sign in again.`,
+        message: t`${accountName} is no longer signed in on this browser. Sign in again.`,
       });
     }
   }
@@ -515,27 +516,31 @@ function BrowserLoginPage() {
         <Trans>Signed in on this browser</Trans>
       </p>
       <ul className="flex flex-col gap-1">
-        {parked.map((account) => (
-          <li key={account.slot} className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={() => void continueAs(account)}
-              className={SECONDARY_BUTTON_CLASS}
-            >
-              {t`Continue as ${accountLabel(account)}`}
-            </button>
-            {account.org_name && (
-              <span className="text-xs text-mw-text-muted">{account.org_name}</span>
-            )}
-          </li>
-        ))}
+        {parked.map((account) => {
+          const accountName = accountLabel(account);
+          return (
+            <li key={account.slot} className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void continueAs(account)}
+                className={SECONDARY_BUTTON_CLASS}
+              >
+                {t`Continue as ${accountName}`}
+              </button>
+              {account.org_name && (
+                <span className="text-xs text-mw-text-muted">{account.org_name}</span>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
 
   if (mode === "sso") {
     const lastProvider = remembered?.kind === "sso" ? remembered : null;
+    const providerName = lastProvider?.providerName ?? "";
     return (
       <AuthPage
         title={t`Sign in with your organisation`}
@@ -562,7 +567,7 @@ function BrowserLoginPage() {
           {continueList}
           {lastProvider && !ssoFailure && (
             <p className="text-sm text-mw-text-muted" data-mw-last-method="">
-              {t`Last time you signed in with ${lastProvider.providerName}.`}
+              {t`Last time you signed in with ${providerName}.`}
             </p>
           )}
           <Field
@@ -577,7 +582,8 @@ function BrowserLoginPage() {
           />
           <div className="flex flex-wrap items-center gap-3">
             <SubmitButton busy={submitting} busyLabel={t`Looking up your organisation…`}>
-              {lastProvider ? t`Continue with ${lastProvider.providerName}` : t`Continue`}
+              {lastProvider ? t`Continue with ${providerName}` : t`Continue`}
+
             </SubmitButton>
             <button
               type="button"

@@ -1,4 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
+import { plural } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Alert } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -43,15 +45,18 @@ import { useLoad } from "./useLoad";
  */
 export function PlansTab() {
   const [state, reload] = useLoad(fetchPlans, "plans");
+  const { t } = useLingui();
   if (state.phase === "loading") return <LoadingSkeleton rows={6} />;
   if (state.phase === "error") {
-    return <ErrorState title="Could not load plans" message={state.message} onRetry={reload} />;
+    return <ErrorState title={t`Could not load plans`} message={state.message} onRetry={reload} />;
   }
   return (
     <div className="space-y-6">
       <p className="text-sm text-mw-text-muted">
-        Every save takes effect in every API process within the catalog's refresh window and is recorded in
-        the audit trail with what changed. A blank count is unlimited.
+        <Trans>
+          Every save takes effect in every API process within the catalog's refresh window and is recorded in the
+          audit trail with what changed. A blank count is unlimited.
+        </Trans>
       </p>
       {state.data.plans.map((plan) => (
         <PlanForm
@@ -175,8 +180,12 @@ function PlanForm({
   // The orgs the last save would have stranded; set by a 409, cleared by a
   // change or a successful save. While set, Save becomes "Save anyway".
   const [stranded, setStranded] = useState<OverLimitOrg[] | null>(null);
+  const { t, i18n } = useLingui();
+  const planName = plan.display_name;
+  const maxTrialDays = MAX_TRIAL_DAYS;
 
   const edit = editOf(draft, plan);
+  const strandedCount = stranded?.length ?? 0;
   const changes = edit ? diffPlan(plan, edit) : [];
   const dirty = changes.length > 0 && edit !== null && edit.display_name !== "";
 
@@ -194,7 +203,14 @@ function PlanForm({
     setSaved(null);
     try {
       await savePlan(plan.code, edit, stranded !== null);
-      setSaved(`${edit.display_name} saved: ${changes.length} change${changes.length === 1 ? "" : "s"}.`);
+      const savedName = edit.display_name;
+      const changeCount = changes.length;
+      setSaved(
+        plural(changeCount, {
+          one: `${savedName} saved: # change.`,
+          other: `${savedName} saved: # changes.`,
+        }),
+      );
       setStranded(null);
       onSaved();
     } catch (err: unknown) {
@@ -208,26 +224,34 @@ function PlanForm({
 
   const field = (name: string) => `${id}-${name}`;
   const perSeat = plan.limits.included_tokens_per_seat !== null;
+  const monthly = formatCents(plan.price_cents_monthly);
+  const annual = formatCents(plan.price_cents_annual);
+  const cap = formatMicros(plan.default_overage_cap_micros);
+  const prices = plan.limits.overage_enabled
+    ? perSeat
+      ? t`${monthly}/month, ${annual}/year per seat, default overage cap ${cap} per seat (prices are Stripe's)`
+      : t`${monthly}/month, ${annual}/year, default overage cap ${cap} (prices are Stripe's)`
+    : perSeat
+      ? t`${monthly}/month, ${annual}/year per seat (prices are Stripe's)`
+      : t`${monthly}/month, ${annual}/year (prices are Stripe's)`;
   return (
     <div className="space-y-4 rounded-xl border border-border bg-card p-5">
-      <form onSubmit={save} aria-label={`${plan.display_name} plan`} className="space-y-4">
+      <form onSubmit={save} aria-label={t`${planName} plan`} className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-sm font-medium text-mw-text">
             {plan.display_name} <code className="ml-1 font-mono text-xs text-mw-text-muted">{plan.code}</code>
           </h3>
-          {!plan.is_public && <Badge variant="outline">unlisted</Badge>}
-          <span className="ml-auto text-xs text-mw-text-muted">
-            {formatCents(plan.price_cents_monthly)}/month, {formatCents(plan.price_cents_annual)}/year
-            {perSeat && " per seat"}
-            {plan.limits.overage_enabled &&
-              `, default overage cap ${formatMicros(plan.default_overage_cap_micros)}${perSeat ? " per seat" : ""}`}{" "}
-            (prices are Stripe's)
-          </span>
+          {!plan.is_public && (
+            <Badge variant="outline">
+              <Trans>unlisted</Trans>
+            </Badge>
+          )}
+          <span className="ml-auto text-xs text-mw-text-muted">{prices}</span>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label htmlFor={field("name")} className="flex flex-col gap-1 text-sm">
-            Display name
+            <Trans>Display name</Trans>
             <Input
               id={field("name")}
               value={draft.display_name}
@@ -243,10 +267,10 @@ function PlanForm({
               disabled={saving}
               onChange={(e) => update({ is_public: e.target.checked })}
             />
-            Listed on /pricing
+            <Trans>Listed on /pricing</Trans>
           </label>
           <label htmlFor={field("trial")} className="flex flex-col gap-1 text-sm">
-            Free trial (days; 0: none)
+            <Trans>Free trial (days; 0: none)</Trans>
             <Input
               id={field("trial")}
               inputMode="numeric"
@@ -255,12 +279,14 @@ function PlanForm({
               onChange={(e) => update({ trial_days: e.target.value })}
             />
             <span className="text-xs text-mw-text-muted">
-              Offered at checkout to an organisation that has never had a trial or a subscription, up to{" "}
-              {MAX_TRIAL_DAYS} days. The card is still taken; the first charge is when the trial ends.
+              <Trans>
+                Offered at checkout to an organisation that has never had a trial or a subscription, up to{" "}
+                {maxTrialDays} days. The card is still taken; the first charge is when the trial ends.
+              </Trans>
             </span>
           </label>
           <label htmlFor={field("included")} className="flex flex-col gap-1 text-sm">
-            Included tokens (weighted, per window)
+            <Trans>Included tokens (weighted, per window)</Trans>
             <Input
               id={field("included")}
               inputMode="numeric"
@@ -270,18 +296,20 @@ function PlanForm({
             />
           </label>
           <label htmlFor={field("per-seat")} className="flex flex-col gap-1 text-sm">
-            Tokens per seat (weighted, pooled; blank: not sold per seat)
+            <Trans>Tokens per seat (weighted, pooled; blank: not sold per seat)</Trans>
             <Input
               id={field("per-seat")}
               inputMode="numeric"
-              placeholder="not sold per seat"
+              placeholder={t`not sold per seat`}
               value={draft.included_tokens_per_seat}
               disabled={saving}
               onChange={(e) => update({ included_tokens_per_seat: e.target.value })}
             />
             <span className="text-xs text-mw-text-muted">
-              A number sells the plan per seat: the price and the default overage cap are per seat, each seat adds
-              this many tokens to the included ones, and the Stripe quantity follows the members.
+              <Trans>
+                A number sells the plan per seat: the price and the default overage cap are per seat, each seat adds
+                this many tokens to the included ones, and the Stripe quantity follows the members.
+              </Trans>
             </span>
           </label>
           <label className="flex items-center gap-2 self-end text-sm">
@@ -291,10 +319,12 @@ function PlanForm({
               disabled={saving}
               onChange={(e) => update({ overage_enabled: e.target.checked })}
             />
-            Overage past the allowance, at list price
+            <Trans>Overage past the allowance, at list price</Trans>
           </label>
           <div className="flex flex-col gap-1 text-sm">
-            <label htmlFor={field("duration")}>Budget window</label>
+            <label htmlFor={field("duration")}>
+              <Trans>Budget window</Trans>
+            </label>
             <SimpleSelect
               id={field("duration")}
               value={draft.budget_duration}
@@ -306,11 +336,11 @@ function PlanForm({
           </div>
           {COUNT_FIELDS.map((count) => (
             <label key={count.key} htmlFor={field(count.key)} className="flex flex-col gap-1 text-sm">
-              {count.label}
+              {i18n._(count.label)}
               <Input
                 id={field(count.key)}
                 inputMode="numeric"
-                placeholder="unlimited"
+                placeholder={t`unlimited`}
                 value={draft.counts[count.key]}
                 disabled={saving}
                 onChange={(e) => update({ counts: { ...draft.counts, [count.key]: e.target.value } })}
@@ -324,7 +354,7 @@ function PlanForm({
               disabled={saving}
               onChange={(e) => update({ every_model: e.target.checked })}
             />
-            Every GRT model the gateway serves (partner models only when listed)
+            <Trans>Every GRT model the gateway serves (partner models only when listed)</Trans>
           </label>
           {!draft.every_model && (
             <ModelChecklist
@@ -337,16 +367,22 @@ function PlanForm({
           )}
         </div>
 
-        <section aria-label={`Changes to ${plan.display_name}`} className="text-sm">
-          <h4 className="text-xs font-medium uppercase tracking-wide text-mw-text-muted">Changes</h4>
+        <section aria-label={t`Changes to ${planName}`} className="text-sm">
+          <h4 className="text-xs font-medium uppercase tracking-wide text-mw-text-muted">
+            <Trans>Changes</Trans>
+          </h4>
           {edit === null ? (
             <p role="alert" className="mt-1 text-mw-danger">
-              Included tokens is a whole number; tokens per seat is a whole number, or blank for a plan not sold per
-              seat; the free trial is a whole number of days up to {MAX_TRIAL_DAYS}; every other count is a whole
-              number, or blank for unlimited.
+              <Trans>
+                Included tokens is a whole number; tokens per seat is a whole number, or blank for a plan not sold per
+                seat; the free trial is a whole number of days up to {maxTrialDays}; every other count is a whole
+                number, or blank for unlimited.
+              </Trans>
             </p>
           ) : changes.length === 0 ? (
-            <p className="mt-1 text-mw-text-muted">Nothing changed.</p>
+            <p className="mt-1 text-mw-text-muted">
+              <Trans>Nothing changed.</Trans>
+            </p>
           ) : (
             <ul className="mt-1 space-y-0.5">
               {changes.map((change) => (
@@ -362,12 +398,16 @@ function PlanForm({
           <Alert
             role="alert"
             variant="danger"
-            title={`This change would put ${stranded.length} organisation${stranded.length === 1 ? "" : "s"} over a limit. They go read-only over it on their next request; nothing is deleted.`}
+            title={plural(strandedCount, {
+              one: "This change would put # organisation over a limit. They go read-only over it on their next request; nothing is deleted.",
+              other:
+                "This change would put # organisations over a limit. They go read-only over it on their next request; nothing is deleted.",
+            })}
           >
             <ul className="list-disc pl-5">
               {stranded.map((org) => (
                 <li key={org.org_id}>
-                  {org.org_name}: {org.conversations} conversations, {org.seats} seats (over {org.over.join(", ")})
+                  <StrandedOrg org={org} />
                 </li>
               ))}
             </ul>
@@ -390,7 +430,7 @@ function PlanForm({
             variant={stranded ? "destructive" : "outline"}
             disabled={saving || !dirty}
           >
-            {stranded ? `Save ${plan.display_name} anyway` : `Save ${plan.display_name}`}
+            {stranded ? <Trans>Save {planName} anyway</Trans> : <Trans>Save {planName}</Trans>}
           </Button>
           <Button
             type="button"
@@ -403,7 +443,7 @@ function PlanForm({
               setError(null);
             }}
           >
-            Discard
+            <Trans>Discard</Trans>
           </Button>
         </div>
       </form>
@@ -411,6 +451,20 @@ function PlanForm({
           form's Changes and Save are for the form's own fields alone. */}
       <PlanFeatures plan={plan} catalog={features} disabled={saving} onSaved={onSaved} />
     </div>
+  );
+}
+
+/** "Acme: 40 conversations, 3 seats (over max_conversations)". */
+function StrandedOrg({ org }: { org: OverLimitOrg }) {
+  const orgName = org.org_name;
+  const conversations = org.conversations;
+  const seats = org.seats;
+  // The limits' own keys, as the API names them.
+  const over = org.over.join(", ");
+  return (
+    <Trans>
+      {orgName}: {conversations} conversations, {seats} seats (over {over})
+    </Trans>
   );
 }
 
@@ -438,7 +492,9 @@ function ModelChecklist(props: {
     props.onChange(on ? [...props.chosen, id] : props.chosen.filter((m) => m !== id));
   return (
     <fieldset className="flex flex-col gap-1 text-sm sm:col-span-2">
-      <legend className="mb-1">Models beyond the house model; a partner model only if ticked here</legend>
+      <legend className="mb-1">
+        <Trans>Models beyond the house model; a partner model only if ticked here</Trans>
+      </legend>
       {props.models.map((model) => {
         const house = model.id === props.houseModel;
         return (
@@ -453,8 +509,16 @@ function ModelChecklist(props: {
             />
             {model.label}
             <code className="font-mono text-xs text-mw-text-muted">{model.id}</code>
-            {house && <Badge variant="secondary">house model, on every plan</Badge>}
-            {model.partner && <Badge variant="outline">partner</Badge>}
+            {house && (
+              <Badge variant="secondary">
+                <Trans>house model, on every plan</Trans>
+              </Badge>
+            )}
+            {model.partner && (
+              <Badge variant="outline">
+                <Trans>partner</Trans>
+              </Badge>
+            )}
           </label>
         );
       })}
@@ -462,7 +526,7 @@ function ModelChecklist(props: {
         <label key={id} className="flex items-center gap-2 text-mw-danger" data-plan-model={id}>
           <input type="checkbox" checked disabled={props.disabled} onChange={() => toggle(id, false)} />
           <code className="font-mono text-xs">{id}</code>
-          not on the price list: untick it to save
+          <Trans>not on the price list: untick it to save</Trans>
         </label>
       ))}
     </fieldset>
@@ -496,7 +560,9 @@ function PlanFeatures(props: {
       .map((name) => ({ name, label: name, description: "" })),
   ];
   const orgs = plan.org_count ?? 0;
-  const orgsText = `${orgs} organisation${orgs === 1 ? "" : "s"}`;
+  const { t } = useLingui();
+  const planName = plan.display_name;
+  const pendingName = pending?.label ?? "";
 
   async function apply(feature: FeatureInfo, on: boolean) {
     setBusy(true);
@@ -504,7 +570,8 @@ function PlanFeatures(props: {
     setSaved(null);
     try {
       await savePlanFeatures(plan.code, { [feature.name]: on });
-      setSaved(`${feature.label} is ${on ? "on" : "off"} for ${plan.display_name}.`);
+      const featureName = feature.label;
+      setSaved(on ? t`${featureName} is on for ${planName}.` : t`${featureName} is off for ${planName}.`);
       props.onSaved();
     } catch (err: unknown) {
       setError(failureMessage(err));
@@ -525,14 +592,21 @@ function PlanFeatures(props: {
   }
 
   return (
-    <section aria-label={`${plan.display_name} features`} className="border-t border-mw-border pt-4 text-sm">
+    <section aria-label={t`${planName} features`} className="border-t border-mw-border pt-4 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-mw-text-muted">Features</h4>
-        <Badge variant="outline">Saved as you switch</Badge>
+        <h4 className="text-xs font-medium uppercase tracking-wide text-mw-text-muted">
+          <Trans>Features</Trans>
+        </h4>
+        <Badge variant="outline">
+          <Trans>Saved as you switch</Trans>
+        </Badge>
       </div>
       <p className="mt-1 text-xs text-mw-text-muted">
-        Not part of Save above: each switch saves on its own and reaches the {orgsText} on this plan on their next
-        request. An organisation's own override wins over the plan.
+        {plural(orgs, {
+          one: "Not part of Save above: each switch saves on its own and reaches the # organisation on this plan on its next request. An organisation's own override wins over the plan.",
+          other:
+            "Not part of Save above: each switch saves on its own and reaches the # organisations on this plan on their next request. An organisation's own override wins over the plan.",
+        })}
       </p>
       <ul className="mt-2 space-y-2">
         {known.map((feature) => {
@@ -577,9 +651,12 @@ function PlanFeatures(props: {
         onOpenChange={(open) => {
           if (!open && !busy) setPending(null);
         }}
-        title={pending ? `Turn off ${pending.label} for ${plan.display_name}?` : "Turn this feature off?"}
-        description={`The ${orgsText} on ${plan.display_name} lose it on their next request, except any whose own override keeps it. The change is recorded in the audit trail under your name.`}
-        confirmLabel="Turn off"
+        title={pending ? t`Turn off ${pendingName} for ${planName}?` : t`Turn this feature off?`}
+        description={plural(orgs, {
+          one: `The # organisation on ${planName} loses it on its next request, unless its own override keeps it. The change is recorded in the audit trail under your name.`,
+          other: `The # organisations on ${planName} lose it on their next request, except any whose own override keeps it. The change is recorded in the audit trail under your name.`,
+        })}
+        confirmLabel={t`Turn off`}
         inFlight={busy}
         onConfirm={() => {
           if (pending) void apply(pending, false);

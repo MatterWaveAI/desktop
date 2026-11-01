@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { msg } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { i18n } from "../i18n/runtime";
 import type { ReadyStatus } from "../types";
 import { apiFetch } from "../lib/api";
 
@@ -11,13 +14,14 @@ const READY_POLL_MS = 30_000;
 
 /** Surfaces "the model gateway is down" without touching the chat itself. */
 export function ReadyBadge() {
+  const { t } = useLingui();
   const [status, setStatus] = useState<ReadyStatus | null>(null);
   useEffect(() => {
     let alive = true;
     const check = () =>
       apiFetch<ReadyStatus>("/readyz")
         .then((next) => alive && setStatus(next))
-        .catch(() => alive && setStatus({ status: "degraded", detail: "API unreachable" }));
+        .catch(() => alive && setStatus({ status: "degraded", detail: i18n._(msg`API unreachable`) }));
     void check();
     const timer = setInterval(check, READY_POLL_MS);
     return () => {
@@ -29,9 +33,9 @@ export function ReadyBadge() {
   return (
     <span
       className="ml-2 rounded-full bg-mw-warning-subtle px-2 py-0.5 text-xs text-mw-warning-foreground"
-      title={status.detail ?? "The model gateway is down."}
+      title={status.detail ?? t`The model gateway is down.`}
     >
-      Model gateway down
+      <Trans>Model gateway down</Trans>
     </span>
   );
 }

@@ -15,7 +15,7 @@ export function CopyAction(props: { text: string; disabled?: boolean }) {
       iconOnly
       variant="ghost"
       disabled={props.disabled}
-      className="text-mw-text-muted hover:text-mw-text pointer-coarse:size-11 [&_svg]:size-3.5"
+      className="size-8 rounded-lg text-mw-text-muted hover:text-mw-text pointer-coarse:size-11 [&_svg]:size-4"
     />
   );
 }

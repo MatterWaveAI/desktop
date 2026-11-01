@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   WebhooksPane,
+  type CatalogueEntry,
   type RevealedSecret,
   type WebhookDelivery,
   type WebhookEndpoint,
+  type WebhookLimits,
 } from "./WebhooksPane";
 import {
   buttonNamed,
@@ -327,6 +329,8 @@ describe("the webhooks pane", () => {
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(0); // the confirm is the gate
     click(buttonNamed(document.querySelector("[data-slot='dialog-content']")!, "Rotate secret"));
     await flush();
+    // The default grace: a day, so the receiver can switch without a failure.
+    expect(calls.find((c) => c.method === "POST")!.body).toEqual({ grace_seconds: 86400 });
     const shown = document.querySelector("[data-webhook-secret-dialog]")!;
     expect(shown.querySelector("[data-testid='webhook-secret']")!.textContent).toBe("whsec_ROTATED");
     click(buttonNamed(shown, "Done"));
@@ -344,5 +348,172 @@ describe("the webhooks pane", () => {
     click(buttonNamed(document.querySelector("[data-slot='dialog-content']")!, "Delete endpoint"));
     await flush();
     expect(calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual([`/api/org/webhooks/${ENDPOINT.id}`]);
+  });
+});
+
+// --- the catalogue, editing, rotation's grace, the banner, the log's detail ---------
+
+const CATALOGUE: CatalogueEntry[] = [
+  { type: "member.joined", group: "members", description: "Someone joined.", example: { subject: "user_1", role: "member" } },
+  { type: "member.role_changed", group: "members", description: "A role changed.", example: { subject: "user_1" } },
+  { type: "api_key.created", group: "keys", description: "A key was created.", example: { key_id: "k1" } },
+  { type: "budget.warn", group: "billing", description: "80%.", example: { tokens_used: 800 } },
+];
+
+const LIMITS: WebhookLimits = {
+  max_endpoints: 2,
+  max_payload_bytes: 65536,
+  disable_after_failures: 5,
+  retry_delays_s: [60, 300, 1800, 7200, 43200],
+  rotation_grace_default_s: 86400,
+  rotation_grace_max_s: 604800,
+};
+
+const STANDING = {
+  python: 'SECRET = "whsec_YOUR_SECRET"\n# standing python',
+  node: 'const SECRET = "whsec_YOUR_SECRET";\n// standing node',
+  curl: "SECRET='whsec_YOUR_SECRET'\ncurl -sS -X POST 'https://your-receiver.example/matterwave'",
+};
+
+const fullListing = (endpoints: WebhookEndpoint[]) => ({
+  status: 200,
+  body: {
+    data: endpoints,
+    events: CATALOGUE.map((entry) => entry.type),
+    catalogue: CATALOGUE,
+    groups: ["members", "keys", "billing", "conversations", "moderation"],
+    limits: LIMITS,
+    verification: STANDING,
+  },
+});
+
+describe("the webhooks pane, finished", () => {
+  it("groups the checklist by the catalogue and explains each event", async () => {
+    stubApi(() => fullListing([]));
+    mounted = await mount(<WebhooksPane />, principalWith(["user"], "owner"));
+    click(buttonNamed(mounted.container, "Add endpoint…"));
+    await flush();
+    const dialog = document.querySelector("[data-webhook-create-dialog]")!;
+    const groups = [...dialog.querySelectorAll("[data-event-group]")].map((g) => g.getAttribute("data-event-group"));
+    expect(groups).toEqual(["members", "keys", "billing"]);
+    expect(dialog.querySelector("[data-event-group='members']")!.textContent).toContain("Members");
+    expect(dialog.querySelector("[data-event-group='keys']")!.textContent).toContain("An API key was created.");
+  });
+
+  it("edits an endpoint, sending only what changed", async () => {
+    const calls = stubApi(({ method, url }) => {
+      if (method === "GET" && url === "/api/org/webhooks") return fullListing([ENDPOINT]);
+      if (method === "PATCH") return { status: 200, body: ENDPOINT };
+      return undefined;
+    });
+    mounted = await mount(<WebhooksPane />, principalWith(["user"], "admin"));
+    click(buttonNamed(mounted.container.querySelector("li[data-endpoint-url]")!, "Edit…"));
+    await flush();
+    const dialog = document.querySelector("[data-webhook-edit-dialog]")!;
+    const url = dialog.querySelector("input[name='url']") as HTMLInputElement;
+    expect(url.value).toBe(ENDPOINT.url);
+    const box = (name: string) => dialog.querySelector(`input[name='events'][value='${name}']`) as HTMLInputElement;
+    expect(box("member.joined").checked).toBe(true);
+    click(box("api_key.created"));
+    setInputValue(dialog.querySelector("input[name='description']") as HTMLInputElement, "Ops");
+    submit(dialog.querySelector("form")!);
+    await flush();
+    const patch = calls.find((c) => c.method === "PATCH")!;
+    expect(patch.url).toBe(`/api/org/webhooks/${ENDPOINT.id}`);
+    // In the catalogue's order, the untouched subscription kept.
+    expect(patch.body).toEqual({ description: "Ops", events: ["member.joined", "api_key.created", "budget.warn"] });
+  });
+
+  it("rotates with the chosen grace and says until when the old secret signs", async () => {
+    const calls = stubApi(({ method, url }) => {
+      if (method === "GET" && url === "/api/org/webhooks") return fullListing([ENDPOINT]);
+      if (method === "POST" && url.endsWith("/rotate")) {
+        return {
+          status: 200,
+          body: { ...REVEALED, secret: "whsec_NEXT", previous_secret_expires_at: "2026-10-04T10:00:00+00:00" },
+        };
+      }
+      return undefined;
+    });
+    mounted = await mount(<WebhooksPane />, principalWith(["user"], "owner"));
+    click(buttonNamed(mounted.container.querySelector("li[data-endpoint-url]")!, "Rotate secret…"));
+    await flush();
+    const rotate = document.querySelector("[data-webhook-rotate-dialog]")!;
+    const choice = selectNamed(rotate, "The old secret")!;
+    expect(selectShown(choice)).toBe("Keep the old secret for 24 hours (recommended)");
+    await chooseOption(choice, "Stop the old secret now (it may have leaked)");
+    click(buttonNamed(rotate, "Rotate secret"));
+    await flush();
+    expect(calls.find((c) => c.method === "POST")!.body).toEqual({ grace_seconds: 0 });
+    const shown = document.querySelector("[data-webhook-secret-dialog]")!;
+    expect(shown.querySelector("[data-grace-note]")!.textContent).toContain("keeps signing beside this one");
+  });
+
+  it("shows a banner for an endpoint the failures disabled, and none for one an admin switched off", async () => {
+    const byFailures: WebhookEndpoint = { ...DISABLED, disabled_reason: "failures" };
+    const byAdmin: WebhookEndpoint = {
+      ...DISABLED,
+      id: "33333333-3333-7333-8333-333333333333",
+      url: "https://paused.example.com/hook",
+      failure_count: 2,
+      disabled_reason: "admin",
+    };
+    stubApi(() => fullListing([byFailures, byAdmin]));
+    mounted = await mount(<WebhooksPane />, principalWith(["user"], "owner"));
+    const banner = mounted.container.querySelector("[data-webhooks-disabled-banner]")!;
+    expect(banner.textContent).toContain("1 endpoint was disabled after repeated failures");
+    const rows = [...mounted.container.querySelectorAll("li[data-endpoint-url]")];
+    expect(rows[0].querySelector("[data-endpoint-disabled-banner]")).not.toBeNull();
+    expect(rows[1].querySelector("[data-endpoint-disabled-banner]")).toBeNull();
+    expect(rows[1].textContent).toContain("Disabled");
+    expect(rows[1].textContent).not.toContain("Disabled after");
+  });
+
+  it("disables Add endpoint at the org's cap and says why", async () => {
+    stubApi(() => fullListing([ENDPOINT, { ...DISABLED, disabled_reason: "admin" }]));
+    mounted = await mount(<WebhooksPane />, principalWith(["user"], "owner"));
+    expect(buttonNamed(mounted.container, "Add endpoint…").disabled).toBe(true);
+    expect(mounted.container.querySelector("[data-webhooks-at-cap]")!.textContent).toContain("2 endpoints");
+  });
+
+  it("filters the log by event and opens a row's request and response", async () => {
+    const rows = [
+      delivery({ id: "d-9", event: "member.joined", payload: { id: "evt_9", data: { subject: "user_1" } }, response_excerpt: "thanks" }),
+    ];
+    const calls = stubApi(({ method, url }) => {
+      if (method === "GET" && url === "/api/org/webhooks") return fullListing([ENDPOINT]);
+      if (method === "GET" && url.includes("/deliveries")) return { status: 200, body: { data: rows, status: null } };
+      return undefined;
+    });
+    mounted = await mount(<WebhooksPane />, principalWith(["user"], "owner"));
+    const row = mounted.container.querySelector("li[data-endpoint-url]")!;
+    click(buttonNamed(row, "Deliveries"));
+    await flush();
+    const events = selectNamed(row, "Event")!;
+    await chooseOption(events, "member.joined");
+    expect(calls.some((c) => c.url.endsWith("/deliveries?event=member.joined"))).toBe(true);
+    await chooseOption(selectNamed(row, "Show")!, "Failed");
+    expect(calls.some((c) => c.url.endsWith("/deliveries?status=failed&event=member.joined"))).toBe(true);
+    click(buttonNamed(row.querySelector("tbody tr")!, "Details"));
+    await flush();
+    const details = row.querySelector("[data-delivery-details='d-9']")!;
+    expect(details.textContent).toContain('"subject": "user_1"');
+    expect(details.textContent).toContain("thanks");
+    expect(details.textContent).toContain("evt_1");
+  });
+
+  it("shows the verification snippets with a placeholder and the event catalogue with examples", async () => {
+    stubApi(() => fullListing([]));
+    mounted = await mount(<WebhooksPane />, principalWith(["user"], "owner"));
+    const verify = mounted.container.querySelector("[data-webhooks-verify]")!;
+    const snippet = () => verify.querySelector("[data-testid='standing-verification-snippet']")!.textContent!;
+    expect(snippet()).toContain("# standing python");
+    click([...verify.querySelectorAll("[role='tab']")].find((tab) => tab.textContent === "curl")!);
+    expect(snippet()).toContain("curl -sS -X POST");
+    expect(mounted.container.textContent).not.toMatch(/whsec_(?!YOUR_SECRET)/);
+    const catalogue = mounted.container.querySelector("[data-webhooks-events]")!;
+    const joined = catalogue.querySelector("[data-event-type='member.joined']")!;
+    expect(joined.textContent).toContain("Someone accepted an invitation.");
+    expect(joined.querySelector("pre")!.textContent).toContain('"role": "member"');
   });
 });

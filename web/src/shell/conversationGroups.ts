@@ -1,3 +1,5 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
 import type { Conversation } from "../types";
 
 export type ConversationGroupLabel =
@@ -11,6 +13,24 @@ export type ConversationGroupLabel =
 export interface ConversationGroup {
   readonly label: ConversationGroupLabel;
   readonly rows: readonly Conversation[];
+}
+
+/**
+ * The heading each label is shown as. The label itself stays English: it is
+ * the group's key, and tests and the list compare against it.
+ */
+const HEADINGS: Record<ConversationGroupLabel, MessageDescriptor> = {
+  Pinned: msg`Pinned`,
+  Today: msg`Today`,
+  Yesterday: msg`Yesterday`,
+  "Previous 7 days": msg`Previous 7 days`,
+  "Previous 30 days": msg`Previous 30 days`,
+  Older: msg`Older`,
+};
+
+/** The heading for a group, rendered with `i18n._(groupHeading(label))`. */
+export function groupHeading(label: ConversationGroupLabel): MessageDescriptor {
+  return HEADINGS[label];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

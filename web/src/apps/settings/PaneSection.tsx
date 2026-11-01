@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { cn } from "cn";
+import { useLingui } from "@lingui/react/macro";
 import { EmptyState } from "../../patterns";
 
 /**
@@ -63,11 +64,12 @@ export function PaneSection(props: {
  * a disclosure that reads "Learn more" until opened.
  */
 export function LearnMore(props: { children: ReactNode; label?: string; className?: string }) {
+  const { t } = useLingui();
   return (
     <details className={cn("group text-sm text-mw-text-subtle", props.className)}>
       <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-mw-link outline-none select-none hover:text-mw-link-hover focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
         <ChevronRightIcon aria-hidden className="size-3.5 transition-transform group-open:rotate-90" />
-        {props.label ?? "Learn more"}
+        {props.label ?? t`Learn more`}
       </summary>
       <div className="mt-2 flex flex-col gap-2">{props.children}</div>
     </details>
@@ -79,10 +81,12 @@ export function LearnMore(props: { children: ReactNode; label?: string; classNam
  * what is coming so the placeholder reads as a commitment rather than a gap.
  */
 export function PendingPane(props: { what: string }) {
+  const { t } = useLingui();
+  const what = props.what;
   return (
     <EmptyState
-      title="Coming soon"
-      description={`${props.what} is not built yet. This pane is where it will live; until then there is nothing here to change.`}
+      title={t`Coming soon`}
+      description={t`${what} is not built yet. This pane is where it will live; until then there is nothing here to change.`}
     />
   );
 }

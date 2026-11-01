@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { apiFetch } from "../lib/api";
 import { Alert, AuthPage, DonePanel, ErrorSummary, Field, SubmitButton } from "./AuthForm";
 import {
@@ -25,6 +26,7 @@ type ForgotState =
   | { phase: "error"; message: string };
 
 export function ForgotPage() {
+  const { t } = useLingui();
   const [state, setState] = useState<ForgotState>({ phase: "form" });
   const [emailError, setEmailError] = useState<string | undefined>(undefined);
   const id = useId();
@@ -52,19 +54,19 @@ export function ForgotPage() {
 
   return (
     <AuthPage
-      title="Reset your password"
-      intro="Enter your email and we will send you a code to choose a new password."
+      title={t`Reset your password`}
+      intro={t`Enter your email and we will send you a code to choose a new password.`}
     >
       {/* Always mounted, so what lands in it is announced rather than merely appearing. */}
       <div aria-live="polite">
         {state.phase === "sent" && (
-          <DonePanel id={id} title="Check your email">
+          <DonePanel id={id} title={t`Check your email`}>
             <p className="text-sm text-mw-text-muted">
-              If an account exists for that address, a code is on its way.
+              <Trans>If an account exists for that address, a code is on its way.</Trans>
             </p>
             <div>
               <a href={withEmail(RESET_PATH, state.email)} className={SECONDARY_BUTTON_CLASS}>
-                Enter the code
+                <Trans>Enter the code</Trans>
               </a>
             </div>
           </DonePanel>
@@ -85,7 +87,7 @@ export function ForgotPage() {
               <p>{state.message}</p>
               <div>
                 <button type="submit" className={SECONDARY_BUTTON_CLASS}>
-                  Retry
+                  <Trans>Retry</Trans>
                 </button>
               </div>
             </Alert>
@@ -94,7 +96,7 @@ export function ForgotPage() {
           <Field
             id={`${id}-email`}
             name="email"
-            label="Email"
+            label={t`Email`}
             type="email"
             autoComplete="email"
             required
@@ -102,11 +104,12 @@ export function ForgotPage() {
           />
 
           <div className="flex flex-wrap items-center gap-3">
-            <SubmitButton busy={submitting} busyLabel="Sending…">
-              Send code
+            <SubmitButton busy={submitting} busyLabel={t`Sending…`}>
+              <Trans>Send code</Trans>
             </SubmitButton>
             <a href={LOGIN_PATH} className={LINK_CLASS}>
-              Back to sign in
+              <Trans>Back to sign in</Trans>
+
             </a>
           </div>
         </form>

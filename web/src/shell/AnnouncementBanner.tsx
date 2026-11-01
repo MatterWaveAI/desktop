@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchActiveAnnouncements, type ActiveAnnouncement } from "../apps/admin/announcementsApi";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { safeLinkUrl } from "../apps/chat/safeUrl";
 
 /**
@@ -56,6 +57,7 @@ const TONE: Record<Severity, string> = {
 };
 
 export function AnnouncementBanner() {
+  const { t } = useLingui();
   const [rows, setRows] = useState<ActiveAnnouncement[]>([]);
   const [dismissed, setDismissed] = useState<string[]>(readDismissed);
   // Critical ones hidden for this page only; never written to storage.
@@ -95,11 +97,11 @@ export function AnnouncementBanner() {
   }
 
   function toggle(tier: Severity) {
-    setExpanded((open) => (open.includes(tier) ? open.filter((t) => t !== tier) : [...open, tier]));
+    setExpanded((open) => (open.includes(tier) ? open.filter((s) => s !== tier) : [...open, tier]));
   }
 
   return (
-    <div aria-label="Announcements">
+    <div aria-label={t`Announcements`}>
       {TIERS.map((tier) => {
         const list = visible.filter((row) => row.severity === tier);
         if (list.length === 0) return null;
@@ -127,6 +129,7 @@ function AnnouncementRow(props: {
   onToggle?: () => void;
   onDismiss: () => void;
 }) {
+  const { t } = useLingui();
   const { row, open, more, onToggle } = props;
   const text = useRef<HTMLParagraphElement>(null);
   // Whether the clamp is cutting the message off: a lone long message needs
@@ -156,7 +159,7 @@ function AnnouncementRow(props: {
       </p>
       {showToggle && (
         <button type="button" aria-expanded={open} onClick={onToggle} className="shrink-0 underline underline-offset-2">
-          {open ? "Show less" : more > 0 ? `${more} more` : "More"}
+          {open ? t`Show less` : more > 0 ? t`${more} more` : t`More`}
         </button>
       )}
       {href && (
@@ -165,14 +168,14 @@ function AnnouncementRow(props: {
           {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
           className="shrink-0 underline underline-offset-2"
         >
-          Details
+          <Trans>Details</Trans>
         </a>
       )}
       {(critical || row.dismissible) && (
         <button
           type="button"
-          aria-label={critical ? "Hide announcement for now" : "Dismiss announcement"}
-          title={critical ? "Hidden until the page is reloaded" : undefined}
+          aria-label={critical ? t`Hide announcement for now` : t`Dismiss announcement`}
+          title={critical ? t`Hidden until the page is reloaded` : undefined}
           onClick={props.onDismiss}
           className="shrink-0 text-mw-text-muted hover:text-mw-text"
         >

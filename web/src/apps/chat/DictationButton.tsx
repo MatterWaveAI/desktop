@@ -56,11 +56,11 @@ export function DictationButton(props: {
         title={title}
         data-mw-dictate-button=""
         data-mw-dictation-state={dictation.state}
-        className={`relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${
+        className={`relative flex size-11 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-mw-focus md:size-9 md:pointer-coarse:size-11 ${
           active
             ? "bg-mw-danger-subtle text-mw-danger-strong"
             : disabled
-              ? "cursor-not-allowed text-mw-text-muted opacity-40"
+              ? "cursor-not-allowed text-mw-border-strong"
               : "text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text"
         }`}
       >

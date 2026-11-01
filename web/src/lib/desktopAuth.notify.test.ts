@@ -27,11 +27,25 @@ describe("notifyGenerationComplete", () => {
     const invoke = fakeTauri();
     const { notifyGenerationComplete } = await load();
 
-    notifyGenerationComplete();
+    notifyGenerationComplete("c1");
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce());
     expect(invoke).toHaveBeenCalledWith("notify_generation_complete", {
       title: "MatterWave",
       body: "Your reply is ready.",
+      conversationId: "c1",
+    });
+  });
+
+  it("sends no conversation when the stream named none", async () => {
+    const invoke = fakeTauri();
+    const { notifyGenerationComplete } = await load();
+
+    notifyGenerationComplete(null);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce());
+    expect(invoke).toHaveBeenCalledWith("notify_generation_complete", {
+      title: "MatterWave",
+      body: "Your reply is ready.",
+      conversationId: null,
     });
   });
 

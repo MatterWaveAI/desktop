@@ -1,5 +1,7 @@
 import { useContext, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "../components/ui/button";
 import { ApiError, apiFetch } from "../lib/api";
 import { Alert, AuthPage, DonePanel, Field } from "./AuthForm";
@@ -42,15 +44,15 @@ const KEY_NAME_MAX_LENGTH = 64;
 const USER_CODE_SHAPE = /^[0-9A-Za-z]{4}-?[0-9A-Za-z]{4}$/;
 
 function validateUserCode(code: string): string | undefined {
-  if (code === "") return "Enter the code shown on your device.";
+  if (code === "") return t`Enter the code shown on your device.`;
   if (!USER_CODE_SHAPE.test(code.replace(/\s/g, ""))) {
-    return "The code is the eight characters shown on your device, like ABCD-2345.";
+    return t`The code is the eight characters shown on your device, like ABCD-2345.`;
   }
   return undefined;
 }
 
 function clientLabel(device: DeviceLookup): string {
-  return device.client_name ?? "A device";
+  return device.client_name ?? t`A device`;
 }
 
 /**
@@ -80,6 +82,7 @@ function deviceReturnPath(code: string | undefined): string {
 }
 
 export function DevicePage() {
+  const { t } = useLingui();
   const searchStr = useLocation({ select: (location) => location.searchStr });
   const prefilled = queryParam(searchStr, "user_code") ?? "";
   // Null outside the shell: no session, so the front door rendered this page.
@@ -158,9 +161,9 @@ export function DevicePage() {
 
   if (shell === null) {
     return (
-      <AuthPage title="Sign in to approve a device">
+      <AuthPage title={t`Sign in to approve a device`}>
         <p aria-live="polite" className="animate-pulse text-sm text-mw-text-muted">
-          Taking you to sign in…
+          <Trans>Taking you to sign in…</Trans>
         </p>
       </AuthPage>
     );
@@ -170,13 +173,16 @@ export function DevicePage() {
   const who = principal.email ?? principal.subject;
 
   if (state.phase === "approved") {
+    const clientName = clientLabel(state.device);
     return (
-      <AuthPage title="Device approved" brand={false}>
+      <AuthPage title={t`Device approved`} brand={false}>
         <div aria-live="polite">
-          <DonePanel id={id} title={`${clientLabel(state.device)} is signed in`}>
+          <DonePanel id={id} title={t`${clientName} is signed in`}>
             <p className="text-sm text-mw-text-muted">
-              It signs in as {who} with a key named after it, which you can revoke in Settings,
-              under API keys. You can close this page.
+              <Trans>
+                It signs in as {who} with a key named after it, which you can revoke in Settings,
+                under API keys. You can close this page.
+              </Trans>
             </p>
           </DonePanel>
         </div>
@@ -184,12 +190,13 @@ export function DevicePage() {
     );
   }
   if (state.phase === "denied") {
+    const clientName = clientLabel(state.device);
     return (
-      <AuthPage title="Device denied" brand={false}>
+      <AuthPage title={t`Device denied`} brand={false}>
         <div aria-live="polite">
-          <DonePanel id={id} title="The sign-in was denied">
+          <DonePanel id={id} title={t`The sign-in was denied`}>
             <p className="text-sm text-mw-text-muted">
-              {clientLabel(state.device)} was not given access. You can close this page.
+              <Trans>{clientName} was not given access. You can close this page.</Trans>
             </p>
           </DonePanel>
         </div>
@@ -206,10 +213,11 @@ export function DevicePage() {
 
   if (device !== undefined) {
     const busy = state.phase === "deciding";
+    const clientName = clientLabel(device);
     return (
       <AuthPage
-        title="Approve this device?"
-        intro={`${clientLabel(device)} wants to sign in to MatterWave as ${who}.`}
+        title={t`Approve this device?`}
+        intro={t`${clientName} wants to sign in to MatterWave as ${who}.`}
         brand={false}
       >
         {state.phase === "error" && (
@@ -218,10 +226,12 @@ export function DevicePage() {
           </Alert>
         )}
         <div className="flex flex-col gap-1 rounded-lg border border-mw-border bg-mw-surface-raised p-4">
-          <p className="text-sm text-mw-text-muted">Code</p>
+          <p className="text-sm text-mw-text-muted">
+            <Trans>Code</Trans>
+          </p>
           <p className="font-mono text-lg tracking-widest">{device.user_code}</p>
           <p className="text-xs text-mw-text-muted">
-            Only approve if this matches the code on your device and you started the sign-in.
+            <Trans>Only approve if this matches the code on your device and you started the sign-in.</Trans>
           </p>
         </div>
         <form
@@ -233,7 +243,7 @@ export function DevicePage() {
           <Field
             id={`${id}-name`}
             name="name"
-            label="Key name (optional)"
+            label={t`Key name (optional)`}
             // Keyed on the code so a new lookup refills it; the input itself
             // stays uncontrolled, read at submit like the other forms.
             key={device.user_code}
@@ -241,15 +251,15 @@ export function DevicePage() {
             maxLength={KEY_NAME_MAX_LENGTH}
             autoComplete="off"
             spellCheck={false}
-            hint="How the device's key is listed in Settings, under API keys."
+            hint={t`How the device's key is listed in Settings, under API keys.`}
           />
           <div className="flex flex-wrap gap-3">
             {/* The shell's buttons: this page renders inside it. */}
             <Button type="submit" disabled={busy}>
-              {busy ? "Working…" : "Approve"}
+              {busy ? t`Working…` : t`Approve`}
             </Button>
             <Button type="button" variant="outline" disabled={busy} onClick={() => void decide(device, "deny")}>
-              Deny
+              <Trans>Deny</Trans>
             </Button>
           </div>
         </form>
@@ -258,7 +268,11 @@ export function DevicePage() {
   }
 
   return (
-    <AuthPage title="Sign in a device" intro="Enter the code shown in your terminal or editor." brand={false}>
+    <AuthPage
+      title={t`Sign in a device`}
+      intro={t`Enter the code shown in your terminal or editor.`}
+      brand={false}
+    >
       {state.phase === "error" && (
         <Alert>
           <p>{state.message}</p>
@@ -268,7 +282,7 @@ export function DevicePage() {
         <Field
           id={`${id}-code`}
           name="user_code"
-          label="Code"
+          label={t`Code`}
           defaultValue={prefilled}
           autoComplete="one-time-code"
           autoCapitalize="characters"
@@ -278,7 +292,8 @@ export function DevicePage() {
         />
         <div>
           <Button type="submit" disabled={state.phase === "looking"}>
-            {state.phase === "looking" ? "Checking…" : "Continue"}
+            {state.phase === "looking" ? t`Checking…` : t`Continue`}
+
           </Button>
         </div>
       </form>

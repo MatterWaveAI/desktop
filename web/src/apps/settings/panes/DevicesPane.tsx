@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 import { ServerIcon } from "lucide-react";
+import { plural } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { formatTime } from "../../../i18n/format";
 import { Alert } from "../../../components/ui/alert";
 import { Badge, StatusDot } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -108,12 +111,13 @@ export function DevicesPane() {
 // --- the platform -------------------------------------------------------------
 
 function PlatformDevices() {
+  const { t } = useLingui();
   const { principal } = useShell();
   if (!managesOrg(principal)) {
     return (
       <EmptyState
-        title="Devices are for admins"
-        description="Edge boxes are paired with this organisation by an owner or administrator. Ask one to pair a box or to unpair one."
+        title={t`Devices are for admins`}
+        description={t`Edge boxes are paired with this organisation by an owner or administrator. Ask one to pair a box or to unpair one.`}
       />
     );
   }
@@ -121,6 +125,7 @@ function PlatformDevices() {
 }
 
 function PlatformAdmin() {
+  const { t } = useLingui();
   const [devices, setDevices] = useState<EdgeDevice[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
@@ -138,12 +143,12 @@ function PlatformAdmin() {
       .catch((err: unknown) => {
         if (cancelled) return;
         setDevices(null);
-        setLoadError(messageOf(err, "Could not load the paired boxes."));
+        setLoadError(messageOf(err, t`Could not load the paired boxes.`));
       });
     return () => {
       cancelled = true;
     };
-  }, [version]);
+  }, [version, t]);
 
   return (
     <div className="flex flex-col gap-7">
@@ -160,12 +165,12 @@ function PlatformAdmin() {
             field?.focus({ preventScroll: true });
           }}
         >
-          Pair a box
+          <Trans>Pair a box</Trans>
         </Button>
       </PaneActions>
       <PaneSection
-        title="Pair an edge box"
-        description="Name the box, make a code, and enter it on the box within ten minutes."
+        title={t`Pair an edge box`}
+        description={t`Name the box, make a code, and enter it on the box within ten minutes.`}
       >
         {minted ? (
           <CodeReveal
@@ -188,29 +193,31 @@ function PlatformAdmin() {
         )}
         <LearnMore className="mt-4">
           <p>
-            A box on your network keeps working with no connection and mirrors its conversations here when
-            it has one. The code is entered on the box under Settings → Devices. The box gets a key that can
-            only add conversations: it cannot read your threads, chat as you, or reach billing.
+            <Trans>
+              A box on your network keeps working with no connection and mirrors its conversations here
+              when it has one. The code is entered on the box under Settings → Devices. The box gets a key
+              that can only add conversations: it cannot read your threads, chat as you, or reach billing.
+            </Trans>
           </p>
         </LearnMore>
       </PaneSection>
       <PaneSection
-        title="Paired boxes"
+        title={t`Paired boxes`}
         flush
-        description="Unpairing revokes the box's key; what it already mirrored stays here."
+        description={t`Unpairing revokes the box's key; what it already mirrored stays here.`}
       >
         {loadError ? (
           <div className="px-5 py-4">
-            <ErrorState title="Could not load the boxes" message={loadError} onRetry={reload} />
+            <ErrorState title={t`Could not load the boxes`} message={loadError} onRetry={reload} />
           </div>
         ) : devices === null ? (
           <div className="px-5 py-4">
             <LoadingSkeleton rows={2} />
           </div>
         ) : devices.length === 0 ? (
-          <EmptyState title="No boxes yet" description="Pair one above." />
+          <EmptyState title={t`No boxes yet`} description={t`Pair one above.`} />
         ) : (
-          <RowList aria-label="Paired boxes">
+          <RowList aria-label={t`Paired boxes`}>
             {devices.map((device) => (
               <DeviceRow key={device.id} device={device} onChanged={reload} />
             ))}
@@ -218,8 +225,10 @@ function PlatformAdmin() {
         )}
         <LearnMore className="border-t border-border px-5 py-3">
           <p>
-            An unpaired box stops at its next sync and asks to be paired again. Conversations it already
-            mirrored stay in this organisation.
+            <Trans>
+              An unpaired box stops at its next sync and asks to be paired again. Conversations it already
+              mirrored stay in this organisation.
+            </Trans>
           </p>
         </LearnMore>
       </PaneSection>
@@ -228,13 +237,14 @@ function PlatformAdmin() {
 }
 
 function MintForm(props: { onMinted: (minted: MintedCode) => void }) {
+  const { t } = useLingui();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!name.trim()) {
-      setError("Name the box, so you can tell it apart later.");
+      setError(t`Name the box, so you can tell it apart later.`);
       return;
     }
     setBusy(true);
@@ -248,25 +258,27 @@ function MintForm(props: { onMinted: (minted: MintedCode) => void }) {
       );
       setName("");
     } catch (err) {
-      setError(messageOf(err, "Could not make a pairing code."));
+      setError(messageOf(err, t`Could not make a pairing code.`));
     } finally {
       setBusy(false);
     }
   }
   return (
-    <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => void submit(e)} aria-label="Pair an edge box">
+    <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => void submit(e)} aria-label={t`Pair an edge box`}>
       <label className="flex min-w-48 flex-1 flex-col gap-1" htmlFor={BOX_NAME_ID}>
-        <span className={LABEL_CLASS}>Box name</span>
+        <span className={LABEL_CLASS}>
+          <Trans>Box name</Trans>
+        </span>
         <Input
           id={BOX_NAME_ID}
           value={name}
           maxLength={64}
-          placeholder="e.g. Kitchen Pi"
+          placeholder={t`e.g. Kitchen Pi`}
           onChange={(e) => setName(e.target.value)}
         />
       </label>
       <Button type="submit" disabled={busy}>
-        Make a pairing code
+        <Trans>Make a pairing code</Trans>
       </Button>
       {error && (
         <p role="alert" className="basis-full text-sm text-mw-danger">
@@ -298,6 +310,7 @@ function CodeReveal(props: {
   onDone: () => void;
   onRenewed: (minted: MintedCode) => void;
 }) {
+  const { t } = useLingui();
   const { minted } = props;
   // Fixed on arrival: the deadline is when the code dies, not when it rendered.
   const [deadline] = useState(() => Date.now() + lifetimeMs(minted));
@@ -305,6 +318,9 @@ function CodeReveal(props: {
   const left = Math.max(0, Math.ceil((deadline - now) / 1000));
   const expired = left === 0;
   const [renewing, setRenewing] = useState(false);
+  const boxName = minted.name;
+  const until = formatTime(deadline, { timeStyle: "medium" });
+  const countdown = clock(left);
   const [error, setError] = useState<string | null>(null);
   // The platform's address, named in the instructions. A browser IS the
   // platform (`window.location.origin`); the desktop webview's origin is
@@ -340,7 +356,7 @@ function CodeReveal(props: {
         await apiFetch<MintedCode>("/api/sync/pairings", { method: "POST", json: { name: minted.name } }),
       );
     } catch (err) {
-      setError(messageOf(err, "Could not make a new pairing code."));
+      setError(messageOf(err, t`Could not make a new pairing code.`));
       setRenewing(false);
     }
   }
@@ -351,10 +367,9 @@ function CodeReveal(props: {
       data-testid="pairing-code-reveal"
       variant={expired ? "warning" : "success"}
       title={
-        <>
-          The pairing code for {minted.name}. It works once, until{" "}
-          {new Date(deadline).toLocaleTimeString()}, and is not shown again.
-        </>
+        <Trans>
+          The pairing code for {boxName}. It works once, until {until}, and is not shown again.
+        </Trans>
       }
     >
       <div className="flex flex-col gap-2">
@@ -369,21 +384,25 @@ function CodeReveal(props: {
           </code>
           {/* Without a clipboard the button is not rendered; the code is on
               screen to type. */}
-          {!expired && <CopyButton text={minted.code} label="Copy code" size="default" />}
+          {!expired && <CopyButton text={minted.code} label={t`Copy code`} size="default" />}
         </div>
         {/* role=timer is not announced each tick; the expiry itself is a status. */}
         {expired ? (
           <p data-testid="pairing-countdown" role="status" className="font-medium">
-            Expired. Make a new code to pair {minted.name}.
+            <Trans>Expired. Make a new code to pair {boxName}.</Trans>
           </p>
         ) : (
           <p data-testid="pairing-countdown" role="timer">
-            Expires in <span className="tabular-nums">{clock(left)}</span>
+            <Trans>
+              Expires in <span className="tabular-nums">{countdown}</span>
+            </Trans>
           </p>
         )}
         <p>
-          On the box: Settings → Devices, enter this platform's address ({origin}) and the code.
-          Or from the box's shell:{" "}
+          <Trans>
+            On the box: Settings → Devices, enter this platform's address ({origin}) and the code. Or
+            from the box's shell:
+          </Trans>{" "}
           <code className="font-mono text-xs break-all">
             deploy/edge/edge-up.sh --check --pair {origin} {minted.code}
           </code>
@@ -391,11 +410,11 @@ function CodeReveal(props: {
         <div className="flex flex-wrap items-center gap-2">
           {expired && (
             <Button type="button" disabled={renewing} onClick={() => void renew()}>
-              Make a new code
+              <Trans>Make a new code</Trans>
             </Button>
           )}
           <Button type="button" variant="outline" onClick={props.onDone}>
-            Done
+            <Trans>Done</Trans>
           </Button>
         </div>
         {error && (
@@ -409,6 +428,7 @@ function CodeReveal(props: {
 }
 
 function DeviceRow(props: { device: EdgeDevice; onChanged: () => void }) {
+  const { t } = useLingui();
   const { device } = props;
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -421,7 +441,7 @@ function DeviceRow(props: { device: EdgeDevice; onChanged: () => void }) {
       setConfirming(false);
       props.onChanged();
     } catch (err) {
-      setError(messageOf(err, "Could not unpair the box."));
+      setError(messageOf(err, t`Could not unpair the box.`));
     } finally {
       setBusy(false);
     }
@@ -429,6 +449,9 @@ function DeviceRow(props: { device: EdgeDevice; onChanged: () => void }) {
   // Read once per mount: "paired 3 days ago" does not need to tick.
   const [now] = useState(() => Date.now());
   const synced = device.last_used_at !== null;
+  const pairedAgo = ago(device.created_at, now);
+  const syncedAgo = synced ? ago(device.last_used_at!, now) : "";
+  const boxName = device.box_name;
   return (
     <Row
       leading={
@@ -442,16 +465,22 @@ function DeviceRow(props: { device: EdgeDevice; onChanged: () => void }) {
       title={
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span>{device.box_name}</span>
-          {device.revoked_at && <Badge variant="outline">Unpaired</Badge>}
+          {device.revoked_at && (
+            <Badge variant="outline">
+              <Trans>Unpaired</Trans>
+            </Badge>
+          )}
         </span>
       }
       meta={
         <span className="inline-flex flex-wrap items-center gap-x-1.5">
           <span className="font-mono text-xs">{device.prefix}</span>
-          <span>· Paired {ago(device.created_at, now)} ·</span>
+          <span>
+            · <Trans>Paired {pairedAgo}</Trans> ·
+          </span>
           <span className="inline-flex items-center gap-1.5">
             {!device.revoked_at && <StatusDot tone={synced ? "positive" : "neutral"} />}
-            {synced ? `last synced ${ago(device.last_used_at!, now)}` : "never synced"}
+            {synced ? t`last synced ${syncedAgo}` : t`never synced`}
           </span>
         </span>
       }
@@ -466,17 +495,19 @@ function DeviceRow(props: { device: EdgeDevice; onChanged: () => void }) {
         !device.revoked_at &&
         (confirming ? (
           <>
-            <span className="text-sm">Unpair {device.box_name}?</span>
+            <span className="text-sm">
+              <Trans>Unpair {boxName}?</Trans>
+            </span>
             <Button type="button" size="sm" variant="destructive" disabled={busy} onClick={() => void unpair()}>
-              Unpair
+              <Trans>Unpair</Trans>
             </Button>
             <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setConfirming(false)}>
-              Cancel
+              <Trans>Cancel</Trans>
             </Button>
           </>
         ) : (
           <Button type="button" size="sm" variant="outline" onClick={() => setConfirming(true)}>
-            Unpair…
+            <Trans>Unpair…</Trans>
           </Button>
         ))
       }
@@ -502,6 +533,7 @@ function ThisBox(props: { initial: SyncStatus }) {
 }
 
 function BoxPairForm(props: { onPaired: (status: SyncStatus) => void }) {
+  const { t } = useLingui();
   const urlId = useId();
   const codeId = useId();
   const codeHintId = useId();
@@ -512,7 +544,7 @@ function BoxPairForm(props: { onPaired: (status: SyncStatus) => void }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!url.trim() || !code.trim()) {
-      setError("Enter the platform's address and the pairing code.");
+      setError(t`Enter the platform's address and the pairing code.`);
       return;
     }
     setBusy(true);
@@ -525,48 +557,52 @@ function BoxPairForm(props: { onPaired: (status: SyncStatus) => void }) {
         }),
       );
     } catch (err) {
-      setError(messageOf(err, "Could not pair this box."));
+      setError(messageOf(err, t`Could not pair this box.`));
     } finally {
       setBusy(false);
     }
   }
   return (
     <PaneSection
-      title="Pair this box with the platform"
-      description="This box mirrors its conversations to your account whenever it has a connection."
+      title={t`Pair this box with the platform`}
+      description={t`This box mirrors its conversations to your account whenever it has a connection.`}
     >
-      <form className="flex flex-col gap-3" onSubmit={(e) => void submit(e)} aria-label="Pair this box">
+      <form className="flex flex-col gap-3" onSubmit={(e) => void submit(e)} aria-label={t`Pair this box`}>
         {/* "e.g." placeholders: a bare address or code in the field read as
             one already filled in, and people pressed Pair on it. */}
         <label className="flex flex-col gap-1" htmlFor={urlId}>
-          <span className={LABEL_CLASS}>Platform address</span>
+          <span className={LABEL_CLASS}>
+            <Trans>Platform address</Trans>
+          </span>
           <Input
             id={urlId}
             value={url}
-            placeholder="e.g. https://app.matterwave.ai"
+            placeholder={t`e.g. https://app.matterwave.ai`}
             onChange={(e) => setUrl(e.target.value)}
           />
         </label>
         <div className="flex flex-col gap-1">
           <label className={LABEL_CLASS} htmlFor={codeId}>
-            Pairing code
+            <Trans>Pairing code</Trans>
           </label>
           <Input
             id={codeId}
             value={code}
-            placeholder="e.g. ABCD-EFGH-JKMN"
+            placeholder={t`e.g. ABCD-EFGH-JKMN`}
             autoComplete="off"
             aria-describedby={codeHintId}
             className="font-mono"
             onChange={(e) => setCode(e.target.value)}
           />
           <span id={codeHintId} className="text-xs text-mw-text-muted">
-            Twelve letters, made on the platform under Settings → Devices. It works for ten minutes.
+            <Trans>
+              Twelve letters, made on the platform under Settings → Devices. It works for ten minutes.
+            </Trans>
           </span>
         </div>
         <div>
           <Button type="submit" disabled={busy}>
-            Pair
+            <Trans>Pair</Trans>
           </Button>
         </div>
         {error && (
@@ -577,9 +613,11 @@ function BoxPairForm(props: { onPaired: (status: SyncStatus) => void }) {
       </form>
       <LearnMore className="mt-4">
         <p>
-          Once paired, this box sends its conversations to your MatterWave account every minute it has a
-          connection, and keeps working without one. On the platform an owner or admin makes the code under
-          Settings → Devices. Attached files stay on this box.
+          <Trans>
+            Once paired, this box sends its conversations to your MatterWave account every minute it has
+            a connection, and keeps working without one. On the platform an owner or admin makes the code
+            under Settings → Devices. Attached files stay on this box.
+          </Trans>
         </p>
       </LearnMore>
     </PaneSection>
@@ -587,6 +625,7 @@ function BoxPairForm(props: { onPaired: (status: SyncStatus) => void }) {
 }
 
 function BoxStatus(props: { status: SyncStatus; onUnpaired: (status: SyncStatus) => void }) {
+  const { t } = useLingui();
   const { status } = props;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -598,38 +637,50 @@ function BoxStatus(props: { status: SyncStatus; onUnpaired: (status: SyncStatus)
     try {
       props.onUnpaired(await apiFetch<SyncStatus>("/api/sync/box/pairing", { method: "DELETE" }));
     } catch (err) {
-      setError(messageOf(err, "Could not unpair this box."));
+      setError(messageOf(err, t`Could not unpair this box.`));
     } finally {
       setBusy(false);
     }
   }
   const pending = status.pending_messages;
+  const pairedName = status.name;
+  const platformUrl = status.platform_url;
   return (
     <PaneSection
-      title={status.name ? `Paired as ${status.name}` : "Paired"}
-      description={`Mirroring to ${status.platform_url ?? "the platform"}.`}
+      title={pairedName ? t`Paired as ${pairedName}` : t`Paired`}
+      description={platformUrl ? t`Mirroring to ${platformUrl}.` : t`Mirroring to the platform.`}
     >
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" aria-label="Sync status">
-        <dt className="text-mw-text-muted">Status</dt>
-        <dd>{line?.text ?? "Paired"}</dd>
-        <dt className="text-mw-text-muted">Waiting</dt>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" aria-label={t`Sync status`}>
+        <dt className="text-mw-text-muted">
+          <Trans>Status</Trans>
+        </dt>
+        <dd>{line?.text ?? t`Paired`}</dd>
+        <dt className="text-mw-text-muted">
+          <Trans>Waiting</Trans>
+        </dt>
         <dd>
           {pending === null || pending === undefined
-            ? "unknown"
-            : `${pending}${status.pending_capped ? "+" : ""} message${pending === 1 ? "" : "s"}`}
+            ? t`unknown`
+            : status.pending_capped
+              ? plural(pending, { one: "#+ message", other: "#+ messages" })
+              : plural(pending, { one: "# message", other: "# messages" })}
         </dd>
         {status.last_error && (
           <>
-            <dt className="text-mw-text-muted">Last error</dt>
+            <dt className="text-mw-text-muted">
+              <Trans>Last error</Trans>
+            </dt>
             <dd>{status.last_error}</dd>
           </>
         )}
-        <dt className="text-mw-text-muted">Device id</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Device id</Trans>
+        </dt>
         <dd className="font-mono text-xs">{status.device_id}</dd>
       </dl>
       <div className="mt-3">
         <Button type="button" variant="destructive" disabled={busy} onClick={() => void unpair()}>
-          Unpair this box
+          <Trans>Unpair this box</Trans>
         </Button>
       </div>
       {error && (

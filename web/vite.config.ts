@@ -9,7 +9,7 @@ import { defineConfig, type ProxyOptions } from "vite";
 // dev. Production serves the built SPA from FastAPI itself, no config needed.
 //
 // The target may be a shared environment (https://app.mw.local, the dev
-// gateway: docs/dev-environment.md, "The web app against dev"). Its
+// gateway: matterwave-infra/docs/dev-environment.md, "The web app against dev"). Its
 // certificate is from the gateway's own CA, which Node trusts through
 // NODE_EXTRA_CA_CERTS - verification stays on.
 const proxyTarget = process.env.API_PROXY_TARGET ?? "http://localhost:8000";

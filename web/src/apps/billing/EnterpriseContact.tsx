@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Textarea } from "../../components/ui/textarea";
@@ -35,6 +36,7 @@ function field(form: FormData, name: string): string {
  * answers 503 and the form says where to write instead.
  */
 export function EnterpriseContact() {
+  const { t } = useLingui();
   const [state, setState] = useState<"idle" | "sending" | "sent" | { error: string }>("idle");
   const ids = { name: useId(), email: useId(), company: useId(), seats: useId(), phone: useId(), message: useId() };
 
@@ -53,7 +55,7 @@ export function EnterpriseContact() {
       ...(field(form, "website") ? { website: field(form, "website") } : {}),
     };
     if (!body.name || !body.email || !body.company) {
-      setState({ error: "Your name, work email and company are needed." });
+      setState({ error: t`Your name, work email and company are needed.` });
       return;
     }
     setState("sending");
@@ -68,40 +70,42 @@ export function EnterpriseContact() {
   return (
     <section aria-labelledby="enterprise-contact" className="mt-12 rounded-xl border border-mw-border bg-mw-surface-raised p-5 sm:p-7">
       <h2 id="enterprise-contact" className="font-display text-display-sm">
-        Enterprise and invoicing
+        <Trans>Enterprise and invoicing</Trans>
       </h2>
       <p className="mt-1 text-sm text-mw-text-muted">
-        Invoice billing on net terms with a PO number, negotiated allowances and seats, single sign-on, and a
-        late-payment policy set for your organisation. Tell us what you need and sales will be in touch.
+        <Trans>
+          Invoice billing on net terms with a PO number, negotiated allowances and seats, single sign-on, and a
+          late-payment policy set for your organisation. Tell us what you need and sales will be in touch.
+        </Trans>
       </p>
       {state === "sent" ? (
         <p role="status" className="mt-3 text-sm font-medium">
-          Thanks, we have your request. Sales will reply by email, usually within one business day.
+          <Trans>Thanks, we have your request. Sales will reply by email, usually within one business day.</Trans>
         </p>
       ) : (
         <form onSubmit={(event) => void handleSubmit(event)} className="mt-3 grid gap-3 sm:grid-cols-2" noValidate>
           <label htmlFor={ids.name} className="flex flex-col gap-1 text-sm">
-            Name
+            <Trans>Name</Trans>
             <Input id={ids.name} name="name" autoComplete="name" required maxLength={120} />
           </label>
           <label htmlFor={ids.email} className="flex flex-col gap-1 text-sm">
-            Work email
+            <Trans>Work email</Trans>
             <Input id={ids.email} name="email" type="email" autoComplete="email" required maxLength={254} />
           </label>
           <label htmlFor={ids.company} className="flex flex-col gap-1 text-sm">
-            Company
+            <Trans>Company</Trans>
             <Input id={ids.company} name="company" autoComplete="organization" required maxLength={200} />
           </label>
           <label htmlFor={ids.seats} className="flex flex-col gap-1 text-sm">
-            Seats (roughly)
+            <Trans>Seats (roughly)</Trans>
             <Input id={ids.seats} name="seats" type="number" min={1} inputMode="numeric" />
           </label>
           <label htmlFor={ids.phone} className="flex flex-col gap-1 text-sm">
-            Phone (optional)
+            <Trans>Phone (optional)</Trans>
             <Input id={ids.phone} name="phone" type="tel" autoComplete="tel" maxLength={40} />
           </label>
           <label htmlFor={ids.message} className="flex flex-col gap-1 text-sm sm:col-span-2">
-            What do you need?
+            <Trans>What do you need?</Trans>
             <Textarea id={ids.message} name="message" maxLength={4000} rows={3} />
           </label>
           {/* Hidden from people and from assistive technology; a bot fills it in. */}
@@ -113,13 +117,15 @@ export function EnterpriseContact() {
           </div>
           <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
             <Button type="submit" disabled={state === "sending"}>
-              {state === "sending" ? "Sending…" : "Contact sales"}
+              {state === "sending" ? t`Sending…` : t`Contact sales`}
             </Button>
             <span className="text-sm text-mw-text-muted">
-              Or email{" "}
-              <a href={`mailto:${SALES_EMAIL}`} className={PROSE_LINK_CLASS}>
-                {SALES_EMAIL}
-              </a>
+              <Trans>
+                Or email{" "}
+                <a href={`mailto:${SALES_EMAIL}`} className={PROSE_LINK_CLASS}>
+                  {SALES_EMAIL}
+                </a>
+              </Trans>
             </span>
           </div>
           {typeof state === "object" && (

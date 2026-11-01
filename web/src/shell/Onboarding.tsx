@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { CompassIcon } from "lucide-react";
+import { msg } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import type { AuthConfig, Principal } from "../types";
 import { ApiError, apiFetch } from "../lib/api";
 import { loadModels } from "../lib/models";
@@ -30,6 +32,7 @@ export function Onboarding(props: {
   principal: Principal;
   onDone: (principal: Principal) => void;
 }) {
+  const { t, i18n } = useLingui();
   const [step, setStep] = useState(0);
   const [name, setName] = useState(props.principal.name ?? "");
   const [state, setState] = useState<"idle" | "saving">("idle");
@@ -53,6 +56,7 @@ export function Onboarding(props: {
 
   const total = STEPS.length;
   const last = step === total - 1;
+  const stepNumber = step + 1;
 
   async function complete(saveName: boolean) {
     setState("saving");
@@ -70,7 +74,7 @@ export function Onboarding(props: {
       await apiFetch("/api/me/onboarding/complete", { method: "POST" });
     } catch (err) {
       setState("idle");
-      setError(err instanceof ApiError ? err.message : "Could not save. Try again.");
+      setError(err instanceof ApiError ? err.message : t`Could not save. Try again.`);
       return;
     }
     props.onDone({ ...props.principal, name: updatedName, onboarding_completed: true });
@@ -84,14 +88,16 @@ export function Onboarding(props: {
             <CompassIcon className="size-6" aria-hidden />
           </span>
           <p className="text-xs font-medium uppercase tracking-wide text-mw-text-muted">
-            Step {step + 1} of {total}
+            <Trans>
+              Step {stepNumber} of {total}
+            </Trans>
           </p>
           <h1
             id="onboarding-step"
             className="font-heading text-2xl font-semibold tracking-tight"
             aria-live="polite"
           >
-            {STEPS[step].title}
+            {i18n._(STEPS[step].title)}
           </h1>
         </div>
 
@@ -99,16 +105,20 @@ export function Onboarding(props: {
           {step === 0 && (
             <>
               <p>
-                MatterWave is a chat workspace. Every answer comes from{" "}
                 {modelLabel ? (
-                  <>
+                  <Trans>
+                    MatterWave is a chat workspace. Every answer comes from{" "}
                     <span className="font-medium">{modelLabel}</span>, the model this deployment
-                    serves by default
-                  </>
+                    serves by default; you can pick another in the message box when more are
+                    offered.
+                  </Trans>
                 ) : (
-                  "the model this deployment serves by default"
+                  <Trans>
+                    MatterWave is a chat workspace. Every answer comes from the model this
+                    deployment serves by default; you can pick another in the message box when
+                    more are offered.
+                  </Trans>
                 )}
-                ; you can pick another in the message box when more are offered.
               </p>
               <p className="rounded-md border border-mw-border bg-mw-surface-raised p-3 text-mw-text-muted">
                 {AI_DISCLOSURE}
@@ -118,25 +128,33 @@ export function Onboarding(props: {
           {step === 1 && (
             <>
               <p>
-                Answers use tokens from your organisation's monthly allowance.{" "}
-                <span className="font-medium">Settings › Usage</span> shows what has been used and
-                when it resets; the app says so itself at 80% and again at the limit.
+                <Trans>
+                  Answers use tokens from your organisation's monthly allowance.{" "}
+                  <span className="font-medium">Settings › Usage</span> shows what has been used and
+                  when it resets; the app says so itself at 80% and again at the limit.
+                </Trans>
               </p>
               <p>
-                The plan, the invoice and the way to change either live in{" "}
-                <span className="font-medium">Settings › Billing</span>. A notification bell in the
-                header tells you when any of this moves.
+                <Trans>
+                  The plan, the invoice and the way to change either live in{" "}
+                  <span className="font-medium">Settings › Billing</span>. A notification bell in the
+                  header tells you when any of this moves.
+                </Trans>
               </p>
             </>
           )}
           {step === 2 && (
             <>
               <p>
-                This is the name the app will greet you by and that other members of your
-                organisation will see. Leave it as it is, or change it now.
+                <Trans>
+                  This is the name the app will greet you by and that other members of your
+                  organisation will see. Leave it as it is, or change it now.
+                </Trans>
               </p>
               <label className="flex flex-col gap-1">
-                <span className="text-xs font-medium text-mw-text-muted">Display name</span>
+                <span className="text-xs font-medium text-mw-text-muted">
+                  <Trans>Display name</Trans>
+                </span>
                 <input
                   type="text"
                   value={name}
@@ -158,7 +176,7 @@ export function Onboarding(props: {
               disabled={state === "saving"}
               className="rounded-lg border border-mw-border px-4 py-2 text-sm hover:bg-mw-surface-hover disabled:opacity-60"
             >
-              Back
+              <Trans>Back</Trans>
             </button>
           )}
           <button
@@ -167,7 +185,7 @@ export function Onboarding(props: {
             disabled={state === "saving"}
             className="ml-auto rounded-lg bg-mw-accent px-4 py-2 text-sm font-medium text-mw-accent-foreground hover:opacity-90 disabled:opacity-60"
           >
-            {last ? (state === "saving" ? "Saving…" : "Finish") : "Next"}
+            {last ? (state === "saving" ? t`Saving…` : t`Finish`) : t`Next`}
           </button>
         </div>
 
@@ -186,7 +204,7 @@ export function Onboarding(props: {
           disabled={state === "saving"}
           className="self-center text-xs text-mw-text-muted underline hover:text-mw-text disabled:opacity-60"
         >
-          Skip the tour
+          <Trans>Skip the tour</Trans>
         </button>
       </div>
     </main>
@@ -194,7 +212,7 @@ export function Onboarding(props: {
 }
 
 const STEPS = [
-  { title: "What you are talking to" },
-  { title: "Where usage and billing live" },
-  { title: "What should we call you?" },
+  { title: msg`What you are talking to` },
+  { title: msg`Where usage and billing live` },
+  { title: msg`What should we call you?` },
 ] as const;

@@ -255,8 +255,6 @@ describe("/pricing as a stranger: the chrome, the badge, the grid and the questi
   it("wears the front door's header and footer, with every way in", async () => {
     await open();
     const header = view().querySelector("nav[aria-label='MatterWave']")!;
-    // The front-door header carries the brand and the ways into the app;
-    // there is no nav row and no aria-current link on it.
     const hrefs = [...header.querySelectorAll("a")].map((a) => `${a.textContent}|${a.getAttribute("href")}`);
     expect(hrefs).toEqual(["MatterWave ai|/", "Sign in|/login", "Create account|/signup"]);
     const footer = view().querySelector("nav[aria-label='About MatterWave']")!;

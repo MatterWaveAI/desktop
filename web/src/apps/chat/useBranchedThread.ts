@@ -48,8 +48,10 @@ export function useBranchedThread(args: {
   onContext?: (frame: ContextFrame) => void;
   /** A fold that could not run; the turn went ahead without it. */
   onNotice?: (message: string) => void;
+  /** The answer finished: the stream reached `done`. */
+  onDone?: () => void;
 }) {
-  const { conversationId, getModel, onError, onSettled, onContext, onNotice } = args;
+  const { conversationId, getModel, onError, onSettled, onContext, onNotice, onDone } = args;
   const [tree, setTree] = useState<readonly Message[]>(args.initialTree);
   const [leafId, setLeafId] = useState<string | null>(
     () => defaultLeaf(args.initialTree, args.initialLeaf),
@@ -186,6 +188,7 @@ export function useBranchedThread(args: {
             sawTerminal = true;
             setTree((current) => [...current.filter((m) => m.id !== pendingId), saved]);
             setLeafId(saved.id);
+            onDone?.();
           }
         }
 
@@ -219,7 +222,7 @@ export function useBranchedThread(args: {
         onSettled?.();
       }
     },
-    [conversationId, onError, onSettled, onContext, onNotice],
+    [conversationId, onError, onSettled, onContext, onNotice, onDone],
   );
 
   const edit = useCallback(

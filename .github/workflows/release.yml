@@ -1,13 +1,26 @@
 name: Release
 
-# A tag push (`v0.2.2`) builds signed installers on all three OSes, attaches
-# them and the updater manifests to a GitHub release, and publishes the
-# updater feed the installed apps check
-# (`<MW_DESKTOP_UPDATES_URL>/desktop/<channel>/<os>/<arch>/<version>`,
-# the endpoint scripts/release-config.mjs names). The web and Rust checks
-# are CI's job (.github/workflows/ci.yml); this job builds and ships.
+# A tag push (`v0.2.2`) first checks that every manifest says the tag's
+# version and that CHANGELOG.md has its section (scripts/release-check.mjs;
+# the section becomes the release notes). It then builds the installers for
+# every target, signs what the secrets allow, and attaches them, the updater
+# manifests and a CycloneDX SBOM to a draft GitHub release. Each packaged app is then started once; only when every
+# target built and started is the release published and the updater feed
+# laid out for the installed apps to check
+# (`<MW_DESKTOP_UPDATES_URL>/desktop/<channel>/<os>/<arch>/<version>`, the
+# endpoint scripts/release-config.mjs names). The web and Rust checks are
+# CI's job (.github/workflows/ci.yml); this job builds and ships.
 #
-# Required secrets (Settings -> Secrets and variables -> Actions):
+# Targets: Windows x64 (MSI, NSIS) and arm64 (NSIS: WiX builds no arm64
+# MSI), macOS universal (app bundle and DMG, one build for Apple silicon and
+# Intel), Linux x64 and arm64 (AppImage and .deb). No rpm: nothing installs
+# it and the updater feed has no entry for it.
+#
+# Secrets (Settings -> Secrets and variables -> Actions). Each group is all
+# or nothing: a group with some secrets set and others missing fails the
+# build, because a half-configured signature is worse than none.
+#
+# Updater -- without it the installers ship, the feed keeps the previous version:
 #
 # | Secret | What |
 # |---|---|
@@ -17,40 +30,82 @@ name: Release
 # | `MW_DESKTOP_UPDATES_URL` | Where the feed lives (e.g. `https://releases.example.com`). Also the base of the endpoint built into the app. |
 # | `MW_UPDATER_FEED_TOKEN` | A bearer token the feed accepts `PUT`s from. Without it the release is built and published but the feed keeps the previous version. |
 #
+# Windows Authenticode -- without it SmartScreen warns on install:
+#
+# | Secret | What |
+# |---|---|
+# | `WINDOWS_CERTIFICATE` | The code-signing certificate and key as a base64 PFX. |
+# | `WINDOWS_CERTIFICATE_PASSWORD` | The PFX's password. |
+#
+# macOS signing and notarization -- without them Gatekeeper refuses to open
+# the app until the person overrides it:
+#
+# | Secret | What |
+# |---|---|
+# | `APPLE_CERTIFICATE` | The Developer ID Application certificate and key as a base64 .p12. |
+# | `APPLE_CERTIFICATE_PASSWORD` | The .p12's password. |
+# | `APPLE_SIGNING_IDENTITY` | The identity name, `Developer ID Application: <Name> (<TEAM>)`. |
+# | `APPLE_ID` | The Apple ID notarization runs as; with the two below, the build is notarized and stapled. |
+# | `APPLE_PASSWORD` | An app-specific password for that Apple ID. |
+# | `APPLE_TEAM_ID` | The developer team. |
+#
 # Variables (not secrets):
 #
 # | Variable | What |
 # |---|---|
 # | `MW_DESKTOP_CHANNEL` | The feed channel, one per environment (`dev`, `staging`, `prod`). Default `prod`. |
-# | `MW_DESKTOP_BASE_URL` | The API the release talks to, read at build time. Default `https://app.matterwave.ai`. |
+# | `MW_DESKTOP_BASE_URL` | The API the release talks to, read at build time; the CSP allows its origin only. Default `https://app.matterwave.ai`. |
+# | `MW_WINDOWS_TIMESTAMP_URL` | The certificate vendor's RFC 3161 timestamp server; required with the Windows certificate. |
 #
 # The feed itself must accept an authenticated `PUT` per file at the path
 # the layout script prints (a static host in front of a small writer
 # endpoint, or any equivalent -- the transport is the one thing this
 # workflow assumes; swap the upload step if the host speaks something else).
 #
-# Without the signing setup (all three secrets absent), the build degrades
-# instead of failing: `MW_DESKTOP_UNSIGNED=1` has release-config.mjs write a
-# config without the updater, the app builds without the updater plugin, and
-# plain (clearly named) installers attach to a release titled "(unsigned
-# installers)". The feed job is skipped, so installed apps see no update.
-# One secret set but not the others is still a hard failure: half a feed is
-# worse than none.
+# Without the updater secrets (all three absent), the build degrades instead
+# of failing: `MW_DESKTOP_UNSIGNED=1` has release-config.mjs write a config
+# without the updater, the app builds without the updater plugin, and the
+# release is titled "(no updater)". The feed job is skipped, so installed
+# apps see no update.
 
 on:
   push:
     tags: ["v*"]
 
+# Read by default; the jobs that create and publish the release widen it.
 permissions:
-  contents: write
+  contents: read
 
 defaults:
   run:
     shell: bash
 
 jobs:
+  prepare:
+    name: Version and release notes
+    runs-on: ubuntu-latest
+    outputs:
+      notes: ${{ steps.notes.outputs.notes }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - id: notes
+        name: The tag matches every manifest; its CHANGELOG section is the notes
+        run: |
+          node scripts/release-check.mjs --tag "$GITHUB_REF_NAME" --notes-out "$RUNNER_TEMP/notes.md"
+          {
+            echo "notes<<MW_RELEASE_NOTES"
+            cat "$RUNNER_TEMP/notes.md"
+            echo "MW_RELEASE_NOTES"
+          } >> "$GITHUB_OUTPUT"
+
   build:
-    name: Signed installers (${{ matrix.os }})
+    name: Installers (${{ matrix.name }})
+    needs: prepare
+    permissions:
+      contents: write
     outputs:
       # The feed job runs only when the updater artifacts exist; without the
       # signing secrets there is no manifest to publish.
@@ -58,59 +113,144 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is arm64; an x86_64 mac build is another entry
-        # (macos-13) away, with its own feed path (darwin/x86_64).
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+          - name: Windows arm64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            bundles: nsis
+          - name: macOS universal
+            os: macos-latest
+            target: universal-apple-darwin
+            bundles: app,dmg
+          - name: Linux x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+          - name: Linux arm64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: appimage,deb
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: |
             pnpm-lock.yaml
             web/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          # A universal macOS build is both architectures, lipo'd together.
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
       - name: Install Tauri's Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir web install --frozen-lockfile
       - id: signing
-        name: Decide signed (updater) or unsigned (plain installers)
-        # All three secrets, or none: a half-configured release is a hard
-        # failure (release-config.mjs refuses it) rather than a build that
-        # signs with one key and feeds from nowhere.
+        name: Decide what this build signs
+        # Each group all or nothing (the table above). The OS signing secrets
+        # reach the bundler only through GITHUB_ENV and only when complete:
+        # an empty APPLE_CERTIFICATE is still "set" to the bundler.
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           MW_UPDATER_PUBKEY: ${{ secrets.MW_UPDATER_PUBKEY }}
           MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          MW_WINDOWS_TIMESTAMP_URL: ${{ vars.MW_WINDOWS_TIMESTAMP_URL }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] && [ -n "$MW_UPDATER_PUBKEY" ] && [ -n "$MW_DESKTOP_UPDATES_URL" ]; then
-            echo "signed=1" >> "$GITHUB_OUTPUT"
-            echo "MW_DESKTOP_UPDATER=1" >> "$GITHUB_ENV"
-            echo "Signing secrets present: signed artifacts and an updater feed."
-          else
-            echo "signed=" >> "$GITHUB_OUTPUT"
-            echo "MW_DESKTOP_UPDATER=" >> "$GITHUB_ENV"
-            echo "MW_DESKTOP_UNSIGNED=1" >> "$GITHUB_ENV"
-            echo "::warning::Signing secrets absent -- building UNSIGNED installers without the updater."
+          # all NAME... -> "1" when every one is set, "" when none is, a failure otherwise.
+          all() {
+            local set=0
+            for name in "$@"; do [ -n "${!name}" ] && set=$((set + 1)); done
+            if [ "$set" -eq "$#" ]; then echo 1
+            elif [ "$set" -eq 0 ]; then echo ""
+            else echo "::error::Set all of $* or none of them." >&2; return 1
+            fi
+          }
+          updater=$(all TAURI_SIGNING_PRIVATE_KEY MW_UPDATER_PUBKEY MW_DESKTOP_UPDATES_URL)
+          windows=$(all WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD MW_WINDOWS_TIMESTAMP_URL)
+          macos=$(all APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY)
+          notarize=$(all APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID)
+          if [ -n "$notarize" ] && [ -z "$macos" ]; then
+            echo "::error::Notarization needs the macOS signing certificate too."
+            exit 1
           fi
-      - name: Write the updater build config (scripts/release-config.mjs)
-        # The tag is v0.2.2; the app version is 0.2.2, so the v goes.
+          echo "signed=$updater" >> "$GITHUB_OUTPUT"
+          echo "windows=$windows" >> "$GITHUB_OUTPUT"
+          if [ -n "$updater" ]; then
+            echo "MW_DESKTOP_UPDATER=1" >> "$GITHUB_ENV"
+          else
+            echo "MW_DESKTOP_UNSIGNED=1" >> "$GITHUB_ENV"
+            echo "::warning::Updater secrets absent -- no updater in this build, the feed keeps the previous version."
+          fi
+          if [ "$RUNNER_OS" = Windows ] && [ -z "$windows" ]; then
+            echo "::warning::Windows certificate absent -- the installers are not Authenticode-signed."
+          fi
+          if [ "$RUNNER_OS" = macOS ]; then
+            if [ -n "$macos" ]; then
+              {
+                echo "APPLE_CERTIFICATE=$APPLE_CERTIFICATE"
+                echo "APPLE_CERTIFICATE_PASSWORD=$APPLE_CERTIFICATE_PASSWORD"
+                echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY"
+              } >> "$GITHUB_ENV"
+            else
+              echo "::warning::Apple certificate absent -- the app is not signed for Gatekeeper."
+            fi
+            if [ -n "$notarize" ]; then
+              {
+                echo "APPLE_ID=$APPLE_ID"
+                echo "APPLE_PASSWORD=$APPLE_PASSWORD"
+                echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
+              } >> "$GITHUB_ENV"
+            elif [ -n "$macos" ]; then
+              echo "::warning::Notarization secrets absent -- the signed app is not notarized."
+            fi
+          fi
+      - name: Import the Authenticode certificate
+        if: runner.os == 'Windows' && steps.signing.outputs.windows == '1'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          "MW_WINDOWS_CERT_THUMBPRINT=$($cert.Thumbprint)" >> $env:GITHUB_ENV
+      - name: Write the release build config (scripts/release-config.mjs)
+        # The tag is v0.2.2; the app version is 0.2.2, so the v goes. The
+        # config pins the page's CSP to the API's origin as well, and names
+        # the Authenticode certificate when one was imported.
         run: MW_RELEASE="${GITHUB_REF_NAME#v}" node scripts/release-config.mjs
         env:
+          MW_DESKTOP_BASE_URL: ${{ vars.MW_DESKTOP_BASE_URL || 'https://app.matterwave.ai' }}
           MW_UPDATER_PUBKEY: ${{ secrets.MW_UPDATER_PUBKEY }}
           MW_DESKTOP_CHANNEL: ${{ vars.MW_DESKTOP_CHANNEL || 'prod' }}
           MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
-          MW_DESKTOP_UNSIGNED: ${{ env.MW_DESKTOP_UNSIGNED }}
-      - name: Build, sign and publish the release
-        uses: tauri-apps/tauri-action@v0
+          MW_WINDOWS_TIMESTAMP_URL: ${{ vars.MW_WINDOWS_TIMESTAMP_URL }}
+      - name: Build, sign and attach to the draft release
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The bundler signs the updater artifacts (setup.exe, .app.tar.gz,
@@ -119,36 +259,79 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           # Read at build time by the Rust side (src-tauri/src/lib.rs,
           # src-tauri/src/updater.rs): which API and whether the updater
-          # exists are properties of the build. Empty on the unsigned path,
-          # where the plain installers ship and no updater is registered.
+          # exists are properties of the build.
           MW_DESKTOP_BASE_URL: ${{ vars.MW_DESKTOP_BASE_URL || 'https://app.matterwave.ai' }}
-          MW_DESKTOP_UPDATER: ${{ env.MW_DESKTOP_UPDATER }}
         with:
           projectPath: .
           tauriScript: pnpm tauri
-          # The config release-config.mjs wrote: real pubkey, per-channel
-          # endpoint, createUpdaterArtifacts on -- or, unsigned, no updater.
-          args: --config src-tauri/tauri.release.json
+          # The config release-config.mjs wrote: pinned CSP, and when the
+          # secrets allow, the updater and the Authenticode certificate.
+          args: --config src-tauri/tauri.release.json --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
           tagName: ${{ github.ref_name }}
-          releaseName: MatterWave ${{ github.ref_name }}${{ steps.signing.outputs.signed == '1' && '' || ' (unsigned installers)' }}
-          releaseBody: >
-            Installers for Windows (MSI and NSIS), macOS (app bundle) and
-            Linux (AppImage and .deb). ${{ steps.signing.outputs.signed == '1' && '`latest.json` is the updater manifest for the feed; `.sig` files are its artifact signatures.' || 'Unsigned build: no updater manifest, no auto-update; installed apps keep asking the previous feed.' }}
-          releaseDraft: false
+          releaseName: MatterWave ${{ github.ref_name }}${{ steps.signing.outputs.signed == '1' && '' || ' (no updater)' }}
+          releaseBody: |
+            ${{ needs.prepare.outputs.notes }}
+
+            Installers for Windows x64 (MSI and NSIS) and arm64 (NSIS), macOS (universal DMG) and Linux x64 and arm64 (AppImage and .deb); `matterwave-desktop-${{ github.ref_name }}.cdx.json` is the CycloneDX SBOM. ${{ steps.signing.outputs.signed == '1' && '`latest.json` is the updater manifest for the feed; `.sig` files are its artifact signatures.' || 'Built without the updater: no manifest, no auto-update; installed apps keep asking the previous feed.' }}
+          # Published by the publish job once every target has started.
+          releaseDraft: true
           prerelease: false
           includeRelease: true
           includeUpdaterJson: ${{ steps.signing.outputs.signed == '1' }}
+      - name: Start the packaged app once
+        if: runner.os != 'Linux'
+        run: node scripts/smoke-packaged-app.mjs --bundle-dir "src-tauri/target/${{ matrix.target }}/release/bundle"
+      - name: Start the packaged app once (virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke-packaged-app.mjs --bundle-dir "src-tauri/target/${{ matrix.target }}/release/bundle"
+
+  sbom:
+    name: Software bill of materials
+    # What the app is built from -- the crates in src-tauri/Cargo.lock and the
+    # packages in both pnpm lockfiles -- as CycloneDX, beside the installers.
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Generate the SBOM from the lockfiles
+        run: >
+          npx --yes @cyclonedx/cdxgen@12.9.0 --no-install-deps --recurse
+          --type js --type rust --spec-version 1.6
+          --output "matterwave-desktop-$GITHUB_REF_NAME.cdx.json" .
+      - name: Attach it to the draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "matterwave-desktop-$GITHUB_REF_NAME.cdx.json" --repo "$GITHUB_REPOSITORY"
+
+  publish:
+    name: Publish the release
+    # Every target built, signed what it could, and started, and the SBOM is
+    # attached: the draft goes public. One failure keeps it a draft, with
+    # nothing on the feed.
+    needs: [build, sbom]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --repo "$GITHUB_REPOSITORY" --draft=false
 
   feed:
     name: Publish the updater feed
-    needs: build
-    # Nothing to lay out when the release shipped unsigned: the feed keeps
-    # serving the previous version, and installed apps see no update.
+    needs: [build, publish]
+    # Nothing to lay out when the release shipped without the updater: the
+    # feed keeps serving the previous version, and installed apps see no update.
     if: needs.build.outputs.signed == '1'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - name: Collect the release artifacts

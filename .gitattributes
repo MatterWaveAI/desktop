@@ -1,0 +1,4 @@
+# The bundled SPA and its sync patches are compared byte for byte against
+# the platform's commit (scripts/spa-sync.mjs): no line-ending conversion.
+web/** -text
+spa/** -text

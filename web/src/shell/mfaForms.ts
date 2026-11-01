@@ -1,3 +1,5 @@
+import { t } from "@lingui/core/macro";
+
 /**
  * The second factor's data: the API shapes the login step and the Account
  * pane's Security section read, and the two field rules. Functions and
@@ -26,13 +28,14 @@ export interface MfaState {
 /** Six digits, with the spaces people type between the halves allowed. */
 export function validateTotpCode(code: string): string | undefined {
   const digits = code.replace(/\s+/g, "");
-  if (digits === "") return "Enter the code from your authenticator app.";
-  if (!/^\d{6}$|^\d{8}$/.test(digits)) return "The code is the six digits the app shows.";
+  if (digits === "") return t`Enter the code from your authenticator app.`;
+  if (!/^\d{6}$|^\d{8}$/.test(digits)) return t`The code is the six digits the app shows.`;
   return undefined;
 }
 
 export function validateRecoveryCode(code: string): string | undefined {
-  if (code.trim() === "") return "Enter one of your recovery codes.";
+  if (code.trim() === "") return t`Enter one of your recovery codes.`;
+
   return undefined;
 }
 

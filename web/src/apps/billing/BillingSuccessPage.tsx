@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { PageHeader } from "../../patterns";
 import { fetchBillingStatus, type BillingStatus } from "../../lib/billing";
 import { queryParam } from "../../shell/authForms";
@@ -35,10 +36,12 @@ export function BillingSuccessPage() {
 }
 
 function CheckoutReturn() {
+  const { t } = useLingui();
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [polls, setPolls] = useState(0);
   const landed = status !== null && !status.implicit && status.status !== "incomplete";
   const gaveUp = !landed && polls >= POLL_LIMIT;
+  const planName = status?.plan_name ?? "";
 
   useEffect(() => {
     if (landed || gaveUp) return;
@@ -65,28 +68,30 @@ function CheckoutReturn() {
     <div className="h-full overflow-y-auto bg-mw-surface text-mw-text">
       <div className="mx-auto w-full max-w-md px-4 py-12">
         <PageHeader
-          title={landed ? "You're on " + status.plan_name : "Checkout complete"}
+          title={landed ? t`You're on ${planName}` : t`Checkout complete`}
           description={
             landed
-              ? "Your plan is active. Its token allowance and limits apply from now."
+              ? t`Your plan is active. Its token allowance and limits apply from now.`
               : gaveUp
-                ? "Checkout went through, but the plan has not shown up here yet. It will within the hour; check Billing."
-                : "Activating your plan…"
+                ? t`Checkout went through, but the plan has not shown up here yet. It will within the hour; check Billing.`
+                : t`Activating your plan…`
           }
         />
         <div className="px-4" aria-live="polite" data-billing-landed={landed ? "true" : "false"}>
           {!landed && !gaveUp && (
-            <p className="text-sm text-mw-text-muted">Waiting for Stripe to confirm.</p>
+            <p className="text-sm text-mw-text-muted">
+              <Trans>Waiting for Stripe to confirm.</Trans>
+            </p>
           )}
           <div className="mt-4 flex flex-wrap gap-3 text-sm">
             {/* `/` rather than the chat path: the index route sends a signed-in
                 person to the first app, and app paths are not in the typed
                 route union because the registry generates them. */}
             <Link to="/" className="underline underline-offset-2">
-              Start chatting
+              <Trans>Start chatting</Trans>
             </Link>
             <Link to="/settings/$paneId" params={{ paneId: "billing" }} className="underline underline-offset-2">
-              Billing
+              <Trans>Billing</Trans>
             </Link>
           </div>
         </div>

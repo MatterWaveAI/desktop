@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { msg } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { formatNumber } from "../i18n/format";
 import { LegalPage, type LegalDocument } from "./LegalPage";
 import { PRIVACY_PATH, TERMS_PATH } from "./frontDoor";
 import { fetchPolicyStats, type PolicyStats } from "./policy";
@@ -16,7 +19,7 @@ import { fetchPolicyStats, type PolicyStats } from "./policy";
  * shell's banner can link straight to the appeal.
  */
 const POLICY: LegalDocument = {
-  title: "Acceptable Use Policy",
+  title: msg`Acceptable Use Policy`,
   lastUpdated: "2026-10-24",
   intro: (
     <>
@@ -188,8 +191,12 @@ const POLICY: LegalDocument = {
  * there is data, and said as zero: a policy page that hides its numbers
  * until they flatter it is the kind people screenshot. Counts only -- the
  * endpoint returns no subject, note or reason, so none can be shown.
+ * The loading and failure lines and the row labels are the widget's
+ * chrome and are translated; the two paragraphs round it are the policy's
+ * text and stay in English with the rest of it.
  */
 function PolicyNumbers() {
+  const { t } = useLingui();
   const [stats, setStats] = useState<PolicyStats | null | "unavailable">(null);
   useEffect(() => {
     let alive = true;
@@ -202,26 +209,34 @@ function PolicyNumbers() {
   }, []);
 
   if (stats === "unavailable") {
-    return <p className="text-mw-text-muted">The counts could not be loaded right now.</p>;
+    return (
+      <p className="text-mw-text-muted">
+        <Trans>The counts could not be loaded right now.</Trans>
+      </p>
+    );
   }
   if (stats === null) {
-    return <p className="text-mw-text-muted">Loading the counts…</p>;
+    return (
+      <p className="text-mw-text-muted">
+        <Trans>Loading the counts…</Trans>
+      </p>
+    );
   }
   const reports = stats.reports;
   const actions = stats.enforcement;
   const total = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0);
   const rows: readonly [string, number][] = [
-    ["Reports received, unsafe", reports.by_kind.unsafe],
-    ["Reports received, unhelpful", reports.by_kind.unhelpful],
-    ["Unsafe reports still open", reports.unsafe_by_status.open],
-    ["Unsafe reports that led to an action", reports.unsafe_by_status.actioned],
-    ["Unsafe reports dismissed", reports.unsafe_by_status.dismissed],
-    ["Warnings issued", actions.by_state.warned],
-    ["Rate limits applied", actions.by_state.rate_limited],
-    ["Suspensions", actions.by_state.suspended],
-    ["Actions in force now", total(actions.active)],
-    ["Appeals received", actions.appeals.received],
-    ["Appeals upheld", actions.appeals.upheld],
+    [t`Reports received, unsafe`, reports.by_kind.unsafe],
+    [t`Reports received, unhelpful`, reports.by_kind.unhelpful],
+    [t`Unsafe reports still open`, reports.unsafe_by_status.open],
+    [t`Unsafe reports that led to an action`, reports.unsafe_by_status.actioned],
+    [t`Unsafe reports dismissed`, reports.unsafe_by_status.dismissed],
+    [t`Warnings issued`, actions.by_state.warned],
+    [t`Rate limits applied`, actions.by_state.rate_limited],
+    [t`Suspensions`, actions.by_state.suspended],
+    [t`Actions in force now`, total(actions.active)],
+    [t`Appeals received`, actions.appeals.received],
+    [t`Appeals upheld`, actions.appeals.upheld],
   ];
   return (
     <>
@@ -233,7 +248,8 @@ function PolicyNumbers() {
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
             <dt className="text-mw-text-muted">{label}</dt>
-            <dd className="text-right font-mono tabular-nums">{value}</dd>
+            <dd className="text-right font-mono tabular-nums">{formatNumber(value)}</dd>
+
           </div>
         ))}
       </dl>

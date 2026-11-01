@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { plural } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import type { Conversation, Folder, LibraryState, SearchHit, Tag } from "../types";
 import { apiFetch, ApiError } from "../lib/api";
 import { useShell } from "./shellContext";
@@ -13,7 +15,7 @@ import {
   type JumpToMessageDetail,
 } from "./useConversationSearch";
 import { splitSnippet } from "./searchSnippet";
-import { groupConversations } from "./conversationGroups";
+import { groupConversations, groupHeading } from "./conversationGroups";
 import { CONVERSATION_SEARCH_ID } from "./shortcuts";
 
 /**
@@ -235,19 +237,21 @@ function SearchField(props: {
   ref: React.Ref<HTMLInputElement>;
 }) {
   const { search, ref } = props;
+  const { t } = useLingui();
   return (
-    <div className="px-3 pb-2">
+    <div className="px-3.5 pb-3">
       <div className="relative">
+        <SearchGlyph />
         <input
           ref={ref}
           id={CONVERSATION_SEARCH_ID}
           type="search"
           value={search.query}
-          placeholder="Search conversations"
-          aria-label="Search conversations"
+          placeholder={t`Search conversations`}
+          aria-label={t`Search conversations`}
           /* The browser's own clear button is hidden: the one below is the
              same action, and two crosses side by side read as two actions. */
-          className="w-full rounded-md border border-mw-border bg-mw-surface px-2 py-1.5 pr-7 text-base placeholder:text-mw-text-muted focus:border-mw-focus focus:outline-none focus-visible:ring-2 focus-visible:ring-mw-focus md:text-sm pointer-coarse:min-h-11 [&::-webkit-search-cancel-button]:appearance-none"
+          className="min-h-10 w-full rounded-lg border border-mw-border bg-mw-surface-hover py-1.5 pr-8 pl-9 text-base placeholder:text-mw-text-muted focus:border-mw-border-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-mw-focus md:text-sm pointer-coarse:min-h-11 [&::-webkit-search-cancel-button]:appearance-none"
           onChange={(event) => search.setQuery(event.target.value)}
           onKeyDown={(event) => {
             // Escape clears the box and hands the sidebar back to the list.
@@ -263,8 +267,8 @@ function SearchField(props: {
         {search.active && (
           <button
             type="button"
-            className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-mw-text-muted hover:text-mw-text"
-            aria-label="Clear search"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-mw-text-muted hover:text-mw-text"
+            aria-label={t`Clear search`}
             onClick={() => search.clear()}
           >
             <CrossIcon />
@@ -278,15 +282,19 @@ function SearchField(props: {
 function SearchResults(props: { search: ConversationSearch }) {
   const { search } = props;
   const shell = useShell();
+  const { t } = useLingui();
 
   if (search.error && search.results.length === 0) {
     return (
       <ErrorState
-        title="Search failed"
+        title={t`Search failed`}
         message={
           <>
-            Your conversations could not be searched. The list itself is unaffected — clear the box
-            to go back to it. <RequestReference requestId={search.error.requestId} />
+            <Trans>
+              Your conversations could not be searched. The list itself is unaffected — clear the
+              box to go back to it.
+            </Trans>{" "}
+            <RequestReference requestId={search.error.requestId} />
           </>
         }
       />
@@ -297,10 +305,11 @@ function SearchResults(props: { search: ConversationSearch }) {
   // until the new ones land.
   if (search.results.length === 0) {
     if (search.loading) return <ConversationListSkeleton />;
+    const query = search.query.trim();
     return (
       <EmptyState
-        title="No matches"
-        description={`Nothing in your conversations mentions “${search.query.trim()}”.`}
+        title={t`No matches`}
+        description={t`Nothing in your conversations mentions “${query}”.`}
       />
     );
   }
@@ -312,10 +321,11 @@ function SearchResults(props: { search: ConversationSearch }) {
           wants to know whether to read twelve rows or refine the word. "So
           far" while the server has more pages than are loaded. */}
       <p role="status" data-mw-search-count="" className="px-4 pb-1 text-xs text-mw-text-muted">
-        {count} {count === 1 ? "result" : "results"}
-        {search.hasMore ? " so far" : ""}
+        {search.hasMore
+          ? plural(count, { one: "# result so far", other: "# results so far" })
+          : plural(count, { one: "# result", other: "# results" })}
       </p>
-      <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" aria-label="Search results">
+      <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" aria-label={t`Search results`}>
         {search.results.map((hit) => (
           <li key={hit.id}>
             <SearchResultLink
@@ -338,11 +348,11 @@ function SearchResults(props: { search: ConversationSearch }) {
             disabled={search.loadingMore}
             onClick={() => search.loadMore()}
           >
-            {search.loadingMore ? "Loading…" : "More results"}
+            {search.loadingMore ? t`Loading…` : t`More results`}
           </button>
           {search.error && (
             <p role="alert" className="px-2 pt-1 text-xs text-mw-danger">
-              The next page could not be loaded.{" "}
+              <Trans>The next page could not be loaded.</Trans>{" "}
               <RequestReference requestId={search.error.requestId} />
             </p>
           )}
@@ -383,7 +393,7 @@ function SearchResultLink(props: { hit: SearchHit; onOpen: (detail: JumpToMessag
             it is in the list. */}
         {hit.archived_at && (
           <span className="shrink-0 rounded bg-mw-surface px-1 text-xs text-mw-text-muted">
-            Archived
+            <Trans>Archived</Trans>
           </span>
         )}
       </span>
@@ -420,6 +430,7 @@ function Snippet(props: { text: string }) {
 function ConversationList(props: { library: LibraryModel }) {
   const shell = useShell();
   const { library } = props;
+  const { t, i18n } = useLingui();
   const [tagFilter, setTagFilter] = useState<string | null>(null);
 
   // A skeleton shaped like the list, not a line of text: the
@@ -429,10 +440,12 @@ function ConversationList(props: { library: LibraryModel }) {
   if (shell.conversationsError) {
     return (
       <ErrorState
-        title="Could not load conversations"
+        title={t`Could not load conversations`}
         message={
           <>
-            The list could not be fetched. Your conversations are safe — this is only the sidebar.{" "}
+            <Trans>
+              The list could not be fetched. Your conversations are safe — this is only the sidebar.
+            </Trans>{" "}
             <RequestReference requestId={shell.conversationsError.requestId} />
           </>
         }
@@ -450,13 +463,13 @@ function ConversationList(props: { library: LibraryModel }) {
       <div className="flex min-h-0 flex-1 flex-col">
         {shell.listFilter === "archived" ? (
           <EmptyState
-            title="Nothing archived"
-            description="Conversations you archive are kept here, out of the main list."
+            title={t`Nothing archived`}
+            description={t`Conversations you archive are kept here, out of the main list.`}
           />
         ) : (
           <EmptyState
-            title="No conversations yet"
-            description="Your chats will be listed here once you send a first message."
+            title={t`No conversations yet`}
+            description={t`Your chats will be listed here once you send a first message.`}
           />
         )}
         <ArchivedSection library={library} />
@@ -467,7 +480,8 @@ function ConversationList(props: { library: LibraryModel }) {
   // The tag filter is applied to every section, and a folder with nothing
   // left under it is not drawn: a filter that shows empty folders is a
   // filter that mostly shows headings.
-  const activeTag = tagFilter ? library.tags.find((t) => t.id === tagFilter) ?? null : null;
+  const activeTag = tagFilter ? library.tags.find((tag) => tag.id === tagFilter) ?? null : null;
+  const tagName = activeTag?.name ?? "";
   const visible = activeTag
     ? shell.conversations.filter((c) => (library.assignments[c.id] ?? []).includes(activeTag.id))
     : shell.conversations;
@@ -481,7 +495,7 @@ function ConversationList(props: { library: LibraryModel }) {
       )}
       {library.failed && (
         <p role="alert" className="px-4 pb-1 text-xs text-mw-danger">
-          Folders and tags could not be loaded.
+          <Trans>Folders and tags could not be loaded.</Trans>
         </p>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -494,17 +508,17 @@ function ConversationList(props: { library: LibraryModel }) {
         })}
         {activeTag && visible.length === 0 ? (
           <EmptyState
-            title={`Nothing tagged ${activeTag.name}`}
-            description="Tag a conversation from its row menu, or clear the filter."
+            title={t`Nothing tagged ${tagName}`}
+            description={t`Tag a conversation from its row menu, or clear the filter.`}
           />
         ) : (
-          <ul className="px-2 pb-3" aria-label="Conversations">
+          <ul className="px-3.5 pb-3" aria-label={t`Conversations`}>
             {groupConversations(unfiled).map((group, index) => (
               <li key={`${group.label}-${index}`}>
-                <h3 className="px-2 pb-0.5 pt-2 text-xs font-medium text-mw-text-muted">
-                  {group.label}
+                <h3 className="px-2.5 pb-1 pt-3 text-xs font-medium text-mw-text-muted">
+                  {i18n._(groupHeading(group.label))}
                 </h3>
-                <ul aria-label={group.label}>
+                <ul aria-label={i18n._(groupHeading(group.label))}>
                   {group.rows.map((conversation) => (
                     <ConversationRow
                       key={conversation.id}
@@ -530,10 +544,11 @@ function TagFilter(props: {
   active: string | null;
   onChange: (tagId: string | null) => void;
 }) {
+  const { t } = useLingui();
   return (
     <div
       role="group"
-      aria-label="Filter by tag"
+      aria-label={t`Filter by tag`}
       className="flex flex-wrap gap-1 px-3 pb-2"
     >
       <button
@@ -546,7 +561,7 @@ function TagFilter(props: {
             : "border-mw-border text-mw-text-muted hover:bg-mw-surface-hover"
         }`}
       >
-        All
+        <Trans>All</Trans>
       </button>
       {props.tags.map((tag) => (
         <button
@@ -573,6 +588,8 @@ function TagFilter(props: {
  */
 function FolderSection(props: { folder: Folder; rows: Conversation[]; library: LibraryModel }) {
   const { folder, rows, library } = props;
+  const { t } = useLingui();
+  const folderName = folder.name;
   const [open, setOpen] = useState(true);
   const [renaming, setRenaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -583,12 +600,12 @@ function FolderSection(props: { folder: Folder; rows: Conversation[]; library: L
       setRenaming(false);
       setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not rename the folder.");
+      setError(err instanceof ApiError ? err.message : t`Could not rename the folder.`);
     }
   }
 
   return (
-    <section aria-label={`Folder ${folder.name}`} className="px-2">
+    <section aria-label={t`Folder ${folderName}`} className="px-2">
       <div className="group flex items-center">
         <button
           type="button"
@@ -600,7 +617,7 @@ function FolderSection(props: { folder: Folder; rows: Conversation[]; library: L
           <span className="min-w-0 flex-1 truncate text-left">{folder.name}</span>
           <span className="shrink-0 tabular-nums">{rows.length}</span>
         </button>
-        <RowMenu label={`Folder options for ${folder.name}`}>
+        <RowMenu label={t`Folder options for ${folderName}`}>
           {(close) => (
             <>
               <MenuButton
@@ -609,18 +626,18 @@ function FolderSection(props: { folder: Folder; rows: Conversation[]; library: L
                   setRenaming(true);
                 }}
               >
-                Rename
+                <Trans>Rename</Trans>
               </MenuButton>
               <MenuButton
                 danger
                 onClick={() => {
                   close();
                   void library.deleteFolder(folder.id).catch(() => {
-                    setError("Could not delete the folder.");
+                    setError(t`Could not delete the folder.`);
                   });
                 }}
               >
-                Delete folder (keeps its conversations)
+                <Trans>Delete folder (keeps its conversations)</Trans>
               </MenuButton>
             </>
           )}
@@ -628,7 +645,7 @@ function FolderSection(props: { folder: Folder; rows: Conversation[]; library: L
       </div>
       {renaming && (
         <InlineNameForm
-          label={`New name for ${folder.name}`}
+          label={t`New name for ${folderName}`}
           initial={folder.name}
           maxLength={80}
           onSubmit={rename}
@@ -641,9 +658,11 @@ function FolderSection(props: { folder: Folder; rows: Conversation[]; library: L
         </p>
       )}
       {open && (
-        <ul aria-label={`Conversations in ${folder.name}`} className="pb-1">
+        <ul aria-label={t`Conversations in ${folderName}`} className="pb-1">
           {rows.length === 0 && (
-            <li className="px-4 py-1 text-xs text-mw-text-muted">Empty</li>
+            <li className="px-4 py-1 text-xs text-mw-text-muted">
+              <Trans>Empty</Trans>
+            </li>
           )}
           {rows.map((conversation) => (
             <ConversationRow key={conversation.id} conversation={conversation} library={library} />
@@ -655,14 +674,15 @@ function FolderSection(props: { folder: Folder; rows: Conversation[]; library: L
 }
 
 function NewFolderControl(props: { library: LibraryModel }) {
+  const { t } = useLingui();
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
     <div className="px-2 py-1">
       {adding ? (
         <InlineNameForm
-          label="New folder name"
-          placeholder="Folder name"
+          label={t`New folder name`}
+          placeholder={t`Folder name`}
           initial=""
           maxLength={80}
           onSubmit={async (name) => {
@@ -671,7 +691,7 @@ function NewFolderControl(props: { library: LibraryModel }) {
               setAdding(false);
               setError(null);
             } catch (err) {
-              setError(err instanceof ApiError ? err.message : "Could not create the folder.");
+              setError(err instanceof ApiError ? err.message : t`Could not create the folder.`);
             }
           }}
           onCancel={() => {
@@ -685,7 +705,7 @@ function NewFolderControl(props: { library: LibraryModel }) {
           className="w-full rounded-md px-2 py-1 text-left text-xs text-mw-text-muted hover:bg-mw-surface-hover pointer-coarse:min-h-11"
           onClick={() => setAdding(true)}
         >
-          + New folder
+          <Trans>+ New folder</Trans>
         </button>
       )}
       {error && (
@@ -757,14 +777,14 @@ function InlineNameForm(props: {
           onClick={props.onCancel}
           className="rounded px-2 py-1 text-xs hover:bg-mw-surface-hover pointer-coarse:min-h-11"
         >
-          Cancel
+          <Trans>Cancel</Trans>
         </button>
         <button
           type="submit"
           disabled={!value.trim()}
           className="rounded bg-mw-accent px-2 py-1 text-xs font-medium text-mw-accent-foreground hover:bg-mw-accent/85 disabled:opacity-40 pointer-coarse:min-h-11"
         >
-          Save
+          <Trans>Save</Trans>
         </button>
       </div>
     </form>
@@ -824,19 +844,21 @@ function ArchivedSection(props: { library: LibraryModel }) {
         onClick={() => setOpen((value) => !value)}
       >
         <ChevronIcon open={open} />
-        Archived
+        <Trans>Archived</Trans>
       </button>
       {open && (
         <div className="max-h-48 overflow-y-auto">
           {error && (
             <div role="alert" className="px-2 py-1 text-xs text-mw-danger">
-              <p>The archive could not be loaded.</p>
+              <p>
+                <Trans>The archive could not be loaded.</Trans>
+              </p>
               <button
                 type="button"
                 onClick={() => void load()}
                 className="mt-0.5 underline hover:no-underline"
               >
-                Try again
+                <Trans>Try again</Trans>
               </button>
               <p className="mt-0.5 text-mw-text-muted">
                 <RequestReference requestId={error.requestId} />
@@ -848,11 +870,13 @@ function ArchivedSection(props: { library: LibraryModel }) {
               "is it loading or is it broken?" failure, in miniature. */}
           {!error && archived === null && (
             <p role="status" className="px-2 py-1 text-xs text-mw-text-muted">
-              Loading the archive…
+              <Trans>Loading the archive…</Trans>
             </p>
           )}
           {!error && archived !== null && archived.length === 0 && (
-            <p className="px-2 py-1 text-xs text-mw-text-muted">Nothing archived.</p>
+            <p className="px-2 py-1 text-xs text-mw-text-muted">
+              <Trans>Nothing archived.</Trans>
+            </p>
           )}
           <ul>
             {(archived ?? []).map((conversation) => (
@@ -881,6 +905,7 @@ function LoadMoreControl() {
   const hasMore = shell.conversationsHasMore ?? false;
   const loading = shell.conversationsLoadingMore ?? false;
   const loadMore = shell.loadMoreConversations;
+  const { t } = useLingui();
   const sentinel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -904,11 +929,11 @@ function LoadMoreControl() {
         onClick={() => void loadMore()}
         className="w-full rounded-md px-2 py-1 text-left text-xs text-mw-text-muted hover:bg-mw-surface-hover disabled:cursor-default"
       >
-        {loading ? "Loading more…" : "Load more"}
+        {loading ? t`Loading more…` : t`Load more`}
       </button>
       {shell.conversationsMoreError && (
         <p role="alert" className="px-2 text-xs text-mw-danger">
-          More could not be loaded.{" "}
+          <Trans>More could not be loaded.</Trans>{" "}
           <RequestReference requestId={shell.conversationsMoreError.requestId} />
         </p>
       )}
@@ -926,12 +951,14 @@ function ConversationRow(props: {
   const { conversation, archived, library } = props;
   const shell = useShell();
   const onNavigate = useContext(SidebarNavigate);
+  const { t } = useLingui();
+  const title = conversation.title;
   const pinned = Boolean(conversation.pinned_at);
   const active = conversation.id === shell.activeConversationId;
   const tagIds = library.assignments[conversation.id] ?? [];
   const tags = tagIds
-    .map((id) => library.tags.find((t) => t.id === id))
-    .filter((t): t is Tag => t !== undefined);
+    .map((id) => library.tags.find((tag) => tag.id === id))
+    .filter((tag): tag is Tag => tag !== undefined);
   const [renaming, setRenaming] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -978,7 +1005,7 @@ function ConversationRow(props: {
       // looking like a click that did nothing.
       .catch(() => {
         setConfirmingDelete(false);
-        setDeleteError(`${conversation.title} could not be deleted. Try again.`);
+        setDeleteError(t`${title} could not be deleted. Try again.`);
       })
       .finally(() => setDeleting(false));
   };
@@ -999,7 +1026,7 @@ function ConversationRow(props: {
         ref={linkRef}
         href={conversationHref(conversation.id)}
         aria-current={active ? "page" : undefined}
-        className={`flex min-w-0 flex-1 flex-col rounded-md px-2.5 py-1.5 text-sm pointer-coarse:min-h-11 pointer-coarse:justify-center ${
+        className={`flex min-h-9.5 min-w-0 flex-1 flex-col justify-center rounded-md px-2.5 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-mw-focus pointer-coarse:min-h-11 ${
           active
             ? "bg-mw-selection font-medium text-mw-selection-foreground shadow-selected"
             : "text-mw-text-secondary hover:bg-mw-surface-hover hover:text-mw-text"
@@ -1019,7 +1046,7 @@ function ConversationRow(props: {
           <span className="min-w-0 flex-1 truncate">{conversation.title}</span>
         </span>
         {tags.length > 0 && (
-          <span className="mt-0.5 flex flex-wrap gap-1" aria-label="Tags">
+          <span className="mt-0.5 flex flex-wrap gap-1" aria-label={t`Tags`}>
             {tags.map((tag) => (
               <span
                 key={tag.id}
@@ -1033,49 +1060,49 @@ function ConversationRow(props: {
       </a>
       {/* Every row action behind one button: four icons on every row were
           four things to aim between, and hid the title they belong to. */}
-      <RowMenu label={`Actions for ${conversation.title}`}>
+      <RowMenu label={t`Actions for ${title}`}>
         {(close) => (
           <>
             <MenuButton
-              label={`${pinned ? "Unpin" : "Pin"} ${conversation.title}`}
+              label={pinned ? t`Unpin ${title}` : t`Pin ${title}`}
               onClick={() => {
                 close();
                 void shell.setPinned(conversation.id, !pinned);
               }}
             >
-              {pinned ? "Unpin" : "Pin"}
+              {pinned ? t`Unpin` : t`Pin`}
             </MenuButton>
             {shell.renameConversation && (
               <MenuButton
-                label={`Rename ${conversation.title}`}
+                label={t`Rename ${title}`}
                 onClick={() => {
                   close();
                   setRenameError(null);
                   setRenaming(true);
                 }}
               >
-                Rename…
+                <Trans>Rename…</Trans>
               </MenuButton>
             )}
             <MenuButton
-              label={`${archived ? "Unarchive" : "Archive"} ${conversation.title}`}
+              label={archived ? t`Unarchive ${title}` : t`Archive ${title}`}
               onClick={() => {
                 close();
                 void shell.setArchived(conversation.id, !archived);
               }}
             >
-              {archived ? "Unarchive" : "Archive"}
+              {archived ? t`Unarchive` : t`Archive`}
             </MenuButton>
             <MenuButton
               danger
-              label={`Delete ${conversation.title}`}
+              label={t`Delete ${title}`}
               onClick={() => {
                 close();
                 setDeleteError(null);
                 setConfirmingDelete(true);
               }}
             >
-              Delete…
+              <Trans>Delete…</Trans>
             </MenuButton>
             <div role="separator" className="my-1 border-t border-mw-border" />
             <OrganiseItems conversation={conversation} library={library} tagIds={tagIds} />
@@ -1087,14 +1114,14 @@ function ConversationRow(props: {
         onOpenChange={(next) => {
           if (!deleting) setConfirmingDelete(next);
         }}
-        title="Delete this conversation?"
+        title={t`Delete this conversation?`}
         description={
-          <>
-            <span className="font-medium">{conversation.title}</span> and its messages are deleted.
-            This cannot be undone; archive it instead to keep it out of the list.
-          </>
+          <Trans>
+            <span className="font-medium">{title}</span> and its messages are deleted. This cannot
+            be undone; archive it instead to keep it out of the list.
+          </Trans>
         }
-        confirmLabel="Delete"
+        confirmLabel={t`Delete`}
         inFlight={deleting}
         onConfirm={confirmDelete}
       />
@@ -1119,6 +1146,8 @@ function RowRenameField(props: {
 }) {
   const { conversation } = props;
   const shell = useShell();
+  const { t } = useLingui();
+  const title = conversation.title;
   const [value, setValue] = useState(conversation.title);
   const ref = useRef<HTMLInputElement>(null);
   const settled = useRef(false);
@@ -1136,7 +1165,7 @@ function RowRenameField(props: {
     void shell.renameConversation(conversation.id, name).then(
       () => props.onError(null),
       (err: unknown) =>
-        props.onError(err instanceof ApiError ? err.message : "Could not rename the conversation."),
+        props.onError(err instanceof ApiError ? err.message : t`Could not rename the conversation.`),
     );
   }
 
@@ -1151,7 +1180,7 @@ function RowRenameField(props: {
       <input
         ref={ref}
         type="text"
-        aria-label={`New name for ${conversation.title}`}
+        aria-label={t`New name for ${title}`}
         value={value}
         maxLength={200}
         onChange={(event) => setValue(event.target.value)}
@@ -1178,6 +1207,8 @@ function RowRenameField(props: {
  */
 function OrganiseItems(props: { conversation: Conversation; library: LibraryModel; tagIds: string[] }) {
   const { conversation, library, tagIds } = props;
+  const { t } = useLingui();
+  const title = conversation.title;
   const [error, setError] = useState<string | null>(null);
 
   function attempt(work: Promise<unknown>, failure: string) {
@@ -1190,30 +1221,30 @@ function OrganiseItems(props: { conversation: Conversation; library: LibraryMode
   return (
     <>
       <p className="px-2 pb-0.5 pt-1 text-xs font-medium uppercase tracking-wide text-mw-text-muted">
-        Move to
+        <Trans>Move to</Trans>
       </p>
       <MenuButton
         current={!conversation.folder_id}
         onClick={() =>
-          attempt(library.moveConversation(conversation.id, null), "Could not move it.")
+          attempt(library.moveConversation(conversation.id, null), t`Could not move it.`)
         }
       >
-        No folder
+        <Trans>No folder</Trans>
       </MenuButton>
       {library.folders.map((folder) => (
         <MenuButton
           key={folder.id}
           current={conversation.folder_id === folder.id}
           onClick={() =>
-            attempt(library.moveConversation(conversation.id, folder.id), "Could not move it.")
+            attempt(library.moveConversation(conversation.id, folder.id), t`Could not move it.`)
           }
         >
           {folder.name}
         </MenuButton>
       ))}
       <MenuNameForm
-        label={`New folder for ${conversation.title}`}
-        placeholder="New folder…"
+        label={t`New folder for ${title}`}
+        placeholder={t`New folder…`}
         maxLength={80}
         onSubmit={async (name) => {
           const folder = await library.createFolder(name);
@@ -1222,13 +1253,16 @@ function OrganiseItems(props: { conversation: Conversation; library: LibraryMode
         onError={setError}
       />
       <p className="px-2 pb-0.5 pt-1 text-xs font-medium uppercase tracking-wide text-mw-text-muted">
-        Tags
+        <Trans>Tags</Trans>
       </p>
       {library.tags.length === 0 && (
-        <p className="px-2 pb-1 text-xs text-mw-text-muted">No tags yet.</p>
+        <p className="px-2 pb-1 text-xs text-mw-text-muted">
+          <Trans>No tags yet.</Trans>
+        </p>
       )}
       {library.tags.map((tag) => {
         const on = tagIds.includes(tag.id);
+        const tagName = tag.name;
         return (
           <label
             key={tag.id}
@@ -1238,14 +1272,14 @@ function OrganiseItems(props: { conversation: Conversation; library: LibraryMode
               type="checkbox"
               className="accent-mw-accent"
               checked={on}
-              aria-label={`${on ? "Remove tag" : "Add tag"} ${tag.name} on ${conversation.title}`}
+              aria-label={on ? t`Remove tag ${tagName} on ${title}` : t`Add tag ${tagName} on ${title}`}
               onChange={() =>
                 attempt(
                   library.setTags(
                     conversation.id,
                     on ? tagIds.filter((id) => id !== tag.id) : [...tagIds, tag.id],
                   ),
-                  "Could not change the tags.",
+                  t`Could not change the tags.`,
                 )
               }
             />
@@ -1254,8 +1288,8 @@ function OrganiseItems(props: { conversation: Conversation; library: LibraryMode
         );
       })}
       <MenuNameForm
-        label={`New tag for ${conversation.title}`}
-        placeholder="New tag…"
+        label={t`New tag for ${title}`}
+        placeholder={t`New tag…`}
         maxLength={40}
         onSubmit={async (name) => {
           const tag = await library.createTag(name);
@@ -1348,6 +1382,7 @@ function MenuNameForm(props: {
   onSubmit: (name: string) => Promise<void>;
   onError: (message: string | null) => void;
 }) {
+  const { t } = useLingui();
   const [value, setValue] = useState("");
   return (
     <form
@@ -1362,7 +1397,7 @@ function MenuNameForm(props: {
             props.onError(null);
           },
           (err: unknown) =>
-            props.onError(err instanceof ApiError ? err.message : "Could not save that."),
+            props.onError(err instanceof ApiError ? err.message : t`Could not save that.`),
         );
       }}
     >
@@ -1411,6 +1446,26 @@ function ChevronIcon(props: { open: boolean }) {
       aria-hidden
     >
       <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+/** The magnifier at the search box's leading edge; the box's label is its name. */
+function SearchGlyph() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      aria-hidden
+      className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-mw-text-muted"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
     </svg>
   );
 }

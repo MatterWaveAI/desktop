@@ -1,3 +1,6 @@
+import { t } from "@lingui/core/macro";
+import { recordFailure } from "./diagnostics";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -216,9 +219,18 @@ async function apiError(res: Response): Promise<ApiError> {
     // not JSON; fall through to status text
   }
   const detail = (body as { detail?: unknown } | undefined)?.detail;
-  const message =
-    typeof detail === "string" ? detail : res.statusText || `Request failed (${res.status})`;
+  const status = res.status;
+  const message = typeof detail === "string" ? detail : res.statusText || t`Request failed (${status})`;
   const error = new ApiError(res.status, message, body, requestIdOf(res, body), ourHeaders(res));
+  // Kept for "Get help": the last failure is what a support request quotes
+  // when the error on screen holds no id of its own.
+  recordFailure({
+    requestId: error.requestId,
+    traceId: traceIdOf(body),
+    path: pathOf(res),
+    status,
+    at: new Date().toISOString(),
+  });
   // Announced from here rather than handled per call site: the account can
   // be suspended while the shell is open, and whichever request notices
   // first is the one that should take the whole page to the notice.
@@ -231,6 +243,21 @@ async function apiError(res: Response): Promise<ApiError> {
     reloadForSwitchedAccount();
   }
   return error;
+}
+
+function traceIdOf(body: unknown): string | null {
+  const value = (body as { trace_id?: unknown } | undefined)?.trace_id;
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+/** The failed call's path, never its query: a search puts what was typed there. */
+function pathOf(res: Response): string {
+  if (typeof res.url !== "string" || res.url === "") return "";
+  try {
+    return new URL(res.url, location.origin).pathname;
+  } catch {
+    return "";
+  }
 }
 
 /** A 409 whose body says `account_switched`: another tab switched accounts. */

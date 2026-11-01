@@ -1,4 +1,8 @@
 import { useContext, useEffect, useState, type ReactNode } from "react";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { formatDate } from "../i18n/format";
 import { ensureAuthConfig } from "./authForms";
 import { POLICY_PATH, PRIVACY_PATH, SIGNUP_PATH, TERMS_PATH } from "./frontDoor";
 import { TAP_LINK_CLASS } from "./frontDoorLinks";
@@ -19,22 +23,23 @@ import { FrontDoorFrame } from "./FrontDoorChrome";
  * here, so the SPA fetches it rather than keeping a copy that can drift.
  */
 
-/** A dated heading: the date says which revision of the text this is. */
+/**
+ * A dated heading: the date says which revision of the text this is. The
+ * title is the page's chrome and is translated (a descriptor, since the
+ * documents are module constants); the intro and sections are the legal
+ * text itself and stay in English.
+ */
 export interface LegalDocument {
-  title: string;
+  title: MessageDescriptor;
   /** Shown as "Last updated"; the ISO date the text below was last changed. */
   lastUpdated: string;
   intro: ReactNode;
   sections: readonly { heading: string; body: ReactNode }[];
 }
 
-function formatDate(iso: string): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+/** The revision's day, as the server dated it: UTC, not the reader's zone. */
+function revisionDate(iso: string): string {
+  return formatDate(`${iso}T00:00:00Z`, { dateStyle: "long", timeZone: "UTC" });
 }
 
 /**
@@ -43,14 +48,17 @@ function formatDate(iso: string): string {
  * back to the app; one held at a gate (terms to accept, email to verify)
  * goes back to the gate, which is at "/".
  */
-function onwardLink(signedIn: boolean, inShell: boolean): { href: string; label: string } {
-  if (inShell) return { href: "/apps/chat", label: "Back to MatterWave" };
-  if (signedIn) return { href: "/", label: "Back to MatterWave" };
-  return { href: SIGNUP_PATH, label: "Create account" };
+function onwardLink(signedIn: boolean, inShell: boolean): { href: string; label: MessageDescriptor } {
+  if (inShell) return { href: "/apps/chat", label: msg`Back to MatterWave` };
+  if (signedIn) return { href: "/", label: msg`Back to MatterWave` };
+  return { href: SIGNUP_PATH, label: msg`Create account` };
 }
 
 export function LegalPage(props: { document: LegalDocument; showVersion?: boolean }) {
-  const { title, lastUpdated, intro, sections } = props.document;
+  const { t, i18n } = useLingui();
+  const { lastUpdated, intro, sections } = props.document;
+  const title = i18n._(props.document.title);
+  const updated = revisionDate(lastUpdated);
   const [version, setVersion] = useState<string | undefined>();
   const shell = useContext(ShellContext);
   const session = useContext(SessionContext);
@@ -81,11 +89,13 @@ export function LegalPage(props: { document: LegalDocument; showVersion?: boolea
         <header className="flex flex-col gap-3">
           <h1 className="font-display text-display-lg">{title}</h1>
           <p className="text-sm text-mw-text-muted">
-            <span>Last updated {formatDate(lastUpdated)}</span>
+            <span>{t`Last updated ${updated}`}</span>
             {version && (
               <>
                 {" · "}
-                <span data-testid="terms-version">Version {version}</span>
+                <span data-testid="terms-version">
+                  <Trans>Version {version}</Trans>
+                </span>
               </>
             )}
           </p>
@@ -107,19 +117,20 @@ export function LegalPage(props: { document: LegalDocument; showVersion?: boolea
           ))}
         </div>
 
-        <nav aria-label="Legal pages" className="flex flex-wrap gap-x-5 gap-y-1">
+        <nav aria-label={t`Legal pages`} className="flex flex-wrap gap-x-5 gap-y-1">
           <a href={TERMS_PATH} className={TAP_LINK_CLASS}>
-            Terms of Service
+            <Trans>Terms of Service</Trans>
           </a>
           <a href={PRIVACY_PATH} className={TAP_LINK_CLASS}>
-            Privacy Policy
+            <Trans>Privacy Policy</Trans>
           </a>
           <a href={POLICY_PATH} className={TAP_LINK_CLASS}>
-            Acceptable Use Policy
+            <Trans>Acceptable Use Policy</Trans>
           </a>
           <a href={onward.href} className={TAP_LINK_CLASS} data-testid="legal-onward">
-            {onward.label}
+            {i18n._(onward.label)}
           </a>
+
         </nav>
       </article>
     </FrontDoorFrame>

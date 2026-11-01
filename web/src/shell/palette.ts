@@ -85,7 +85,7 @@ function staticCommands(i18n: I18n): readonly PaletteCommand[] {
   return [
     { id: "new-chat", label: i18n._(msg`New chat`), group: "Actions", action: { kind: "new-chat" } },
     ...settingsPanes.map((pane): PaletteCommand => {
-      const title = pane.title;
+      const title = i18n._(pane.title);
       return {
         id: `settings:${pane.id}`,
         label: i18n._(msg`Settings: ${title}`),
@@ -151,9 +151,10 @@ export function paletteCommands(
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .slice(0, PALETTE_LIMIT - 1)
     .map((entry) => entry.command);
+  const search = q;
   ranked.push({
     id: "search",
-    label: i18n._(msg`Search conversations for “${q}”`),
+    label: i18n._(msg`Search conversations for “${search}”`),
     group: "Actions",
     action: { kind: "search", query: q },
   });

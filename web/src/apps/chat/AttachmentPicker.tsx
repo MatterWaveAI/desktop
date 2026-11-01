@@ -65,10 +65,10 @@ export function AttachmentPicker(props: {
            disabled state of its own — the input's `disabled` is what actually
            blocks it, and this is what announces that. */
         aria-disabled={props.disabled}
-        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-mw-text-muted ${
+        className={`flex size-11 shrink-0 items-center justify-center rounded-lg md:size-9 md:pointer-coarse:size-11 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-mw-focus ${
           props.disabled
-            ? "cursor-not-allowed opacity-40"
-            : "cursor-pointer hover:bg-mw-surface-hover hover:text-mw-text"
+            ? "cursor-not-allowed text-mw-border-strong"
+            : "cursor-pointer text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text"
         }`}
       >
         <span className="sr-only">Attach a file</span>

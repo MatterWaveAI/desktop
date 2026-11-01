@@ -1,3 +1,4 @@
+import { msg } from "@lingui/core/macro";
 import { LegalPage, type LegalDocument } from "./LegalPage";
 
 /**
@@ -7,7 +8,8 @@ import { LegalPage, type LegalDocument } from "./LegalPage";
  * controls that already exist in Settings.
  */
 const PRIVACY: LegalDocument = {
-  title: "Privacy Policy",
+  title: msg`Privacy Policy`,
+
   lastUpdated: "2026-09-28",
   intro: (
     <p>

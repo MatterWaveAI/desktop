@@ -1,3 +1,4 @@
+import { Trans } from "@lingui/react/macro";
 import { Skeleton } from "../components/ui/skeleton";
 
 /**
@@ -9,7 +10,7 @@ export function LoadingSkeleton(props: { rows?: number; className?: string }) {
   const rows = Math.max(1, props.rows ?? 3);
   return (
     <div role="status" className={`flex flex-col gap-3 p-4 ${props.className ?? ""}`}>
-      <span className="sr-only">Loading…</span>
+      <span className="sr-only"><Trans>Loading…</Trans></span>
       <div aria-hidden className="flex flex-col gap-3">
         {Array.from({ length: rows }, (_, index) => (
           <Skeleton

@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "../../components/ui/button";
 import {
   Dialog,
@@ -27,7 +28,9 @@ export function SupportConfirm(props: {
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useLingui();
   const inputId = useId();
+  const orgName = props.orgName;
   const ready = props.reason.trim() !== "";
   return (
     <Dialog
@@ -38,10 +41,14 @@ export function SupportConfirm(props: {
     >
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Open {props.orgName} as support?</DialogTitle>
+          <DialogTitle>
+            <Trans>Open {orgName} as support?</Trans>
+          </DialogTitle>
           <DialogDescription>
-            A thirty-minute, read-only view of {props.orgName} as its admin sees it. Opening and closing it are
-            recorded in the audit trail with your name and this reason.
+            <Trans>
+              A thirty-minute, read-only view of {orgName} as its admin sees it. Opening and closing it are recorded
+              in the audit trail with your name and this reason.
+            </Trans>
           </DialogDescription>
         </DialogHeader>
         <form
@@ -52,12 +59,12 @@ export function SupportConfirm(props: {
           }}
         >
           <label htmlFor={inputId} className="text-sm">
-            Reason (required)
+            <Trans>Reason (required)</Trans>
           </label>
           <Input
             id={inputId}
-            aria-label="Reason"
-            placeholder="Ticket number, or what the customer asked"
+            aria-label={t`Reason`}
+            placeholder={t`Ticket number, or what the customer asked`}
             value={props.reason}
             maxLength={500}
             disabled={props.inFlight}
@@ -67,10 +74,10 @@ export function SupportConfirm(props: {
         </form>
         <DialogFooter>
           <Button variant="outline" disabled={props.inFlight} onClick={props.onCancel}>
-            Cancel
+            <Trans>Cancel</Trans>
           </Button>
           <Button disabled={props.inFlight || !ready} onClick={props.onConfirm}>
-            {props.inFlight ? "Opening…" : "Open as support"}
+            {props.inFlight ? <Trans>Opening…</Trans> : <Trans>Open as support</Trans>}
           </Button>
         </DialogFooter>
       </DialogContent>

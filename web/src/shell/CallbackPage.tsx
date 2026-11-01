@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Trans } from "@lingui/react/macro";
 
 /**
  * Legacy landing spot. The OIDC callback is the API's (`/api/auth/callback`),
@@ -17,7 +18,8 @@ export function CallbackPage() {
   return (
     <div className="flex h-full items-center justify-center text-mw-text-muted">
       <p aria-live="polite" className="animate-pulse text-sm">
-        Signing in…
+        <Trans>Signing in…</Trans>
+
       </p>
     </div>
   );

@@ -1,3 +1,5 @@
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import {
   formatMultiplier,
   formatUsd,
@@ -31,8 +33,8 @@ const NUM_CLASS = `${TD_CLASS} tabular-nums`;
  */
 function plansWith(model: string, plans: readonly PlanSummary[]): string {
   const names = plans.filter((plan) => plan.models.includes(model)).map((plan) => plan.name);
-  if (names.length === 0) return "Only plans that name it";
-  return names.length === plans.length && plans.length > 1 ? "Every plan" : names.join(", ");
+  if (names.length === 0) return t`Only plans that name it`;
+  return names.length === plans.length && plans.length > 1 ? t`Every plan` : names.join(", ");
 }
 
 /**
@@ -50,11 +52,21 @@ export function ModelPriceTable(props: {
       <table className={TABLE_CLASS} aria-label={props.name}>
         <thead>
           <tr>
-            <th scope="col" className={TH_CLASS}>Model</th>
-            <th scope="col" className={TH_CLASS}>Multiplier</th>
-            <th scope="col" className={TH_CLASS}>Input, per 1M tokens</th>
-            <th scope="col" className={TH_CLASS}>Output, per 1M tokens</th>
-            <th scope="col" className={TH_CLASS}>Included on</th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Model</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Multiplier</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Input, per 1M tokens</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Output, per 1M tokens</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Included on</Trans>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -77,15 +89,24 @@ export function ModelPriceTable(props: {
 }
 
 export function PlanAllowanceTable(props: { models: readonly ModelPrice[]; plans: readonly PlanSummary[] }) {
+  const { t } = useLingui();
   return (
     <div className="overflow-x-auto">
-      <table className={TABLE_CLASS} aria-label="Plan allowances">
+      <table className={TABLE_CLASS} aria-label={t`Plan allowances`}>
         <thead>
           <tr>
-            <th scope="col" className={TH_CLASS}>Plan</th>
-            <th scope="col" className={TH_CLASS}>Included each month</th>
-            <th scope="col" className={TH_CLASS}>Past the allowance</th>
-            <th scope="col" className={TH_CLASS}>Models</th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Plan</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Included each month</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Past the allowance</Trans>
+            </th>
+            <th scope="col" className={TH_CLASS}>
+              <Trans>Models</Trans>
+            </th>
           </tr>
         </thead>
         <tbody>

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { Link } from "@tanstack/react-router";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Alert } from "../../../components/ui/alert";
 import { Button, buttonVariants } from "../../../components/ui/button";
 import { Textarea } from "../../../components/ui/textarea";
@@ -91,6 +92,7 @@ function writeDraft(key: string, draft: UserInstructions | null): void {
 }
 
 export function CustomInstructionsPane() {
+  const { t } = useLingui();
   const shell = useShell();
   const key = draftKey(shell.principal.subject);
   const [loaded, setLoaded] = useState<UserInstructions | null>(null);
@@ -145,11 +147,12 @@ export function CustomInstructionsPane() {
   }, [dirtyNow]);
 
   if (loadError) {
-    return <ErrorState title="Could not load your instructions" message={loadError} />;
+    return <ErrorState title={t`Could not load your instructions`} message={loadError} />;
   }
   if (loaded === null || access === null) return <LoadingSkeleton rows={4} />;
 
   const readOnly = !access.allowed;
+  const planName = access.planName;
   const tooLong = draft.about.length > ABOUT_MAX_LEN || draft.style.length > STYLE_MAX_LEN;
   // Nothing to save is not an error, it is just a disabled button: comparing
   // against what the API returned, not against "" , so re-saving the same text
@@ -198,54 +201,62 @@ export function CustomInstructionsPane() {
           variant="info"
           role="status"
           data-testid="plan-notice"
-          title={`Custom instructions are not included in the ${access.planName} plan.`}
+          title={t`Custom instructions are not included in the ${planName} plan.`}
           action={
             <Link to="/pricing" className={buttonVariants({ size: "sm" })}>
-              Upgrade
+              <Trans>Upgrade</Trans>
             </Link>
           }
         >
-          Upgrade to tell MatterWave about yourself once, instead of in every conversation.
-          Anything saved before is shown below and still used.
+          <Trans>
+            Upgrade to tell MatterWave about yourself once, instead of in every conversation.
+            Anything saved before is shown below and still used.
+          </Trans>
         </Alert>
       )}
       {save.phase === "error" && <UpgradePrompt error={save.refusal} />}
       {restored && dirty && (
         <Alert variant="info">
-          Restored your unsaved changes. Save them, or discard them to go back
-          to what is saved.
+          <Trans>
+            Restored your unsaved changes. Save them, or discard them to go back to what is saved.
+          </Trans>
         </Alert>
       )}
       <PaneSection
-        title="What should MatterWave know about you?"
-        description="Background it should assume in every new conversation — your work, your tools, anything you would otherwise repeat."
+        title={t`What should MatterWave know about you?`}
+        description={t`Background it should assume in every new conversation — your work, your tools, anything you would otherwise repeat.`}
       >
         <InstructionsField
           id={aboutId}
-          label="What should MatterWave know about you?"
+          label={t`What should MatterWave know about you?`}
           value={draft.about}
           max={ABOUT_MAX_LEN}
-          placeholder="I am a backend engineer working mostly in Python and Postgres."
+          placeholder={t`I am a backend engineer working mostly in Python and Postgres.`}
           readOnly={readOnly}
           onChange={(about) => edit({ ...draft, about })}
         />
       </PaneSection>
 
       <PaneSection
-        title="How should MatterWave respond?"
-        description="Tone, length and format for new conversations."
+        title={t`How should MatterWave respond?`}
+        description={t`Tone, length and format for new conversations.`}
       >
         <InstructionsField
           id={styleId}
-          label="How should MatterWave respond?"
+          label={t`How should MatterWave respond?`}
           value={draft.style}
           max={STYLE_MAX_LEN}
-          placeholder="Be concise. Show code before prose. Do not apologise."
+          placeholder={t`Be concise. Show code before prose. Do not apologise.`}
           readOnly={readOnly}
           onChange={(style) => edit({ ...draft, style })}
         />
         <LearnMore className="mt-1">
-          <p>These apply to new conversations; a single conversation can override them from the chat.</p>
+          <p>
+            <Trans>
+              These apply to new conversations; a single conversation can override them from the
+              chat.
+            </Trans>
+          </p>
         </LearnMore>
       </PaneSection>
 
@@ -253,7 +264,7 @@ export function CustomInstructionsPane() {
       {!readOnly && (
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={!dirty || tooLong || save.phase === "saving"}>
-          {save.phase === "saving" ? "Saving…" : "Save instructions"}
+          {save.phase === "saving" ? t`Saving…` : t`Save instructions`}
         </Button>
         {dirty && (
           <Button
@@ -262,14 +273,14 @@ export function CustomInstructionsPane() {
             disabled={save.phase === "saving"}
             onClick={discard}
           >
-            Discard changes
+            <Trans>Discard changes</Trans>
           </Button>
         )}
         {/* One live region for the outcome: a screen reader hears "Saved" or
             the failure without having to go looking for it. */}
         <p role="status" aria-live="polite" className="text-sm text-mw-text-muted">
-          {save.phase === "saved" && "Saved. New conversations will use these."}
-          {dirty && save.phase === "idle" && "Unsaved changes, kept in this browser until you save."}
+          {save.phase === "saved" && t`Saved. New conversations will use these.`}
+          {dirty && save.phase === "idle" && t`Unsaved changes, kept in this browser until you save.`}
           {save.phase === "error" && <span className="text-mw-danger">{save.message}</span>}
         </p>
       </div>

@@ -1,3 +1,5 @@
+import { msg, plural, t } from "@lingui/core/macro";
+import { formatDate, formatList } from "../i18n/format";
 import { ApiError, apiFetch } from "./api";
 
 /**
@@ -183,6 +185,8 @@ export interface BillingInvoice {
   hosted_invoice_url: string | null;
   invoice_pdf: string | null;
   issued_at: string;
+  /** Stripe's status for a chargeback against this invoice; null when never disputed. */
+  dispute_status?: string | null;
 }
 
 /** One row of `GET /api/plans`: the public catalog, cheapest first. */
@@ -289,7 +293,7 @@ export function upgradeRequired(err: unknown): UpgradeInfo | null {
   const h = err.headers;
   return {
     message: err.message,
-    feature: h["x-matterwave-upgrade-feature"] ?? "this feature",
+    feature: h["x-matterwave-upgrade-feature"] ?? t`this feature`,
     currentPlan: h["x-matterwave-plan"] ?? "free",
     upgradeTo: h["x-matterwave-upgrade-to"] ?? null,
   };
@@ -391,21 +395,22 @@ export function splitPartners<T extends { partner: boolean }>(models: readonly T
 }
 
 /** The heading partner models go under wherever models are listed: the picker, the price lists, the organisation's switches. */
-export const PARTNER_MODELS_HEADING = "Partner models";
+export const PARTNER_MODELS_HEADING_MSG = msg`Partner models`;
 
 /** What every page says about partner models, so the pricing page and the portal agree. */
-export const PARTNER_MODELS_NOTE =
-  "Other providers' models, offered for testing. Optional: they are available only on a plan that names them, and no plan includes them by default.";
+export const PARTNER_MODELS_NOTE_MSG = msg`Other providers' models, offered for testing. Optional: they are available only on a plan that names them, and no plan includes them by default.`;
+
+/** The heading as a plain English string, for the chat's model picker until the chat is translated. */
+export const PARTNER_MODELS_HEADING = "Partner models";
 
 /** A plan's models as their labels, falling back to the id for one the price list does not name. */
 export function planModelLabels(plan: PlanSummary, models: readonly ModelPrice[]): string[] {
   return plan.models.map((id) => models.find((m) => m.id === id)?.label ?? id);
 }
 
-/** "GRT Nano, GRT Nano Pro and GRT Nano Max": names in a sentence. */
+/** "GRT Nano, GRT Nano Pro and GRT Nano Max": names in a sentence, in the reader's language. */
 export function listOf(items: readonly string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+  return formatList(items);
 }
 
 /**
@@ -432,8 +437,10 @@ export function modelFamily(models: readonly Pick<ModelPrice, "label">[]): strin
  */
 export function planAllowance(plan: PlanSummary): string {
   if (!plan.per_seat || plan.included_tokens_per_seat === null) return formatTokenAllowance(plan.included_tokens);
-  const perSeat = `${formatTokenAllowance(plan.included_tokens_per_seat)} per seat, pooled`;
-  return plan.included_tokens > 0 ? `${formatTokenAllowance(plan.included_tokens)} plus ${perSeat}` : perSeat;
+  const perSeatAllowance = formatTokenAllowance(plan.included_tokens_per_seat);
+  if (plan.included_tokens <= 0) return t`${perSeatAllowance} per seat, pooled`;
+  const flatAllowance = formatTokenAllowance(plan.included_tokens);
+  return t`${flatAllowance} plus ${perSeatAllowance} per seat, pooled`;
 }
 
 /**
@@ -442,24 +449,24 @@ export function planAllowance(plan: PlanSummary): string {
  * the overage line is monthly, and a subscription bills on one cadence.
  */
 export function overageSummary(plan: PlanSummary, annual = false): string {
-  if (!plan.overage_enabled) return "Stops at the allowance";
-  if (annual) return "Stops at the allowance (pay-as-you-go beyond it is monthly only)";
+  if (!plan.overage_enabled) return t`Stops at the allowance`;
+  if (annual) return t`Stops at the allowance (pay-as-you-go beyond it is monthly only)`;
   const cap = formatMicros(plan.default_overage_cap_micros);
-  return `Then list price, up to ${cap}${plan.per_seat ? " per seat" : ""} of overage a month by default`;
+  return plan.per_seat
+    ? t`Then list price, up to ${cap} per seat of overage a month by default`
+    : t`Then list price, up to ${cap} of overage a month by default`;
 }
 
 /** "3 seats" -- a count of seats, one noun rule for every pane. */
 export function formatSeats(n: number): string {
-  return `${n} seat${n === 1 ? "" : "s"}`;
+  return plural(n, { one: "# seat", other: "# seats" });
 }
 
 /** What every page says about how seats are counted on a plan sold per seat. */
-export const SEATS_FOLLOW_MEMBERS_NOTE =
-  "Seats update automatically as members join or leave; pending invites are not billed.";
+export const SEATS_FOLLOW_MEMBERS_NOTE_MSG = msg`Seats update automatically as members join or leave; pending invites are not billed.`;
 
 /** The pricing page's and billing pane's one sentence on annual plans. */
-export const ANNUAL_OVERAGE_NOTE =
-  "Annual plans include the same monthly allowance with no overage: requests stop at it until the month resets. Choose monthly billing to keep going past it at list price.";
+export const ANNUAL_OVERAGE_NOTE_MSG = msg`Annual plans include the same monthly allowance with no overage: requests stop at it until the month resets. Choose monthly billing to keep going past it at list price.`;
 
 /**
  * "1 Nov 2026" -- the day the balance resets, in the reader's locale, no time.
@@ -468,12 +475,7 @@ export const ANNUAL_OVERAGE_NOTE =
  * early.
  */
 export function formatResetDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  return formatDate(iso, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 /** How far ahead of a trial's end the banner starts saying so. */
@@ -482,31 +484,33 @@ const TRIAL_WARNING_MS = 3 * 24 * 60 * 60 * 1000;
 /** "14-day free trial", or null for a plan without one. */
 export function trialOffer(plan: Pick<PlanSummary, "trial_days">): string | null {
   const days = plan.trial_days ?? 0;
-  return days > 0 ? `${days}-day free trial` : null;
+  return days > 0 ? plural(days, { one: "#-day free trial", other: "#-day free trial" }) : null;
 }
 
 /** "Trial ends 3 Nov 2026" while the org is trialing, else null. */
 export function trialEnds(status: Pick<BillingStatus, "status" | "trial_end">): string | null {
   if (status.status !== "trialing" || !status.trial_end) return null;
-  return `Trial ends ${formatResetDate(status.trial_end)}`;
+  const endsOn = formatResetDate(status.trial_end);
+  return t`Trial ends ${endsOn}`;
 }
 
 /** "Billed by invoice, net 30" or "Card" -- how the org pays, in one phrase. */
 export function paymentMethodLabel(status: BillingStatus): string {
   if (status.collection_method === "send_invoice") {
-    return status.days_until_due ? `Billed by invoice, net ${status.days_until_due}` : "Billed by invoice";
+    const netDays = status.days_until_due;
+    return netDays ? t`Billed by invoice, net ${netDays}` : t`Billed by invoice`;
   }
-  return "Card";
+  return t`Card`;
 }
 
 /** What "limited" switches off for this org, as a phrase a sentence can carry. */
 function limitedMeans(d: DunningState): string {
   const parts = [
-    d.limited.stops_overage && "overage is off",
-    d.limited.blocks_new_keys && "new API keys are paused",
-    d.limited.blocks_upgrades && "plan changes wait for payment",
+    d.limited.stops_overage && t`overage is off`,
+    d.limited.blocks_new_keys && t`new API keys are paused`,
+    d.limited.blocks_upgrades && t`plan changes wait for payment`,
   ].filter((part): part is string => Boolean(part));
-  return parts.length ? parts.join(", ") : "the organisation is flagged as limited";
+  return parts.length ? parts.join(", ") : t`the organisation is flagged as limited`;
 }
 
 /**
@@ -519,32 +523,37 @@ export function dunningNotice(d: DunningState): { tone: "warning" | "danger"; te
   const amount = formatMicros(d.outstanding_micros);
   const limitedOn = formatResetDate(d.schedule.limited_at);
   const suspendedOn = d.schedule.suspended_at ? formatResetDate(d.schedule.suspended_at) : null;
-  const what = d.source === "card" ? "Your last payment failed" : "Your invoice is overdue";
-  const paused = d.overage_stopped ? " Overage is paused until it is paid." : "";
+  const paused = d.overage_stopped ? ` ${t`Overage is paused until it is paid.`}` : "";
   switch (d.stage) {
     case "warn":
       return {
         tone: "warning",
-        text: `${what}: ${amount} outstanding. Pay by ${limitedOn} to keep full access.${paused}`,
+        text:
+          (d.source === "card"
+            ? t`Your last payment failed: ${amount} outstanding. Pay by ${limitedOn} to keep full access.`
+            : t`Your invoice is overdue: ${amount} outstanding. Pay by ${limitedOn} to keep full access.`) + paused,
       };
     case "warn_final":
       return {
         tone: "danger",
-        text: `Final notice: ${amount} overdue. Limited from ${limitedOn}${
-          suspendedOn ? `, on the Free plan from ${suspendedOn}` : ""
-        }.${paused}`,
+        text:
+          (suspendedOn
+            ? t`Final notice: ${amount} overdue. Limited from ${limitedOn}, on the Free plan from ${suspendedOn}.`
+            : t`Final notice: ${amount} overdue. Limited from ${limitedOn}.`) + paused,
       };
-    case "limited":
+    case "limited": {
+      const restrictions = limitedMeans(d);
       return {
         tone: "danger",
-        text: `Limited until paid: ${limitedMeans(d)}. Pay ${amount} to restore full access${
-          suspendedOn ? ` before ${suspendedOn}, when the organisation moves to the Free plan` : ""
-        }.`,
+        text: suspendedOn
+          ? t`Limited until paid: ${restrictions}. Pay ${amount} to restore full access before ${suspendedOn}, when the organisation moves to the Free plan.`
+          : t`Limited until paid: ${restrictions}. Pay ${amount} to restore full access.`,
       };
+    }
     case "suspended":
       return {
         tone: "danger",
-        text: `On the Free plan until ${amount} is paid. Nothing has been deleted; paying restores your plan at once.`,
+        text: t`On the Free plan until ${amount} is paid. Nothing has been deleted; paying restores your plan at once.`,
       };
     default:
       return null;
@@ -567,7 +576,7 @@ export function subscriptionNotice(
   if (status.status === "past_due") {
     return {
       tone: "danger",
-      text: "Your last payment failed. Update your card to keep your plan.",
+      text: t`Your last payment failed. Update your card to keep your plan.`,
     };
   }
   return planNotice(status, now);
@@ -585,28 +594,35 @@ export function memberSubscriptionNotice(
   if (late && status.dunning) {
     const d = status.dunning;
     const limitedOn = formatResetDate(d.schedule.limited_at);
-    const what = d.source === "card" ? "last payment failed" : "invoice is overdue";
+    const card = d.source === "card";
+    const restrictions = limitedMeans(d);
     const texts: Partial<Record<DunningStage, string>> = {
-      warn: `This organisation's ${what}. Ask an org admin to pay before ${limitedOn} to keep full access.`,
-      warn_final: `Final notice: this organisation's ${what}. It is limited from ${limitedOn} unless an org admin pays.`,
-      limited: `This organisation is limited until a late payment is made: ${limitedMeans(d)}. Ask an org admin to pay.`,
-      suspended: "This organisation is on the Free plan until a late payment is made. Nothing has been deleted. Ask an org admin to pay.",
+      warn: card
+        ? t`This organisation's last payment failed. Ask an org admin to pay before ${limitedOn} to keep full access.`
+        : t`This organisation's invoice is overdue. Ask an org admin to pay before ${limitedOn} to keep full access.`,
+      warn_final: card
+        ? t`Final notice: this organisation's last payment failed. It is limited from ${limitedOn} unless an org admin pays.`
+        : t`Final notice: this organisation's invoice is overdue. It is limited from ${limitedOn} unless an org admin pays.`,
+      limited: t`This organisation is limited until a late payment is made: ${restrictions}. Ask an org admin to pay.`,
+      suspended: t`This organisation is on the Free plan until a late payment is made. Nothing has been deleted. Ask an org admin to pay.`,
     };
     return { tone: late.tone, text: texts[d.stage] ?? late.text };
   }
   if (status.status === "past_due") {
     return {
       tone: "danger",
-      text: "This organisation's last payment failed. Ask an org admin to update the card.",
+      text: t`This organisation's last payment failed. Ask an org admin to update the card.`,
     };
   }
   const plan = planNotice(status, now);
   if (!plan || status.writes_blocked) return plan;
   // The plan winding down or the trial ending: the date, and who decides.
   if (status.cancel_at_period_end && status.current_period_end) {
-    return { tone: "warning", text: `This organisation's plan ends on ${formatResetDate(status.current_period_end)}. Ask an org admin to keep it.` };
+    const endsOn = formatResetDate(status.current_period_end);
+    return { tone: "warning", text: t`This organisation's plan ends on ${endsOn}. Ask an org admin to keep it.` };
   }
-  return { tone: "warning", text: `This organisation's free trial ends on ${formatResetDate(status.trial_end!)}.` };
+  const trialEndsOn = formatResetDate(status.trial_end!);
+  return { tone: "warning", text: t`This organisation's free trial ends on ${trialEndsOn}.` };
 }
 
 /** The notices about the plan itself rather than a payment: read-only, ending, a trial ending. */
@@ -615,10 +631,8 @@ function planNotice(status: BillingStatus, now: Date): { tone: "warning" | "dang
     return { tone: "warning", text: status.read_only_reason };
   }
   if (status.cancel_at_period_end && status.current_period_end) {
-    return {
-      tone: "warning",
-      text: `Your plan ends on ${formatResetDate(status.current_period_end)}.`,
-    };
+    const endsOn = formatResetDate(status.current_period_end);
+    return { tone: "warning", text: t`Your plan ends on ${endsOn}.` };
   }
   // A trial about to turn into a bill. Checkout always collects a card for
   // one, so the card on file is what is charged -- unless the org is on
@@ -626,13 +640,14 @@ function planNotice(status: BillingStatus, now: Date): { tone: "warning" | "dang
   if (status.status === "trialing" && status.trial_end) {
     const left = new Date(status.trial_end).getTime() - now.getTime();
     if (left > 0 && left <= TRIAL_WARNING_MS) {
-      const on = formatResetDate(status.trial_end);
+      const endsOn = formatResetDate(status.trial_end);
+      const planName = status.plan_name;
       return {
         tone: "warning",
         text:
           status.collection_method === "send_invoice"
-            ? `Your free trial ends on ${on}. The first invoice for ${status.plan_name} is sent then.`
-            : `Your free trial ends on ${on}. The card on file is charged on ${on} for ${status.plan_name}.`,
+            ? t`Your free trial ends on ${endsOn}. The first invoice for ${planName} is sent then.`
+            : t`Your free trial ends on ${endsOn}. The card on file is charged on ${endsOn} for ${planName}.`,
       };
     }
   }

@@ -33,17 +33,17 @@ export function ShikiCode({ code, language }: { code: string; language: string }
 
   return (
     <div
-      className="my-3 overflow-hidden rounded-lg border border-mw-border text-xs leading-relaxed"
+      className="my-3 overflow-hidden rounded-xl border border-mw-border bg-mw-surface-raised font-mono text-xs leading-relaxed"
       data-mw-code-block
     >
       <CodeHeader language={lang} code={code} />
       {html === null ? (
-        <pre className="m-0 overflow-x-auto bg-mw-surface-hover p-3">
+        <pre className="m-0 overflow-x-auto px-4 py-3.5 text-mw-text">
           <code>{code}</code>
         </pre>
       ) : (
         <div
-          className="overflow-x-auto [&>pre]:m-0 [&>pre]:bg-transparent [&>pre]:p-3"
+          className="overflow-x-auto [&>pre]:m-0 [&>pre]:bg-transparent [&>pre]:px-4 [&>pre]:py-3.5"
           dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
@@ -54,7 +54,7 @@ export function ShikiCode({ code, language }: { code: string; language: string }
 function CodeHeader({ language, code }: { language: string; code: string }) {
   const { copied, copy } = useCopy();
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-mw-border bg-mw-surface-raised px-3 py-1 text-mw-text-muted">
+    <div className="flex min-h-9 items-center justify-between gap-2 border-b border-mw-border px-3.5 py-1 text-mw-text-muted">
       <span className="font-mono" data-mw-code-language>
         {language}
       </span>
@@ -65,7 +65,7 @@ function CodeHeader({ language, code }: { language: string; code: string }) {
           aria-label="Copy code"
           aria-live="polite"
           onClick={() => void copy(code)}
-          className="rounded px-1.5 py-0.5 hover:bg-mw-surface-hover hover:text-mw-text"
+          className="inline-flex min-h-7 items-center rounded-md px-2 font-sans text-xs outline-none hover:bg-mw-surface-hover hover:text-mw-text focus-visible:ring-2 focus-visible:ring-mw-focus pointer-coarse:min-h-11"
         >
           {copied ? "Copied" : "Copy"}
         </button>

@@ -1,5 +1,8 @@
 import { useContext, useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, select, t as coreT } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { apiFetch } from "../lib/api";
 import { AuthPage, Alert, DonePanel } from "./AuthForm";
 import { PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS, ensureAuthConfig, failureMessage, queryParam } from "./authForms";
@@ -52,13 +55,14 @@ type JoinState =
   | { phase: "accepted"; invite: InviteLookup }
   | { phase: "error"; invite: InviteLookup; message: string };
 
-const STATUS_MESSAGE: Record<Exclude<InviteLookup["status"], "pending">, string> = {
-  expired: "This invite has expired.",
-  accepted: "This invite has already been used.",
-  revoked: "This invite was withdrawn.",
+const STATUS_MESSAGE: Record<Exclude<InviteLookup["status"], "pending">, MessageDescriptor> = {
+  expired: msg`This invite has expired.`,
+  accepted: msg`This invite has already been used.`,
+  revoked: msg`This invite was withdrawn.`,
 };
 
 function JoinInvitePage() {
+  const { t, i18n } = useLingui();
   const searchStr = useLocation({ select: (location) => location.searchStr });
   const token = queryParam(searchStr, "token") ?? "";
   // Null outside the shell: no session, so the front door rendered this page.
@@ -71,7 +75,8 @@ function JoinInvitePage() {
       // Set from the effect rather than the initial state so the render
       // rule stays one-way: the token comes from the router's location.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setState({ phase: "invalid", message: "This invite link is missing its token." });
+      setState({ phase: "invalid", message: coreT`This invite link is missing its token.` });
+
       return;
     }
     (async () => {
@@ -92,13 +97,7 @@ function JoinInvitePage() {
   }, [token]);
 
   if (state.phase === "loading") {
-    return (
-      <AuthPage title="Checking your invitation…">
-        <p aria-live="polite" className="animate-pulse text-sm text-mw-text-muted">
-          One moment.
-        </p>
-      </AuthPage>
-    );
+    return <CheckingInvite />;
   }
   if (state.phase === "invalid") {
     return (
@@ -108,7 +107,7 @@ function JoinInvitePage() {
   const { invite } = state;
   if (invite.status !== "pending") {
     return (
-      <UnusableInvite signedIn={shell !== null}>{STATUS_MESSAGE[invite.status]}</UnusableInvite>
+      <UnusableInvite signedIn={shell !== null}>{i18n._(STATUS_MESSAGE[invite.status])}</UnusableInvite>
     );
   }
 
@@ -124,6 +123,10 @@ function JoinInvitePage() {
 
   const { principal } = shell;
   const matches = (principal.email ?? "").trim().toLowerCase() === invite.email;
+  const orgName = invite.org_name;
+  const signedInAs = principal.email ?? principal.subject;
+  const signedInEmail = principal.email;
+  const invitedEmail = invite.email;
 
   async function accept() {
     setState({ phase: "accepting", invite });
@@ -137,29 +140,21 @@ function JoinInvitePage() {
 
   if (state.phase === "accepted") {
     return (
-      <AuthPage title={`Welcome to ${invite.org_name}`}>
-        <div aria-live="polite">
-          <DonePanel id="joined" title={`You are now ${anArticle(invite.role)} ${invite.role} of ${invite.org_name}.`}>
-            <a href="/apps/chat" className={PRIMARY_BUTTON_CLASS + " inline-block text-center"}>
-              Open MatterWave
-            </a>
-          </DonePanel>
-        </div>
-      </AuthPage>
+      <JoinedPage orgName={orgName} role={invite.role} />
     );
   }
 
   return (
     <AuthPage
-      title={`Join ${invite.org_name}`}
-      intro={`You have been invited to join ${invite.org_name} as ${anArticle(invite.role)} ${invite.role}.`}
+      title={t`Join ${orgName}`}
+      intro={invitedAs(invite.role, orgName)}
     >
       {state.phase === "error" && (
         <Alert>
           <p>{state.message}</p>
           {isOtherOrg(state.message) && (
             <p className="text-xs">
-              You are signed in as {principal.email ?? principal.subject}.
+              <Trans>You are signed in as {signedInAs}.</Trans>
             </p>
           )}
         </Alert>
@@ -172,22 +167,25 @@ function JoinInvitePage() {
             disabled={state.phase === "accepting"}
             onClick={() => void accept()}
           >
-            {state.phase === "accepting" ? "Joining…" : `Join ${invite.org_name}`}
+            {state.phase === "accepting" ? t`Joining…` : t`Join ${orgName}`}
           </button>
-          <span className="text-sm text-mw-text-muted">as {principal.email}</span>
+          <span className="text-sm text-mw-text-muted">
+            <Trans>as {signedInEmail}</Trans>
+          </span>
         </div>
       ) : (
         <Alert>
           <p>
-            This invitation was sent to {invite.email}, but you are signed in as{" "}
-            {principal.email ?? principal.subject}.
+            <Trans>
+              This invitation was sent to {invitedEmail}, but you are signed in as {signedInAs}.
+            </Trans>
           </p>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => void shell.signOut()}>
-              Sign out
+              <Trans>Sign out</Trans>
             </button>
             <a href={LOGIN_PATH} className={SECONDARY_BUTTON_CLASS + " inline-block"}>
-              Sign in as someone else
+              <Trans>Sign in as someone else</Trans>
             </a>
           </div>
         </Alert>
@@ -211,27 +209,30 @@ function JoinInvitePage() {
  * has an account the invite was never needed for, and the front page.
  */
 function UnusableInvite(props: { signedIn: boolean; children: ReactNode }) {
+  const { t } = useLingui();
   return (
-    <AuthPage title="This invitation cannot be used">
+    <AuthPage title={t`This invitation cannot be used`}>
       <Alert focus={false}>
         <p>{props.children}</p>
       </Alert>
       <p className="text-sm text-mw-text-muted">
-        Ask the person who invited you for a new link. An administrator of the organisation
-        sends one from Settings, Members.
+        <Trans>
+          Ask the person who invited you for a new link. An administrator of the organisation
+          sends one from Settings, Members.
+        </Trans>
       </p>
       <div className="flex flex-wrap gap-2">
         {props.signedIn ? (
           <a href="/" className={PRIMARY_BUTTON_CLASS + " inline-block text-center"}>
-            Go to MatterWave
+            <Trans>Go to MatterWave</Trans>
           </a>
         ) : (
           <>
             <a href={LOGIN_PATH} className={PRIMARY_BUTTON_CLASS + " inline-block text-center"}>
-              Go to sign in
+              <Trans>Go to sign in</Trans>
             </a>
             <a href="/" className={SECONDARY_BUTTON_CLASS + " inline-block text-center"}>
-              Go to MatterWave
+              <Trans>Go to MatterWave</Trans>
             </a>
           </>
         )}
@@ -240,8 +241,75 @@ function UnusableInvite(props: { signedIn: boolean; children: ReactNode }) {
   );
 }
 
-function anArticle(word: string): string {
-  return /^[aeiou]/i.test(word) ? "an" : "a";
+function CheckingInvite() {
+  const { t } = useLingui();
+  return (
+    <AuthPage title={t`Checking your invitation…`}>
+      <p aria-live="polite" className="animate-pulse text-sm text-mw-text-muted">
+        <Trans>One moment.</Trans>
+      </p>
+    </AuthPage>
+  );
+}
+
+/** The done state once a mailed invite or a link is accepted. */
+function JoinedPage(props: { orgName: string; role: string }) {
+  const { t } = useLingui();
+  const { orgName } = props;
+  return (
+    <AuthPage title={t`Welcome to ${orgName}`}>
+      <div aria-live="polite">
+        <DonePanel id="joined" title={joinedAs(props.role, orgName)}>
+          <a href="/apps/chat" className={PRIMARY_BUTTON_CLASS + " inline-block text-center"}>
+            <Trans>Open MatterWave</Trans>
+          </a>
+        </DonePanel>
+      </div>
+    </AuthPage>
+  );
+}
+
+/**
+ * The role sentences, one branch per role the API has (owner, admin,
+ * member, viewer): the English article and a translation's gender both
+ * depend on the role. An unknown role is shown as the API names it, with
+ * the English article.
+ */
+function withArticle(role: string): string {
+  return /^[aeiou]/i.test(role) ? `an ${role}` : `a ${role}`;
+}
+
+function joinedAs(role: string, orgName: string): string {
+  const roleWithArticle = withArticle(role);
+  return select(role, {
+    owner: `You are now an owner of ${orgName}.`,
+    admin: `You are now an admin of ${orgName}.`,
+    member: `You are now a member of ${orgName}.`,
+    viewer: `You are now a viewer of ${orgName}.`,
+    other: `You are now ${roleWithArticle} of ${orgName}.`,
+  });
+}
+
+function invitedAs(role: string, orgName: string): string {
+  const roleWithArticle = withArticle(role);
+  return select(role, {
+    owner: `You have been invited to join ${orgName} as an owner.`,
+    admin: `You have been invited to join ${orgName} as an admin.`,
+    member: `You have been invited to join ${orgName} as a member.`,
+    viewer: `You have been invited to join ${orgName} as a viewer.`,
+    other: `You have been invited to join ${orgName} as ${roleWithArticle}.`,
+  });
+}
+
+function linkInvitesAs(role: string, orgName: string): string {
+  const roleWithArticle = withArticle(role);
+  return select(role, {
+    owner: `This link invites you to join ${orgName} as an owner.`,
+    admin: `This link invites you to join ${orgName} as an admin.`,
+    member: `This link invites you to join ${orgName} as a member.`,
+    viewer: `This link invites you to join ${orgName} as a viewer.`,
+    other: `This link invites you to join ${orgName} as ${roleWithArticle}.`,
+  });
 }
 
 function isOtherOrg(message: string): boolean {
@@ -269,10 +337,10 @@ type JoinLinkState =
   | { phase: "joined"; link: InviteLinkLookup }
   | { phase: "error"; link: InviteLinkLookup; message: string };
 
-const LINK_STATUS_MESSAGE: Record<Exclude<InviteLinkLookup["status"], "active">, string> = {
-  expired: "This invite link has expired.",
-  used_up: "This invite link has been used up.",
-  revoked: "This invite link was withdrawn.",
+const LINK_STATUS_MESSAGE: Record<Exclude<InviteLinkLookup["status"], "active">, MessageDescriptor> = {
+  expired: msg`This invite link has expired.`,
+  used_up: msg`This invite link has been used up.`,
+  revoked: msg`This invite link was withdrawn.`,
 };
 
 /**
@@ -284,6 +352,7 @@ const LINK_STATUS_MESSAGE: Record<Exclude<InviteLinkLookup["status"], "active">,
  * so otherwise.
  */
 function JoinLinkPage(props: { token: string }) {
+  const { t, i18n } = useLingui();
   const { token } = props;
   const shell = useContext(ShellContext);
   const [state, setState] = useState<JoinLinkState>({ phase: "loading" });
@@ -308,13 +377,7 @@ function JoinLinkPage(props: { token: string }) {
   }, [token]);
 
   if (state.phase === "loading") {
-    return (
-      <AuthPage title="Checking your invitation…">
-        <p aria-live="polite" className="animate-pulse text-sm text-mw-text-muted">
-          One moment.
-        </p>
-      </AuthPage>
-    );
+    return <CheckingInvite />;
   }
   if (state.phase === "invalid") {
     return (
@@ -324,7 +387,7 @@ function JoinLinkPage(props: { token: string }) {
   const { link } = state;
   if (link.status !== "active") {
     return (
-      <UnusableInvite signedIn={shell !== null}>{LINK_STATUS_MESSAGE[link.status]}</UnusableInvite>
+      <UnusableInvite signedIn={shell !== null}>{i18n._(LINK_STATUS_MESSAGE[link.status])}</UnusableInvite>
     );
   }
 
@@ -333,6 +396,8 @@ function JoinLinkPage(props: { token: string }) {
   }
 
   const { principal } = shell;
+  const orgName = link.org_name;
+  const signedInAs = principal.email ?? principal.subject;
 
   async function join() {
     setState({ phase: "joining", link });
@@ -345,32 +410,24 @@ function JoinLinkPage(props: { token: string }) {
   }
 
   if (state.phase === "joined") {
-    return (
-      <AuthPage title={`Welcome to ${link.org_name}`}>
-        <div aria-live="polite">
-          <DonePanel id="joined" title={`You are now ${anArticle(link.role)} ${link.role} of ${link.org_name}.`}>
-            <a href="/apps/chat" className={PRIMARY_BUTTON_CLASS + " inline-block text-center"}>
-              Open MatterWave
-            </a>
-          </DonePanel>
-        </div>
-      </AuthPage>
-    );
+    return <JoinedPage orgName={orgName} role={link.role} />;
   }
 
   return (
     <AuthPage
-      title={`Join ${link.org_name}`}
-      intro={`This link invites you to join ${link.org_name} as ${anArticle(link.role)} ${link.role}.`}
+      title={t`Join ${orgName}`}
+      intro={linkInvitesAs(link.role, orgName)}
     >
       {state.phase === "error" && (
         <Alert>
           <p>{state.message}</p>
           {isOtherOrg(state.message) && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs">You are signed in as {principal.email ?? principal.subject}.</span>
+              <span className="text-xs">
+                <Trans>You are signed in as {signedInAs}.</Trans>
+              </span>
               <button type="button" className={SECONDARY_BUTTON_CLASS} onClick={() => void shell.signOut()}>
-                Sign out
+                <Trans>Sign out</Trans>
               </button>
             </div>
           )}
@@ -383,9 +440,12 @@ function JoinLinkPage(props: { token: string }) {
           disabled={state.phase === "joining"}
           onClick={() => void join()}
         >
-          {state.phase === "joining" ? "Joining…" : `Join ${link.org_name}`}
+          {state.phase === "joining" ? t`Joining…` : t`Join ${orgName}`}
         </button>
-        <span className="text-sm text-mw-text-muted">as {principal.email ?? principal.subject}</span>
+        <span className="text-sm text-mw-text-muted">
+          <Trans>as {signedInAs}</Trans>
+        </span>
+
       </div>
     </AuthPage>
   );

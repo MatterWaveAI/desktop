@@ -25,6 +25,10 @@ fn main() {
             "unpair_device",
             "global_shortcut_state",
             "set_global_shortcut",
+            "take_navigation",
+            "autostart_state",
+            "set_autostart",
+            "set_recent_conversations",
         ]),
     ))
     .expect("tauri build script failed");

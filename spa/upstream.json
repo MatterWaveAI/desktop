@@ -1,0 +1,10 @@
+{
+  "commit": "518e2a80d384376e6cb4770fd17e9082fc5ae593",
+  "exclude": [
+    "e2e",
+    "test-results",
+    "tsconfig.tsbuildinfo",
+    "index.html"
+  ],
+  "digest": "sha256-b4d9093721b2282713721b008439e989f6310c274f7e3b9780efd04f0cd53c3c"
+}

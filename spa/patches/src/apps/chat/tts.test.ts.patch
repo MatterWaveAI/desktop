@@ -1,0 +1,198 @@
+diff --git a/src/apps/chat/tts.test.ts b/src/apps/chat/tts.test.ts
+new file mode 100644
+index 0000000..0b64ac4
+--- /dev/null
++++ b/src/apps/chat/tts.test.ts
+@@ -0,0 +1,192 @@
++import { describe, expect, it, vi } from "vitest";
++import {
++  clampRate,
++  DEFAULT_READ_ALOUD,
++  loadReadAloudSettings,
++  pickVoice,
++  READ_ALOUD_KEY,
++  saveReadAloudSettings,
++  speakText,
++  speechText,
++  type SpeechSynthesisLike,
++  type SpeechSynthesisUtteranceLike,
++  type SpeechSynthesisVoiceLike,
++} from "./tts";
++
++function voice(uri: string, lang: string, name = uri, def = false): SpeechSynthesisVoiceLike {
++  return { voiceURI: uri, name, lang, default: def, localService: true };
++}
++
++/** The synth and its utterances, recorded the way a test asserts on them. */
++function fakeSynth(voices: SpeechSynthesisVoiceLike[] = []) {
++  const spoken: SpeechSynthesisUtteranceLike[] = [];
++  let cancelled = 0;
++  const synth: SpeechSynthesisLike = {
++    speaking: false,
++    paused: false,
++    getVoices: () => voices,
++    speak: (utterance) => spoken.push(utterance),
++    cancel: () => {
++      cancelled += 1;
++    },
++    onvoiceschanged: null,
++  };
++  return { synth, spoken, cancelled: () => cancelled };
++}
++
++describe("the text as something worth saying", () => {
++  it("keeps the words, drops the furniture", () => {
++    expect(speechText("**Hello** there!")).toBe("Hello there!");
++    expect(speechText("# Heading\n\nBody text.")).toBe("Heading Body text.");
++    expect(speechText("- one\n- two\n- three")).toBe("one two three");
++    expect(speechText("1. first\n2. second")).toBe("first second");
++    expect(speechText("> quoted wisdom")).toBe("quoted wisdom");
++    expect(speechText("a *soft* and _quiet_ word")).toBe("a soft and quiet word");
++    expect(speechText("| a | b |\n|---|---|\n| 1 | 2 |")).toBe("a b 1 2");
++  });
++
++  it("keeps code's contents but loses the fences and the language tag", () => {
++    expect(speechText("Run this:\n\n```python\nprint(1)\n```\n\nDone.")).toBe(
++      "Run this: print(1) Done.",
++    );
++    expect(speechText("use `mw --help` first")).toBe("use mw --help first");
++  });
++
++  it("keeps a link's words and drops its URL, and drops images whole", () => {
++    expect(speechText("[the docs](https://example.com/very/long/url) say so")).toBe(
++      "the docs say so",
++    );
++    expect(speechText("before ![alt text](https://example.com/x.png) after")).toBe(
++      "before after",
++    );
++  });
++
++  it("collapses the whitespace the markdown left behind", () => {
++    expect(speechText("a\n\n\nb   c")).toBe("a b c");
++    expect(speechText("   ")).toBe("");
++  });
++});
++
++describe("the settings", () => {
++  it("round-trip through storage, and unreadable ones read as unset", () => {
++    const store = new Map<string, string>();
++    const storage = {
++      getItem: (k: string) => store.get(k) ?? null,
++      setItem: (k: string, v: string) => void store.set(k, v),
++    };
++    expect(loadReadAloudSettings(storage)).toEqual(DEFAULT_READ_ALOUD);
++    saveReadAloudSettings({ voiceURI: "v-1", rate: 1.5 }, storage);
++    expect(JSON.parse(store.get(READ_ALOUD_KEY)!)).toEqual({ voiceURI: "v-1", rate: 1.5 });
++    expect(loadReadAloudSettings(storage)).toEqual({ voiceURI: "v-1", rate: 1.5 });
++    // A chosen voice that means "the engine decides" is stored as null.
++    saveReadAloudSettings({ voiceURI: null, rate: 1 }, storage);
++    expect(loadReadAloudSettings(storage)).toEqual(DEFAULT_READ_ALOUD);
++    // Corrupt, empty-voiced and rate-less shapes fall back, not crash.
++    store.set(READ_ALOUD_KEY, "{not json");
++    expect(loadReadAloudSettings(storage)).toEqual(DEFAULT_READ_ALOUD);
++    store.set(READ_ALOUD_KEY, JSON.stringify({ voiceURI: "", rate: "nonsense" }));
++    expect(loadReadAloudSettings(storage)).toEqual(DEFAULT_READ_ALOUD);
++  });
++
++  it("clamps the rate into what an engine accepts", () => {
++    expect(clampRate(1.25)).toBe(1.25);
++    expect(clampRate("2")).toBe(2);
++    expect(clampRate(999)).toBe(10);
++    expect(clampRate(-3)).toBe(0.1);
++    expect(clampRate(Number.NaN)).toBe(1);
++    expect(clampRate(undefined)).toBe(1);
++  });
++
++  it("survives a blocked store, the way the privacy note does", () => {
++    const broken = {
++      getItem: () => {
++        throw new Error("blocked");
++      },
++      setItem: () => {
++        throw new Error("blocked");
++      },
++    };
++    expect(loadReadAloudSettings(broken)).toEqual(DEFAULT_READ_ALOUD);
++    expect(() => saveReadAloudSettings(DEFAULT_READ_ALOUD, broken)).not.toThrow();
++  });
++});
++
++describe("picking a voice", () => {
++  const voices = [
++    voice("en-gb-1", "en-GB", "Serena"),
++    voice("en-us-1", "en-US", "Sam", true),
++    voice("de-at-1", "de-AT", "Erika"),
++    voice("fr-1", "fr-FR", "Amélie"),
++  ];
++
++  it("is the chosen one, when it is still on the list", () => {
++    expect(pickVoice(voices, { voiceURI: "fr-1", rate: 1 }, "en-GB")?.voiceURI).toBe("fr-1");
++    // A chosen voice that has gone missing falls through to the language.
++    expect(pickVoice(voices, { voiceURI: "gone", rate: 1 }, "en-GB")?.voiceURI).toBe("en-gb-1");
++  });
++
++  it("matches the reply's language exactly, then its family, then nobody", () => {
++    expect(pickVoice(voices, DEFAULT_READ_ALOUD, "en-GB")?.voiceURI).toBe("en-gb-1");
++    expect(pickVoice(voices, DEFAULT_READ_ALOUD, "de-DE")?.voiceURI).toBe("de-at-1");
++    expect(pickVoice(voices, DEFAULT_READ_ALOUD, "ja-JP")).toBeNull();
++    // An engine that spells its tags with underscores matches anyway.
++    expect(pickVoice([voice("x", "en_GB")], DEFAULT_READ_ALOUD, "en-GB")?.voiceURI).toBe("x");
++  });
++
++  it("an empty list means the engine decides", () => {
++    expect(pickVoice([], DEFAULT_READ_ALOUD, "en-GB")).toBeNull();
++  });
++});
++
++describe("wiring the synth call", () => {
++  it("cancels the previous speaker, sets text, language, voice and rate, and speaks", () => {
++    const { synth, spoken, cancelled } = fakeSynth();
++    const ctor = vi.fn(function (this: SpeechSynthesisUtteranceLike) {
++      return this;
++    }) as unknown as new () => SpeechSynthesisUtteranceLike;
++    const onEnd = vi.fn();
++    const utterance = speakText(synth, ctor, "hello there", {
++      lang: "en-GB",
++      rate: 1.5,
++      voice: voice("en-gb-1", "en-GB"),
++      onEnd,
++    });
++    // The previous voice, if any, was stopped first.
++    expect(cancelled()).toBe(1);
++    expect(utterance.text).toBe("hello there");
++    expect(utterance.lang).toBe("en-GB");
++    expect(utterance.rate).toBe(1.5);
++    expect(utterance.voice?.voiceURI).toBe("en-gb-1");
++    expect(spoken).toEqual([utterance]);
++  });
++
++  it("end and error both count as the end", () => {
++    const { synth } = fakeSynth();
++    const onEnd = vi.fn();
++    const utterance = speakText(synth, class implements SpeechSynthesisUtteranceLike {
++      text = "";
++      lang = "";
++      rate = 1;
++      voice = null;
++      onend: (() => void) | null = null;
++      onerror: ((event: unknown) => void) | null = null;
++    }, "words", { lang: "en-GB", rate: 1, onEnd });
++    utterance.onend?.();
++    utterance.onerror?.("interrupted");
++    expect(onEnd).toHaveBeenCalledTimes(2);
++  });
++
++  it("a null voice leaves the engine to choose", () => {
++    const { synth, spoken } = fakeSynth();
++    const utterance = speakText(synth, class implements SpeechSynthesisUtteranceLike {
++      text = "";
++      lang = "";
++      rate = 1;
++      voice = null;
++      onend: (() => void) | null = null;
++      onerror: ((event: unknown) => void) | null = null;
++    }, "words", { lang: "en-GB", rate: 1, voice: null });
++    expect(utterance.voice).toBeNull();
++    expect(spoken).toHaveLength(1);
++  });
++});

@@ -348,6 +348,55 @@ describe("Boot in auth_mode none", () => {
   });
 });
 
+describe("Boot with no network", () => {
+  it("says it is offline and connects by itself when the network comes back", async () => {
+    let onLine = false;
+    vi.spyOn(navigator, "onLine", "get").mockImplementation(() => onLine);
+    const working = stubApi(noneConfig, jsonResponse(principal));
+    // A dead link: fetch rejects, as it does with no network.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (!onLine) throw new TypeError("Failed to fetch");
+        return (working as unknown as typeof fetch)(input);
+      }),
+    );
+    mountAt("/");
+
+    await vi.waitFor(() => {
+      expect(container!.textContent).toContain("You are offline.");
+    });
+    expect(container!.textContent).toContain("connects again by itself");
+    expect(buttonNamed("Retry")).toBeDefined();
+
+    onLine = true;
+    act(() => {
+      window.dispatchEvent(new Event("online"));
+    });
+    await vi.waitFor(() => {
+      expect(container!.querySelector("[data-testid='app-slot']")).not.toBeNull();
+    });
+    vi.restoreAllMocks();
+  });
+
+  it("names the API, not the network, when the device is online", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    mountAt("/");
+
+    await vi.waitFor(() => {
+      expect(container!.textContent).toContain("Could not reach the MatterWave API.");
+    });
+    expect(container!.textContent).not.toContain("You are offline.");
+    vi.restoreAllMocks();
+  });
+});
+
 /**
  * An account that holds a session but has not confirmed its
  * email used to land on the full chat UI: `/api/me` has always reported the

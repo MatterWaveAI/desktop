@@ -4,8 +4,10 @@ import { msg } from "@lingui/core/macro";
 import {
   activateLocale,
   adoptServerLocale,
+  chooseLocalePreference,
   DEVICE_LOCALE,
   directionFor,
+  followAccountLocale,
   getLocalePreference,
   LOCALES,
   matchDeviceLocale,
@@ -84,6 +86,32 @@ describe("the account's saved locale", () => {
   it("leaves a tag this build does not ship alone", async () => {
     await setLocalePreference("en-US");
     await adoptServerLocale("de-DE");
+    expect(getLocalePreference()).toBe("en-US");
+  });
+
+  it("is adopted when it arrives late and nothing was picked meanwhile", async () => {
+    await followAccountLocale(async () => ({ locale: "es-ES" }));
+    expect(getLocalePreference()).toBe("es-ES");
+  });
+
+  it("loses to a language picked while the request was out", async () => {
+    let answer!: (preferences: { locale: string | null }) => void;
+    const following = followAccountLocale(
+      () => new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    await chooseLocalePreference("en-US");
+    answer({ locale: "es-ES" });
+    await following;
+    expect(getLocalePreference()).toBe("en-US");
+  });
+
+  it("leaves the device's setting when the request fails", async () => {
+    await setLocalePreference("en-US");
+    await followAccountLocale(async () => {
+      throw new Error("offline");
+    });
     expect(getLocalePreference()).toBe("en-US");
   });
 });

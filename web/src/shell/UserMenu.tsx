@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 import { msg } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { MessageDescriptor } from "@lingui/core";
+import type { AppDescriptor } from "../apps/registry";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import {
   accountLabel,
@@ -13,7 +14,6 @@ import {
   switchAccount,
   type AccountEntry,
 } from "../lib/accounts";
-import { fetchBillingStatus } from "../lib/billing";
 import { isDesktop } from "../lib/desktopAuth";
 import { loadModels } from "../lib/models";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
@@ -22,6 +22,52 @@ import { HELP_PATH } from "./help";
 import { useShell } from "./shellContext";
 import { chordLabel, isMacPlatform, PALETTE_CHORD } from "./shortcuts";
 import { useThemePreference, type ThemePreference } from "./theme";
+import type { Principal } from "../types";
+import { displayName, usePlan, type Plan } from "./account";
+
+/** An app the account menu can switch to: the registry's entry, as much as the menu needs. */
+export type MenuApp = Pick<AppDescriptor, "id" | "title" | "path">;
+
+/** Up to two initials from the name, else the address's first letter. */
+function initialsOf(principal: Principal): string {
+  const words = (principal.name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0]![0]! + words[words.length - 1]![0]!).toUpperCase();
+  if (words.length === 1) return words[0]!.slice(0, 2).toUpperCase();
+  return (principal.email ?? principal.subject).slice(0, 1).toUpperCase();
+}
+
+function AccountAvatar(props: { principal: Principal; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`flex shrink-0 items-center justify-center rounded-full border border-mw-border-emphasis bg-mw-surface-hover text-xs font-semibold text-mw-text ${props.className ?? "size-8"}`}
+    >
+      {initialsOf(props.principal)}
+    </span>
+  );
+}
+
+/**
+ * The account at rest, for the foot of the sidebar: avatar, name and plan.
+ * The sidebar's trigger for the account menu on a desktop; on a phone, where
+ * the header carries the menu, the same lines with nothing to press.
+ */
+export function AccountSummary(props: { principal: Principal; plan: Plan | null }) {
+  const planName = props.plan?.name;
+  return (
+    <span className="flex min-w-0 items-center gap-2.5 text-left">
+      <AccountAvatar principal={props.principal} className="size-8.5" />
+      <span className="flex min-w-0 flex-col leading-tight">
+        <span className="truncate text-sm font-medium text-mw-text">{displayName(props.principal)}</span>
+        {props.plan !== null && (
+          <span className="truncate text-xs text-mw-text-muted" data-mw-account-plan="">
+            <Trans>{planName} plan</Trans>
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
 
 /**
  * The account menu: who is signed in and to which organisation, the plan
@@ -47,12 +93,25 @@ import { useThemePreference, type ThemePreference } from "./theme";
 export function UserMenu(props: {
   /** Open the command palette, as the keyboard chord does. */
   onOpenPalette?: () => void;
+  /**
+   * `avatar`, the header's round button; `row`, the sidebar's account row
+   * (avatar, name and plan), which opens the menu upward.
+   */
+  variant?: "avatar" | "row";
+  /**
+   * The apps this person can open, for the menu's switcher. Listed only
+   * when there is more than one: chat alone is not a choice.
+   */
+  apps?: readonly MenuApp[];
+  /** The path on screen, to mark the app the person is in. */
+  currentPath?: string;
 }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const shell = useShell();
   const { email, subject, org_name: orgName } = shell.principal;
+  const variant = props.variant ?? "avatar";
   const [open, setOpen] = useState(false);
-  const [plan, setPlan] = useState<{ name: string; free: boolean } | null>(null);
+  const { plan, load: loadPlan } = usePlan(variant === "row");
   const [modelLabel, setModelLabel] = useState<string | null>(null);
   const [asked, setAsked] = useState(false);
   // The other accounts signed in on this browser (lib/accounts.ts), read
@@ -79,9 +138,7 @@ export function UserMenu(props: {
         setAccounts({ others: list.accounts.filter((a) => !a.current), room: list.room }),
       )
       .catch(() => undefined);
-    fetchBillingStatus()
-      .then((status) => setPlan({ name: status.plan_name, free: status.plan === "free" }))
-      .catch(() => undefined);
+    loadPlan();
     loadModels()
       .then((models) => {
         const id = shell.authConfig.default_model;
@@ -129,16 +186,25 @@ export function UserMenu(props: {
 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger
-        aria-label={t`Account and organisation`}
-        className="flex cursor-pointer items-center justify-center gap-1 rounded-full hover:bg-mw-surface-hover pointer-coarse:min-h-11 pointer-coarse:min-w-11"
-      >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-mw-inverse text-xs font-medium text-mw-inverse-foreground">
-          {(email ?? subject).slice(0, 1).toUpperCase()}
-        </span>
-      </PopoverTrigger>
+      {variant === "row" ? (
+        <PopoverTrigger
+          aria-label={t`Account and organisation`}
+          data-mw-account-row=""
+          className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center rounded-lg px-1.5 py-1 outline-none hover:bg-mw-surface-hover focus-visible:ring-2 focus-visible:ring-mw-focus data-popup-open:bg-mw-surface-hover"
+        >
+          <AccountSummary principal={shell.principal} plan={plan} />
+        </PopoverTrigger>
+      ) : (
+        <PopoverTrigger
+          aria-label={t`Account and organisation`}
+          className="flex cursor-pointer items-center justify-center gap-1 rounded-full outline-none hover:bg-mw-surface-hover focus-visible:ring-2 focus-visible:ring-mw-focus pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+        >
+          <AccountAvatar principal={shell.principal} className="size-8" />
+        </PopoverTrigger>
+      )}
       <PopoverContent
-        align="end"
+        align={variant === "row" ? "start" : "end"}
+        side={variant === "row" ? "top" : "bottom"}
         aria-label={t`Account menu`}
         data-mw-user-menu=""
         className="w-64 gap-0 rounded-md border border-mw-border bg-mw-surface-raised p-1 text-mw-text shadow-lg ring-0"
@@ -186,17 +252,19 @@ export function UserMenu(props: {
             <p className="px-2 pb-0.5 pt-1 text-xs font-medium uppercase tracking-wide text-mw-text-muted">
               <Trans>Switch account</Trans>
             </p>
-            {accounts.others.map((account) => (
+            {accounts.others.map((account) => {
+              const accountName = accountLabel(account);
+              return (
               <div key={account.slot} className="flex items-center gap-1">
                 <button
                   type="button"
                   className={`${itemClass} min-w-0 flex-1`}
                   disabled={switching !== null}
                   onClick={() => void switchTo(account)}
-                  aria-label={t`Switch to ${accountLabel(account)}`}
+                  aria-label={t`Switch to ${accountName}`}
                 >
                   <span className="block truncate">
-                    {switching === account.slot ? t`Switching…` : accountLabel(account)}
+                    {switching === account.slot ? t`Switching…` : accountName}
                   </span>
                   {account.org_name && (
                     <span className="block truncate text-xs text-mw-text-muted">
@@ -209,12 +277,13 @@ export function UserMenu(props: {
                   className="shrink-0 rounded px-2 py-1.5 text-xs text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text pointer-coarse:min-h-11"
                   disabled={switching !== null}
                   onClick={() => void signOutOther(account)}
-                  aria-label={t`Sign out ${accountLabel(account)}`}
+                  aria-label={t`Sign out ${accountName}`}
                 >
                   <Trans>Sign out</Trans>
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
         {accounts !== null && accounts.room && (
@@ -228,6 +297,27 @@ export function UserMenu(props: {
           </p>
         )}
         <ThemeSwitch />
+        {props.apps !== undefined && props.apps.length > 1 && (
+          <nav aria-label={t`Apps`} data-mw-app-switcher="">
+            <div role="separator" className="my-1 border-t border-mw-border" />
+            <p className="px-2 pb-0.5 pt-1 text-xs font-medium uppercase tracking-wide text-mw-text-muted">
+              <Trans>Apps</Trans>
+            </p>
+            {props.apps.map((app) => {
+              const current = props.currentPath?.startsWith(app.path) === true;
+              return (
+                <a
+                  key={app.id}
+                  href={app.path}
+                  aria-current={current ? "page" : undefined}
+                  className={`${itemClass} ${current ? "font-medium text-mw-text" : ""}`}
+                >
+                  {i18n._(app.title)}
+                </a>
+              );
+            })}
+          </nav>
+        )}
         <div role="separator" className="my-1 border-t border-mw-border" />
         <a href="/settings/account" className={itemClass}>
           <Trans>Settings</Trans>

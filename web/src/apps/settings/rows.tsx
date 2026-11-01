@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "cn";
+import { t } from "@lingui/core/macro";
+import { formatDate } from "../../i18n/format";
 
 /**
  * The list inside a panel -- people, keys, sessions, devices -- as clean
@@ -94,14 +96,15 @@ export function Initials(props: { name: string; className?: string }) {
  * scanning a list wants rather than a timestamp.
  */
 export function activityLabel(iso: string | null, now: Date = new Date()): { text: string; fresh: boolean } {
-  if (!iso) return { text: "Never active", fresh: false };
+  if (!iso) return { text: t`Never active`, fresh: false };
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return { text: iso, fresh: false };
   const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((day(now) - day(at)) / 86_400_000);
-  if (days <= 0) return { text: "Active today", fresh: true };
-  if (days === 1) return { text: "Active yesterday", fresh: false };
-  return { text: `Active ${at.toLocaleDateString(undefined, { dateStyle: "medium" })}`, fresh: false };
+  if (days <= 0) return { text: t`Active today`, fresh: true };
+  if (days === 1) return { text: t`Active yesterday`, fresh: false };
+  const date = formatDate(at, { dateStyle: "medium" });
+  return { text: t`Active ${date}`, fresh: false };
 }
 
 export function Activity(props: { iso: string | null; "data-testid"?: string }) {

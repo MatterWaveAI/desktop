@@ -8,6 +8,7 @@ import { ShellContext, type ShellContextValue } from "../../shell/shellContext";
 import { UsagePane } from "./panes/UsagePane";
 import { BillingPane } from "./panes/BillingPane";
 import { formatResetDate } from "../../lib/billing";
+import { formatDate } from "../../i18n/format";
 import { planEventReason } from "./panes/BillingPane";
 
 /**
@@ -190,7 +191,7 @@ describe("UsagePane", () => {
     // Each day is a short local date, the machine date on the <time> element.
     const day = container?.querySelector("table[aria-label='Usage by day'] time");
     expect(day?.getAttribute("datetime")).toBe("2026-10-01");
-    expect(day?.textContent).toBe(new Date(2026, 9, 1).toLocaleDateString(undefined, { day: "numeric", month: "short" }));
+    expect(day?.textContent).toBe(formatDate(new Date(2026, 9, 1), { day: "numeric", month: "short" }));
     expect(text()).toMatch(/120,000/);
     // The bar is a share of its column, so it fits whatever width the card has.
     const bars = [...(container?.querySelectorAll("table[aria-label='Usage by day'] tbody [data-slot=meter] > div") ?? [])];

@@ -1,0 +1,193 @@
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { RouterContextProvider } from "@tanstack/react-router";
+import type { AuthConfig, Principal } from "../types";
+import { router } from "../routes";
+import { ShellContext, type ShellContextValue } from "../shell/shellContext";
+import { PRICING_PATH } from "../shell/frontDoor";
+import { cleanup as cleanupPage, jsonResponse, mount, view } from "../shell/frontDoorHarness";
+import { PricingPage } from "../apps/billing/PricingPage";
+import { BillingPane } from "../apps/settings/panes/BillingPane";
+
+/**
+ * Stripe from the desktop app: Checkout and the portal open in the system
+ * browser (`open_external`), the app stays where it was, and the window
+ * coming back to the front reads the subscription again.
+ */
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const CHECKOUT_URL = "https://checkout.stripe.test/c/pay/cs_1";
+const PORTAL_URL = "https://billing.stripe.test/p/session/ps_1";
+
+// One bridge for the whole file: desktopAuth keeps the first invoke it
+// finds, and the pages import it once.
+const invoke = vi.fn();
+
+function fakeDesktop() {
+  invoke.mockClear();
+  (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { invoke };
+  return invoke;
+}
+
+const PLANS = {
+  data: [
+    {
+      code: "free",
+      name: "Free",
+      price_cents_monthly: 0,
+      price_cents_annual: 0,
+      included_tokens: 1_000_000,
+      overage_enabled: false,
+      default_overage_cap_micros: 0,
+      models: ["grt-nano"],
+      limits: { max_seats: 1, max_conversations: 25, allowed_models: [], features: { api_keys: true } },
+    },
+    {
+      code: "pro",
+      name: "Pro",
+      price_cents_monthly: 2000,
+      price_cents_annual: 20000,
+      included_tokens: 20_000_000,
+      overage_enabled: true,
+      default_overage_cap_micros: 20_000_000,
+      models: ["grt-nano"],
+      limits: { max_seats: 5, max_conversations: null, allowed_models: [], features: { api_keys: true } },
+    },
+  ],
+  models: [
+    { id: "grt-nano", label: "GRT Nano", multiplier: 1, input_usd_per_m: 0.1, output_usd_per_m: 0.4, partner: false },
+  ],
+  default_model: "grt-nano",
+};
+
+const FREE = { org_id: "org-a", plan: "free", plan_name: "Free", status: "active", implicit: true, billing_enabled: true };
+const PRO = { ...FREE, plan: "pro", plan_name: "Pro", implicit: false };
+
+let root: Root | null = null;
+let container: HTMLElement | null = null;
+
+afterEach(() => {
+  act(() => root?.unmount());
+  container?.remove();
+  root = null;
+  container = null;
+  cleanupPage();
+  delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+});
+
+function owner(): Principal {
+  return { subject: "eve", kind: "user", email: "eve@acme.test", name: null, roles: [], org_id: "org-a", org_name: null, org_role: "owner" };
+}
+
+/** Answer the status from `current()`, so a test can change what Stripe has done in between. */
+function stubBilling(current: () => unknown) {
+  const answers: Record<string, unknown> = {
+    "/api/plans": PLANS,
+    "/api/billing/checkout": { url: CHECKOUT_URL },
+    "/api/billing/portal": { url: PORTAL_URL },
+  };
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input).split("?")[0];
+    if (path === "/api/billing/status") return jsonResponse(current());
+    if (path in answers) return jsonResponse(answers[path]);
+    return jsonResponse({ detail: `no mock for ${path}` }, 404);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return () => fetchMock.mock.calls.filter(([input]) => String(input).startsWith("/api/billing/status")).length;
+}
+
+function focusWindow() {
+  act(() => {
+    window.dispatchEvent(new Event("focus"));
+  });
+}
+
+describe("Checkout from the desktop app", () => {
+  it("opens in the browser, keeps the app on the plans, and shows the new plan once the window is back", async () => {
+    const invoke = fakeDesktop();
+    let status: unknown = FREE;
+    const statusReads = stubBilling(() => status);
+    const shell = { principal: owner() } as unknown as ShellContextValue;
+    const Page = () => (
+      <ShellContext.Provider value={shell}>
+        <PricingPage />
+      </ShellContext.Provider>
+    );
+    await mount(PRICING_PATH, { [PRICING_PATH]: Page });
+    const subscribe = await vi.waitFor(() => {
+      const button = view().querySelector<HTMLButtonElement>("li[data-plan='pro'] button");
+      expect(button?.textContent).toBe("Subscribe");
+      return button!;
+    });
+
+    await act(async () => subscribe.click());
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("open_external", { url: CHECKOUT_URL }));
+    expect(view().querySelector("[data-checkout-outside]")?.textContent).toContain("open in your browser");
+
+    // Paid in the browser; the person switches back.
+    status = PRO;
+    const before = statusReads();
+    focusWindow();
+    await vi.waitFor(() => expect(statusReads()).toBe(before + 1));
+    await vi.waitFor(() =>
+      expect(view().querySelector("li[data-plan='pro'] [data-plan-badge]")?.textContent).toBe("Your plan"),
+    );
+    expect(view().querySelector("[data-checkout-outside]")?.textContent).toContain("subscription is active");
+  });
+});
+
+describe("The billing portal from the desktop app", () => {
+  it("opens in the browser and reads the status again when the window is back", async () => {
+    const invoke = fakeDesktop();
+    let status: unknown = { ...PRO, current_period_end: "2026-11-01T00:00:00+00:00", cancel_at_period_end: false, price_cents_monthly: 2000, seats: 1, billed_seats: 1, default_overage_cap_micros: 0, limits: { included_tokens: 20_000_000, overage_enabled: true } };
+    const statusReads = stubBilling(() => status);
+    const authConfig: AuthConfig = { auth_mode: "none", csrf_cookie: "mw_csrf", default_model: "m" };
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    await act(async () => {
+      root!.render(
+        <RouterContextProvider router={router}>
+          <ShellContext.Provider value={{ authConfig, principal: owner() } as unknown as ShellContextValue}>
+            <BillingPane />
+          </ShellContext.Provider>
+        </RouterContextProvider>,
+      );
+    });
+    const manage = await vi.waitFor(() => {
+      const button = [...container!.querySelectorAll("button")].find((b) => b.textContent === "Manage billing");
+      expect(button).toBeDefined();
+      return button!;
+    });
+
+    await act(async () => manage.click());
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("open_external", { url: PORTAL_URL }));
+    expect(container.querySelector("[data-portal-outside]")?.textContent).toContain("open in your browser");
+    expect(manage.disabled).toBe(false);
+
+    // Cancelled in the portal; back in the app, the pane says so.
+    status = { ...(status as object), cancel_at_period_end: true };
+    const before = statusReads();
+    focusWindow();
+    await vi.waitFor(() => expect(statusReads()).toBe(before + 1));
+  });
+});
+
+describe("in a browser", () => {
+  it("reads nothing again on focus: Stripe's return brings the tab back itself", async () => {
+    const statusReads = stubBilling(() => FREE);
+    const shell = { principal: owner() } as unknown as ShellContextValue;
+    const Page = () => (
+      <ShellContext.Provider value={shell}>
+        <PricingPage />
+      </ShellContext.Provider>
+    );
+    await mount(PRICING_PATH, { [PRICING_PATH]: Page });
+    await vi.waitFor(() => expect(statusReads()).toBe(1));
+    focusWindow();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(statusReads()).toBe(1);
+  });
+});

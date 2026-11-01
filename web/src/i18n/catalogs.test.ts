@@ -145,7 +145,11 @@ describe("es-ES, the machine-drafted pilot", () => {
  * the same ones or the runtime renders a hole where the value should be.
  */
 function placeholders(message: string): string[] {
-  const simple = [...message.matchAll(/\{(\w+)(?=[,}])/g)].map((match) => `{${match[1]}}`);
+  // A plural branch whose text has no `#` ("one {hour}") reads like a
+  // placeholder; the keyword before it says it is a branch, not a variable.
+  const simple = [...message.matchAll(/(?<!(?:zero|one|two|few|many|other|=\d+) )\{(\w+)(?=[,}])/g)].map(
+    (match) => `{${match[1]}}`,
+  );
   const tags = [...message.matchAll(/<(\d+)>/g)].map((match) => `<${match[1]}>`);
   const plural = [...message.matchAll(/\{(\w+), plural,/g)].map((match) => `plural:${match[1]}`);
   return [...simple, ...tags, ...plural].sort();

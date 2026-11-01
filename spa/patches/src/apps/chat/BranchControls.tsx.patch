@@ -1,0 +1,22 @@
+diff --git a/src/apps/chat/BranchControls.tsx b/src/apps/chat/BranchControls.tsx
+index 7ac8efd..2870eaf 100644
+--- a/src/apps/chat/BranchControls.tsx
++++ b/src/apps/chat/BranchControls.tsx
+@@ -6,6 +6,8 @@ import {
+   GitBranchIcon,
+   PencilIcon,
+   RefreshCwIcon,
++  Volume2Icon,
++  VolumeXIcon,
+   type LucideIcon,
+ } from "lucide-react";
+ 
+@@ -67,6 +69,8 @@ const ACTION_ICONS: Partial<Record<string, LucideIcon>> = {
+   Regenerate: RefreshCwIcon,
+   Report: FlagIcon,
+   "Branch from here": GitBranchIcon,
++  "Read aloud": Volume2Icon,
++  "Stop reading": VolumeXIcon,
+ };
+ 
+ /**
