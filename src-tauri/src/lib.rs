@@ -13,6 +13,7 @@ mod keychain;
 mod loopback;
 mod oidc;
 mod pkce;
+mod summon;
 mod tokens;
 mod updater;
 
@@ -278,7 +279,7 @@ async fn sign_in(app: AppHandle, state: State<'_, AppState>) -> Result<(), Strin
         tokens: Some(set),
         api_key: None,
     };
-    focus_main(&app);
+    summon::summon_main(&app);
     Ok(())
 }
 
@@ -556,40 +557,19 @@ fn set_global_shortcut(
     Ok(hotkey::state_of(current.as_deref()))
 }
 
-fn focus_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-    }
-}
-
-/// The tray's Show/Hide: visible means hide (get the window out of the way
-/// without quitting), anything else means show and focus. Focused-but-
-/// behind counts as hidden, so the item always does something visible.
-#[cfg(desktop)]
-fn toggle_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") {
-        if w.is_visible().unwrap_or(false) && !w.is_focused().unwrap_or(true) {
-            let _ = w.hide();
-        } else {
-            let _ = w.unminimize();
-            let _ = w.show();
-            let _ = w.set_focus();
-        }
-    }
-}
-
-/// The system tray: Show/Hide and Quit, nothing else. The menu on left
-/// click too, because the tray item is not a drop target for anything and
-/// a menu that needs a right click is a menu half the world never finds.
+/// The system tray: Show and Quit, nothing else. The menu on left click
+/// too, because the tray item is not a drop target for anything and a menu
+/// that needs a right click is a menu half the world never finds. Show
+/// always summons: opening the tray menu takes focus from the window, so a
+/// toggle here could never tell "in front" from "behind" -- putting the
+/// window away is the hotkey's job (summon.rs).
 #[cfg(desktop)]
 fn build_tray(app: &tauri::App) -> Result<(), tauri::Error> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::TrayIconBuilder;
-    let show_hide =
-        MenuItem::with_id(app, "show-hide", "Show/Hide MatterWave", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show MatterWave", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit MatterWave", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show_hide, &quit])?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
     TrayIconBuilder::with_id("matterwave")
         .icon(app.default_window_icon().cloned().ok_or_else(|| {
             tauri::Error::InvalidIcon(std::io::Error::other(
@@ -599,7 +579,7 @@ fn build_tray(app: &tauri::App) -> Result<(), tauri::Error> {
         .menu(&menu)
         .show_menu_on_left_click(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "show-hide" => toggle_main(app),
+            "show" => summon::summon_main(app),
             "quit" => app.exit(0),
             _ => {}
         })
@@ -622,7 +602,7 @@ fn route_deep_link(app: &AppHandle, url: &str) {
         // Conversation links and the like belong to the SPA's router.
         let _ = app.emit("deep-link", url.to_string());
     }
-    focus_main(app);
+    summon::summon_main(app);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -642,16 +622,17 @@ pub fn run() {
         // First, per the plugin's docs: a second launch (including the one a
         // deep link starts on Windows and Linux) is folded into this one.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            focus_main(app)
+            summon::summon_main(app)
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
-        // The global hotkey: pressed means toggle, the tray's Show/Hide.
+        // The global hotkey: pressed means toggle -- a focused window is put
+        // away, any other is brought forward (summon.rs).
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        toggle_main(app);
+                        summon::toggle_main(app);
                     }
                 })
                 .build(),

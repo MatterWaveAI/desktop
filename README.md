@@ -4,7 +4,7 @@ The web app (`web/`, bundled in this repo) in a native window, built with Tauri 
 bundled, not loaded from the server; the native side adds what a browser tab cannot: a sign-in
 that survives restarts with the tokens in the OS keychain (or an API key in its place, for
 machines nobody sits at), deep links (`matterwave://`), an OS notification when a reply lands
-while the window is unfocused, a tray with Show/Hide and Quit, an update check and install the
+while the window is unfocused, a tray with Show and Quit, an update check and install the
 SPA can run, and a window whose size and position survive a restart. Tauri rather than
 Electron: the installer is about 10 MB because it uses the OS webview instead of shipping
 Chromium, the renderer has no Node and its IPC is allow-listed per command, and the native
@@ -177,8 +177,10 @@ person comes back.
 ## Global hotkey
 
 `Ctrl+Shift+M` by default (the plugin's `CommandOrControl+Shift+M`, so a Mac gets `Cmd+Shift+M`):
-a quick-summon that toggles the window from anywhere, the tray's Show/Hide without finding the
-tray (`src-tauri/src/hotkey.rs`, the `tauri-plugin-global-shortcut` plugin). The chord is
+a quick-summon that toggles the window from anywhere: one press puts a focused window away, and
+one press brings it forward from any other state -- hidden, minimized or behind other windows
+(`src-tauri/src/summon.rs`, `src-tauri/src/hotkey.rs`, the `tauri-plugin-global-shortcut`
+plugin). The tray's Show always brings the window forward. The chord is
 registered at launch -- before the SPA is up -- from the persisted choice, so the setting lives
 on the native side, in the app's config directory (`hotkey.json`), and the Preferences pane's
 "Global hotkey" select (desktop only) drives it through `set_global_shortcut`. A chord another

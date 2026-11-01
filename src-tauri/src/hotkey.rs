@@ -1,6 +1,7 @@
 //! The global hotkey quick-summon: one chord, registered with the operating
-//! system, that toggles the window from anywhere -- the tray's Show/Hide,
-//! reachable without finding the tray. Default `Ctrl+Shift+M` (the plugin's
+//! system, that toggles the window from anywhere: a focused window is put
+//! away, a hidden, minimized or buried one comes forward (summon.rs).
+//! Default `Ctrl+Shift+M` (the plugin's
 //! `CommandOrControl`, so macOS gets `Cmd+Shift+M` for free).
 //!
 //! The choice is persisted in the app's config directory (`hotkey.json`),

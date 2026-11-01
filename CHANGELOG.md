@@ -35,6 +35,15 @@ the API's `MW_RELEASE` all report it).
   refused and the refusal swallowed. Unlisten now sends what the plugin
   expects (the event and its id), a refused listen is logged, and a test
   checks every bridge call in `web/src` against the capability file.
+- **The global hotkey summons in one press**: it hid a window that was
+  visible but not focused -- behind other windows, or minimized -- so
+  bringing the app up took two presses, and it could not put away the
+  window the person was looking at. Now a focused window is hidden and any
+  other is shown, unminimized and focused (`src-tauri/src/summon.rs`).
+  The tray's Show/Hide becomes Show, which always brings the window
+  forward: opening the tray menu takes focus from the window, so a toggle
+  there could not tell in front from behind. A deep link, a finished
+  sign-in or a second launch now also shows a window the hotkey hid.
 
 ## [0.3.0] - 2026-10-31
 
