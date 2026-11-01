@@ -73,7 +73,9 @@ MW_DESKTOP_BASE_URL=https://app.matterwave.ai pnpm tauri build --debug
 `build:web` runs first (`pnpm --dir web build`: `tsc --noEmit` then the Vite build) and the bundle
 takes `web/dist`. Output: `src-tauri/target/{release,debug}/bundle/` (MSI and NSIS on Windows,
 `.app`/DMG on macOS, AppImage and `.deb` on Linux). Signing and notarisation belong to the
-release job.
+release job. The macOS bundle merges `src-tauri/Info.plist` (the microphone usage description
+WKWebView requires before dictation may ask) and signs with `src-tauri/Entitlements.plist` (audio
+input under the hardened runtime).
 
 ### The bundled SPA
 

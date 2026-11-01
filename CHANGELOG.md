@@ -63,6 +63,12 @@ the API's `MW_RELEASE` all report it).
   (`web/src/lib/desktopLinks.ts`) now sends any http(s) or mailto link
   that leaves the app's origin to the browser, after the page's own
   handlers have had their say.
+- **Dictation can ask for the microphone on macOS**: the bundle had no
+  `NSMicrophoneUsageDescription` and no audio-input entitlement, so
+  WKWebView refused `getUserMedia` before macOS ever asked the person.
+  `src-tauri/Info.plist` now says why the app wants the microphone, and
+  the hardened-runtime bundle carries
+  `com.apple.security.device.audio-input` (`src-tauri/Entitlements.plist`).
 
 ## [0.3.0] - 2026-10-31
 
