@@ -200,7 +200,7 @@ describe("ModelPicker with a priced model list", () => {
     expect(document.querySelector("[data-model-upgrade]")).toBeNull();
   });
 
-  it("shows a preset's model as fixed: named by its label, not changeable, and said to be the preset's", async () => {
+  it("shows a preset's model as fixed: named by its label, not openable, and said to be the preset's", async () => {
     stubModels(FREE_ORG);
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -221,11 +221,11 @@ describe("ModelPicker with a priced model list", () => {
     const pill = trigger();
     expect(pill.textContent).toBe("GRT Nano Pro");
     expect(pill.hasAttribute("data-mw-model-fixed")).toBe(true);
-    expect(pill.hasAttribute("disabled") || pill.getAttribute("aria-disabled") === "true").toBe(true);
-    expect(pill.title).toBe("Set by the Support desk preset");
-    const described = pill.getAttribute("aria-describedby")!;
-    expect(document.getElementById(described)?.textContent).toBe(
+    expect(pill.getAttribute("aria-disabled") === "true" || (pill as HTMLButtonElement).disabled).toBe(true);
+    expect(document.getElementById(pill.getAttribute("aria-describedby")!)?.textContent).toBe(
       "Set by the Support desk preset: $0.50 / $2.00 per 1M · counts 5× · 8k context",
     );
+    await openList();
+    expect(document.querySelector("[role='listbox']")).toBeNull();
   });
 });

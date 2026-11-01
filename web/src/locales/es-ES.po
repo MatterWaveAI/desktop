@@ -1148,6 +1148,10 @@ msgstr "Los administradores invitan a miembros y asignan roles y límites de gas
 msgid "After {disableAfter} failed deliveries in a row nothing more is sent, and the owners and admins were emailed. Fix the receiver, enable the endpoint, then redeliver what was missed from its delivery log."
 msgstr "Tras {disableAfter} entregas fallidas seguidas no se envía nada más, y se avisó por correo a los propietarios y administradores. Arregla el receptor, activa el endpoint y vuelve a entregar lo que faltó desde su registro de entregas."
 
+#: src/lib/orgPolicy.ts
+msgid "Agent mode is off. The terminal app and the VS Code extension keep to chat for everyone in this organisation."
+msgstr "El modo agente está desactivado. La aplicación de terminal y la extensión de VS Code se limitan al chat para todos en esta organización."
+
 #: src/apps/admin/IntegrationsTab.tsx
 #: src/shell/conversationSidebar.tsx
 msgid "All"
@@ -1169,6 +1173,10 @@ msgstr "Todos los resultados"
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Allow {modelLabel}"
 msgstr "Permitir {modelLabel}"
+
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "Allow local agent tools"
+msgstr "Permitir herramientas de agente locales"
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Allow sharing by link"
@@ -4932,6 +4940,10 @@ msgstr "Cargando los ajustes de verificación en dos pasos…"
 msgid "Loading…"
 msgstr "Cargando…"
 
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "Local agent tools"
+msgstr "Herramientas de agente locales"
+
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Login"
 msgstr "Inicio de sesión"
@@ -5118,6 +5130,10 @@ msgstr "Los miembros pueden compartir una conversación como un enlace público 
 #: src/apps/share/share.ts
 msgid "Members can share a conversation by public link. Each link is a snapshot, and whoever made it can revoke it."
 msgstr "Los miembros pueden compartir una conversación mediante un enlace público. Cada enlace es una instantánea, y quien lo creó puede revocarlo."
+
+#: src/lib/orgPolicy.ts
+msgid "Members can use agent mode in the terminal app and the VS Code extension, where the model reads and edits files and runs commands on the member's own computer."
+msgstr "Los miembros pueden usar el modo agente en la aplicación de terminal y en la extensión de VS Code, donde el modelo lee y edita archivos y ejecuta comandos en el propio ordenador del miembro."
 
 #: src/apps/admin/integrationsApi.ts
 msgid "Members changed"
@@ -5524,7 +5540,7 @@ msgstr "Todavía no hay canales. Las menciones en este espacio de trabajo se rec
 
 #: src/apps/settings/panes/UsagePane.tsx
 msgid "No connection was used in {month}."
-msgstr "Ninguna conexión se usó en {month}."
+msgstr "No se usó ninguna conexión en {month}."
 
 #: src/apps/settings/panes/ConnectionsPane.tsx
 msgid "No connections yet"
@@ -5709,7 +5725,7 @@ msgstr "No hay entregas pendientes."
 #: src/apps/settings/panes/connections/ConnectionRouting.tsx
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "No presets yet"
-msgstr "Aún no hay preajustes"
+msgstr "Todavía no hay preajustes"
 
 #: src/apps/admin/BillingTab.tsx
 msgid "no price"
@@ -7009,7 +7025,7 @@ msgstr "Lee el trabajo compartido."
 
 #: src/apps/settings/panes.ts
 msgid "Ready-made assistants: a model, instructions and tools, picked in the composer."
-msgstr "Asistentes ya preparados: un modelo, instrucciones y herramientas, elegidos en el compositor."
+msgstr "Asistentes listos para usar: un modelo, instrucciones y herramientas, elegidos en el compositor."
 
 #: src/apps/admin/AdminPage.tsx
 #: src/apps/admin/DisputesTab.tsx
@@ -9047,6 +9063,10 @@ msgstr "No se pudieron leer los datos de gasto. Reintentar."
 msgid "The support page opens in a new tab: paste the details into your request."
 msgstr "La página de soporte se abre en una pestaña nueva: pega los detalles en tu solicitud."
 
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "The terminal app and the VS Code extension have an agent mode: the model reads and edits files and runs commands in the folder a member opens, on that member's computer. MatterWave never runs these tools itself; the files the model reads are sent to it like any other message. Switch it off and the clients keep agent mode off for everyone in this organisation, while chat in them still works."
+msgstr "La aplicación de terminal y la extensión de VS Code tienen un modo agente: el modelo lee y edita archivos y ejecuta comandos en la carpeta que abre un miembro, en el ordenador de ese miembro. MatterWave nunca ejecuta estas herramientas por sí mismo; los archivos que lee el modelo se le envían como cualquier otro mensaje. Desactívalo y los clientes mantienen el modo agente desactivado para todos en esta organización, mientras el chat en ellos sigue funcionando."
+
 #: src/shell/AcceptTermsNotice.tsx
 msgid "The terms have <0>changed</0>"
 msgstr "Las condiciones han <0>cambiado</0>"
@@ -10121,7 +10141,7 @@ msgstr "Qué hace el cierre"
 
 #: src/apps/settings/panes/UsagePane.tsx
 msgid "What connected workspaces charged to you in {month}. Part of your usage above, not on top of it."
-msgstr "Lo que los espacios de trabajo conectados te cargaron en {month}. Parte de tu uso de arriba, no además de él."
+msgstr "Lo que los espacios de trabajo conectados te cobraron en {month}. Parte de tu uso de arriba, no añadido a él."
 
 #: src/apps/billing/EnterpriseContact.tsx
 msgid "What do you need?"
@@ -10129,7 +10149,7 @@ msgstr "¿Qué necesitas?"
 
 #: src/apps/settings/panes/UsagePane.tsx
 msgid "What each connected workspace's mentions cost in {month}, biggest first. Part of the rows above, not on top of them."
-msgstr "Lo que costaron las menciones de cada espacio de trabajo conectado en {month}, de mayor a menor. Parte de las filas de arriba, no además de ellas."
+msgstr "Lo que costaron las menciones de cada espacio de trabajo conectado en {month}, de mayor a menor. Parte de las filas de arriba, no añadido a ellas."
 
 #: src/apps/settings/panes/WebhooksPane.tsx
 msgid "What each event means and the data it carries. Payloads never include conversation content."
@@ -10182,6 +10202,10 @@ msgstr "¿Cómo quieres que te llamemos?"
 #: src/shell/HelpPage.tsx
 msgid "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
 msgstr "Lo que hace el chat y no está escrito en sus botones: los atajos, qué significa aquí hablar con una IA, y cómo denunciar, exportar y seguir el uso."
+
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "What the coding clients may do on a member's own computer."
+msgstr "Lo que pueden hacer los clientes de programación en el propio ordenador de un miembro."
 
 #: src/apps/admin/ModerationTab.tsx
 msgid "What the screening provider flagged, newest first: the category and score, and whether the prompt was blocked or only counted. No text is stored, so none is shown."
@@ -10354,7 +10378,7 @@ msgstr "Los espacios de trabajo que pueden hacer preguntas a los preajustes de e
 
 #: src/apps/settings/panes.ts
 msgid "Workspaces that can ask your presets a question, which channels are answered, and on whose budget."
-msgstr "Espacios de trabajo que pueden hacer una pregunta a tus preajustes, qué canales se responden y con cargo a qué presupuesto."
+msgstr "Espacios de trabajo que pueden preguntar a tus preajustes, qué canales se responden y con cargo a qué presupuesto."
 
 #: src/apps/billing/PricingPage.tsx
 msgid "Yes. An organisation owner or admin can cancel or change the plan from Settings, Billing; a member cannot. A cancelled subscription runs to the end of the period already paid for. An upgrade takes effect on the next request. A downgrade never deletes anything: if the organisation holds more conversations than the new plan allows, the existing ones stay readable and exportable and creating new ones waits until you upgrade or remove some."

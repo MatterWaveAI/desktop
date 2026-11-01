@@ -1146,6 +1146,10 @@ msgstr ""
 msgid "After {disableAfter} failed deliveries in a row nothing more is sent, and the owners and admins were emailed. Fix the receiver, enable the endpoint, then redeliver what was missed from its delivery log."
 msgstr ""
 
+#: src/lib/orgPolicy.ts
+msgid "Agent mode is off. The terminal app and the VS Code extension keep to chat for everyone in this organisation."
+msgstr "Agent mode is off. The terminal app and the VS Code extension keep to chat for everyone in this organization."
+
 #: src/apps/admin/IntegrationsTab.tsx
 #: src/shell/conversationSidebar.tsx
 msgid "All"
@@ -1166,6 +1170,10 @@ msgstr ""
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Allow {modelLabel}"
+msgstr ""
+
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "Allow local agent tools"
 msgstr ""
 
 #: src/apps/settings/panes/OrganisationPane.tsx
@@ -4930,6 +4938,10 @@ msgstr ""
 msgid "Loading…"
 msgstr ""
 
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "Local agent tools"
+msgstr ""
+
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Login"
 msgstr ""
@@ -5117,6 +5129,10 @@ msgstr "Members can share a conversation as a public, read-only link: a snapshot
 msgid "Members can share a conversation by public link. Each link is a snapshot, and whoever made it can revoke it."
 msgstr ""
 
+#: src/lib/orgPolicy.ts
+msgid "Members can use agent mode in the terminal app and the VS Code extension, where the model reads and edits files and runs commands on the member's own computer."
+msgstr ""
+
 #: src/apps/admin/integrationsApi.ts
 msgid "Members changed"
 msgstr ""
@@ -5127,7 +5143,7 @@ msgstr ""
 
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "Members who pick it get this model, these instructions after the organisation's, and only these tools."
-msgstr ""
+msgstr "Members who pick it get this model, these instructions after the organization's, and only these tools."
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Members whose email is on a verified domain see Sign in with your organisation on the login page and are sent to your identity provider."
@@ -9045,6 +9061,10 @@ msgstr ""
 msgid "The support page opens in a new tab: paste the details into your request."
 msgstr ""
 
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "The terminal app and the VS Code extension have an agent mode: the model reads and edits files and runs commands in the folder a member opens, on that member's computer. MatterWave never runs these tools itself; the files the model reads are sent to it like any other message. Switch it off and the clients keep agent mode off for everyone in this organisation, while chat in them still works."
+msgstr "The terminal app and the VS Code extension have an agent mode: the model reads and edits files and runs commands in the folder a member opens, on that member's computer. MatterWave never runs these tools itself; the files the model reads are sent to it like any other message. Switch it off and the clients keep agent mode off for everyone in this organization, while chat in them still works."
+
 #: src/shell/AcceptTermsNotice.tsx
 msgid "The terms have <0>changed</0>"
 msgstr ""
@@ -9244,7 +9264,7 @@ msgstr "This organization has {maxEndpoints} endpoints, the most it may have. De
 
 #: src/apps/settings/panes/PresetsPane.tsx
 msgid "This organisation has {maxPresets} presets, the most it may have. Delete one first."
-msgstr ""
+msgstr "This organization has {maxPresets} presets, the most it may have. Delete one first."
 
 #: src/lib/billing.ts
 msgid "This organisation is limited until a late payment is made: {restrictions}. Ask an org admin to pay."
@@ -10179,6 +10199,10 @@ msgstr ""
 
 #: src/shell/HelpPage.tsx
 msgid "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
+msgstr ""
+
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "What the coding clients may do on a member's own computer."
 msgstr ""
 
 #: src/apps/admin/ModerationTab.tsx

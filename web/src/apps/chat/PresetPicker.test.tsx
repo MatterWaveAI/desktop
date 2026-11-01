@@ -5,13 +5,12 @@ import type { Preset, PresetRef } from "../../types";
 import { PresetPicker } from "./PresetPicker";
 
 /**
- * The picker against the org's presets: one box naming the preset in
+ * The picker against the org's presets: one pill naming the preset in
  * force, "No preset" first in the list, each preset by name with what it
- * does on the line under the box; a pick on a stored conversation is
- * PATCHed as its `preset_id` and "No preset" clears it; a conversation on
- * a preset the org has since deleted still names it, read on its own,
- * without the list offering it; and an org with no presets gets no
- * control at all.
+ * does as its second line; a pick on a stored conversation is PATCHed as
+ * its `preset_id` and "No preset" clears it; a conversation on a preset
+ * the org has since deleted still names it, read on its own, without the
+ * list offering it; and an org with no presets gets no control at all.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -104,52 +103,62 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function box(): HTMLSelectElement | null {
-  return container!.querySelector<HTMLSelectElement>("[data-mw-preset-picker]");
+function trigger(): HTMLElement | null {
+  return container!.querySelector<HTMLElement>("[data-mw-preset-picker]");
 }
 
-function options(): HTMLOptionElement[] {
-  return [...container!.querySelectorAll("option")];
+/** Open the list: it is portalled, so its entries are looked for on the document. */
+async function openList(): Promise<void> {
+  await act(async () => {
+    trigger()!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    trigger()!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+    trigger()!.click();
+  });
+  await act(async () => {});
+}
+
+function item(id: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[role="option"][data-mw-preset="${id}"]`);
 }
 
 function name(id: string): string | null | undefined {
-  return options().find((o) => o.value === id)?.textContent;
+  return item(id)?.querySelector("[data-slot='select-item-body'] > :first-child")?.textContent;
 }
 
-function shown(): string | undefined {
-  return box()!.selectedOptions[0]?.textContent ?? undefined;
-}
-
-function description(): string | null | undefined {
-  return container!.querySelector("#mw-preset-description")?.textContent;
+function description(id: string): string | null | undefined {
+  return item(id)?.querySelector("[data-slot='select-item-description']")?.textContent;
 }
 
 async function choose(id: string): Promise<void> {
-  const select = box()!;
-  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+  await openList();
   await act(async () => {
-    setter.call(select, id);
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    item(id)!.click();
   });
   await act(async () => {});
 }
 
 describe("PresetPicker", () => {
-  it("is one box reading No preset until one is picked, and lists each preset by name", async () => {
+  it("is one pill reading No preset until one is picked, and lists each preset with what it does", async () => {
     stub([SUPPORT, RESEARCH]);
     const loaded = vi.fn();
     await render({ onPresetsLoaded: loaded });
-    const select = box()!;
-    expect(select.getAttribute("aria-label")).toBe("Preset");
-    expect(shown()).toBe("No preset");
-    expect(select.getAttribute("aria-describedby")).toBe("mw-preset-description");
-    expect(description()).toBe("No preset: your own model and instructions.");
+    const pill = trigger()!;
+    expect(pill.getAttribute("role")).toBe("combobox");
+    expect(pill.getAttribute("aria-label")).toBe("Preset");
+    expect(pill.textContent).toBe("No preset");
+    expect(document.getElementById(pill.getAttribute("aria-describedby")!)?.textContent).toBe(
+      "No preset: your own model and instructions.",
+    );
     expect(loaded).toHaveBeenCalledWith([SUPPORT, RESEARCH]);
 
-    expect(options().map((o) => o.value)).toEqual(["", "p-support", "p-research"]);
+    await openList();
+    const options = [...document.querySelectorAll("[role='option']")].map((o) => o.getAttribute("data-mw-preset"));
+    expect(options).toEqual(["", "p-support", "p-research"]);
     expect(name("")).toBe("No preset");
     expect(name("p-support")).toBe("Support desk");
-    expect(name("p-research")).toBe("Research");
+    expect(description("p-support")).toBe("Answers customer questions.");
+    // Nothing written about it: the model it answers with is what it says.
+    expect(description("p-research")).toBe("Answers with grt-nano.");
   });
 
   it("reports the pick and persists it on a stored conversation; No preset clears it", async () => {
@@ -176,11 +185,14 @@ describe("PresetPicker", () => {
     expect(calls.some((c) => c.method === "PATCH")).toBe(false);
   });
 
-  it("names the preset in force, by the conversation's own ref, with what it does under the box", async () => {
+  it("names the preset in force on the pill, by the conversation's own ref", async () => {
     stub([SUPPORT, RESEARCH]);
     await render({ conversationId: "c-1", value: { id: "p-support", name: "Support desk" } });
-    expect(shown()).toBe("Support desk");
-    expect(description()).toBe("Answering with the Support desk preset: Answers customer questions.");
+    const pill = trigger()!;
+    expect(pill.textContent).toBe("Support desk");
+    expect(document.getElementById(pill.getAttribute("aria-describedby")!)?.textContent).toBe(
+      "Answering with the Support desk preset: Answers customer questions.",
+    );
   });
 
   it("reads a deleted preset the conversation is still on, names it, and does not offer it to others", async () => {
@@ -188,30 +200,30 @@ describe("PresetPicker", () => {
     const loaded = vi.fn();
     await render({ conversationId: "c-1", value: { id: "p-old", name: "Old desk" }, onPresetsLoaded: loaded });
     expect(calls.map((c) => c.url)).toEqual(["/api/org/presets", "/api/org/presets/p-old"]);
-    expect(shown()).toBe("Old desk — no longer offered");
-    expect(description()).toBe("Answering with the Old desk preset.");
+    expect(trigger()!.textContent).toBe("Old desk");
     // The composer learns its model and welcome message the same way as a live one's.
     expect(loaded).toHaveBeenLastCalledWith([SUPPORT, RETIRED]);
-    expect(options().map((o) => o.value)).toEqual(["", "p-support", "p-old"]);
+    await openList();
+    expect(description("p-old")).toBe("No longer offered; this conversation keeps it.");
     expect(name("p-support")).toBe("Support desk");
   });
 
   it("renders nothing while the org has no presets and none is in force", async () => {
     stub([]);
     await render({});
-    expect(box()).toBeNull();
+    expect(trigger()).toBeNull();
     expect(container!.innerHTML).toBe("");
   });
 
   it("renders nothing when the list cannot be read", async () => {
     stub([], null, 503);
     await render({});
-    expect(box()).toBeNull();
+    expect(trigger()).toBeNull();
   });
 
-  it("still shows the box for a conversation on a preset when the org has none left", async () => {
+  it("still shows the pill for a conversation on a preset when the org has none left", async () => {
     stub([], RETIRED);
     await render({ conversationId: "c-1", value: { id: "p-old", name: "Old desk" } });
-    expect(shown()).toBe("Old desk — no longer offered");
+    expect(trigger()!.textContent).toBe("Old desk");
   });
 });

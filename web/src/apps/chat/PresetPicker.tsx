@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { ChevronDownIcon, SparklesIcon } from "lucide-react";
+import { Select, SelectContent, SelectItem } from "../../components/ui/select";
 import type { Preset, PresetListing, PresetRef } from "../../types";
 import { apiFetch } from "../../lib/api";
 
@@ -16,7 +19,7 @@ import { apiFetch } from "../../lib/api";
  * A conversation already on a preset the org has since deleted still
  * answers with it (the API keeps a deleted preset's settings for the
  * conversations on it), so its name and model are read one by one and it
- * stays in the box without being offered again. Nothing renders while the
+ * stays on the pill without being offered again. Nothing renders while the
  * org has no presets and none is in force: a control with one entry, "No
  * preset", would only say what the composer already does.
  */
@@ -78,7 +81,7 @@ export function PresetPicker({
         notifyRef.current?.([...presets, preset]);
       })
       .catch(() => {
-        // The conversation's own ref still names it in the box.
+        // The conversation's own ref still names it on the pill.
       });
     return () => {
       cancelled = true;
@@ -102,52 +105,71 @@ export function PresetPicker({
   if (presets === null || (presets.length === 0 && valueId === null)) return null;
 
   const inForce = listed ?? (retired?.id === valueId ? retired : null) ?? null;
-  const name = inForce?.name ?? value?.name ?? NO_PRESET_LABEL;
-  // What the preset does is the line under the box, where it can be read
-  // in full, the same way the model picker describes its choice.
+  const pillLabel = inForce?.name ?? value?.name ?? NO_PRESET_LABEL;
   const description =
     valueId === null
       ? "No preset: your own model and instructions."
-      : `Answering with the ${name} preset${inForce?.description ? `: ${inForce.description}` : "."}`;
+      : `Answering with the ${pillLabel} preset${inForce?.description ? `: ${inForce.description}` : "."}`;
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-none">
-      <label className="flex min-w-0 items-center gap-2 text-xs text-mw-text-muted">
-        <span className="sr-only sm:not-sr-only">Preset</span>
-        <select
-          className="h-8 w-full min-w-0 rounded border border-mw-border bg-transparent px-2 text-xs sm:w-auto pointer-coarse:h-11"
-          value={valueId ?? ""}
-          onChange={(event) =>
-            void select(
-              event.target.value === ""
-                ? null
-                : (presets.find((p) => p.id === event.target.value) ?? retired ?? null),
-            )
-          }
-          aria-label="Preset"
-          aria-describedby="mw-preset-description"
-          data-mw-preset-picker=""
-        >
-          <option value="">{NO_PRESET_LABEL}</option>
-          {presets.map((preset) => (
-            <option key={preset.id} value={preset.id}>
-              {preset.name}
-            </option>
-          ))}
-          {/* Deleted since: still the conversation's, so still choosable
-              to stay on, but never offered to another conversation. */}
-          {retired !== null && retired.id === valueId && listed === undefined && (
-            <option value={retired.id}>{retired.name} — no longer offered</option>
-          )}
-        </select>
-      </label>
-      <div className="hidden min-h-4 min-w-0 sm:flex">
-        <p id="mw-preset-description" className="min-w-0 text-xs text-mw-text-muted">
-          {description}
-        </p>
-      </div>
-    </div>
+    <Select
+      value={valueId ?? NONE_VALUE}
+      onValueChange={(next) => {
+        if (next === null) return;
+        void select(next === NONE_VALUE ? null : (presets.find((p) => p.id === next) ?? null));
+      }}
+    >
+      {/* The same pill as the model's: the mark, the preset's name, the
+          chevron. What the preset does is each option's second line and
+          the selected one's is the control's description. */}
+      <SelectPrimitive.Trigger
+        aria-label="Preset"
+        aria-describedby="mw-preset-description"
+        data-mw-preset-picker=""
+        className="inline-flex h-10 max-w-36 min-w-0 shrink items-center gap-2 rounded-full border border-mw-border-emphasis bg-mw-surface-raised pr-3 pl-3.5 text-sm text-mw-text transition-colors outline-none select-none hover:bg-mw-surface-hover focus-visible:ring-2 focus-visible:ring-mw-focus focus-visible:ring-offset-2 focus-visible:ring-offset-mw-surface data-popup-open:bg-mw-surface-hover sm:max-w-56 pointer-coarse:h-11"
+      >
+        <SparklesIcon aria-hidden className="size-3.5 shrink-0 text-mw-text-muted" />
+        <span className="min-w-0 truncate" data-mw-preset-label="">
+          {pillLabel}
+        </span>
+        <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 text-mw-text-muted" />
+      </SelectPrimitive.Trigger>
+      <span id="mw-preset-description" className="sr-only">
+        {description}
+      </span>
+      <SelectContent
+        align="end"
+        alignItemWithTrigger={false}
+        sideOffset={6}
+        aria-label="Presets"
+        className="w-[min(22rem,calc(100vw-2rem))] max-w-none p-1"
+      >
+        <SelectItem value={NONE_VALUE} data-mw-preset="" description="Your own model and instructions.">
+          {NO_PRESET_LABEL}
+        </SelectItem>
+        {presets.map((preset) => (
+          <SelectItem
+            key={preset.id}
+            value={preset.id}
+            data-mw-preset={preset.id}
+            description={preset.description || `Answers with ${preset.model}.`}
+          >
+            {preset.name}
+          </SelectItem>
+        ))}
+        {/* Deleted since: still the conversation's, so still choosable
+            to stay on, but never offered to another conversation. */}
+        {retired !== null && retired.id === valueId && listed === undefined && (
+          <SelectItem value={retired.id} data-mw-preset={retired.id} description="No longer offered; this conversation keeps it.">
+            {retired.name}
+          </SelectItem>
+        )}
+      </SelectContent>
+    </Select>
   );
 }
 
+
+/** The "none" entry's value; the API's own is a null `preset_id`. */
+const NONE_VALUE = "__none__";
 const NO_PRESET_LABEL = "No preset";

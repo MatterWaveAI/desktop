@@ -46,7 +46,7 @@ export function ModelPicker({
   onChange: (model: string | null) => void;
   /**
    * A model the conversation's preset fixes, and the preset's name: the
-   * box shows that model and cannot be opened, since the API answers with
+   * pill shows that model and cannot be opened, since the API answers with
    * the preset's model whatever the body says. Null when no preset is on.
    */
   fixed?: { model: string; by: string } | null;
@@ -103,7 +103,7 @@ export function ModelPicker({
   // the case this exists for: it must be readable while the model is in force,
   // not only in the instant the option was open.
   const all = [...(models ?? []), ...partners, ...previews];
-  // The preset's model when one is on: the box reads it and cannot change.
+  // The preset's model when one is on: the pill reads it, the list does not open.
   const fixedEntry = fixed === null ? undefined : all.find((m) => m.id === fixed.model);
   const selected = fixed !== null ? (fixedEntry ?? null) : value === null ? null : all.find((m) => m.id === value);
   // The default by its label when the list names it; the id otherwise.
@@ -113,10 +113,10 @@ export function ModelPicker({
     fixed !== null
       ? `Set by the ${fixed.by} preset: ${fixedEntry === undefined ? fixed.model : describeModel(fixedEntry)}`
       : selected === undefined || selected === null
-        ? defaultName === null
-          ? "Using the default model."
-          : `Using ${defaultName}, the default model.`
-        : describeModel(selected);
+      ? defaultName === null
+        ? "Using the default model."
+        : `Using ${defaultName}, the default model.`
+      : describeModel(selected);
 
   async function select(model: string | null) {
     onChange(model);
@@ -183,7 +183,7 @@ export function ModelPicker({
         data-mw-model-picker=""
         data-mw-model-fixed={fixed === null ? undefined : ""}
         title={fixed === null ? undefined : `Set by the ${fixed.by} preset`}
-        className="inline-flex h-10 max-w-44 min-w-0 shrink items-center gap-2 rounded-full border border-mw-border-emphasis bg-mw-surface-raised pr-3 pl-3.5 text-sm text-mw-text transition-colors outline-none select-none hover:bg-mw-surface-hover focus-visible:ring-2 focus-visible:ring-mw-focus focus-visible:ring-offset-2 focus-visible:ring-offset-mw-surface disabled:cursor-progress data-popup-open:bg-mw-surface-hover sm:max-w-64 pointer-coarse:h-11"
+        className="inline-flex h-10 max-w-44 min-w-0 shrink items-center gap-2 rounded-full border border-mw-border-emphasis bg-mw-surface-raised pr-3 pl-3.5 text-sm text-mw-text transition-colors outline-none select-none hover:bg-mw-surface-hover focus-visible:ring-2 focus-visible:ring-mw-focus focus-visible:ring-offset-2 focus-visible:ring-offset-mw-surface disabled:cursor-progress data-[mw-model-fixed]:cursor-default data-popup-open:bg-mw-surface-hover sm:max-w-64 pointer-coarse:h-11"
       >
         <StatusDot tone={dotTone} />
         <span className="min-w-0 truncate" data-mw-model-label="">
@@ -202,25 +202,22 @@ export function ModelPicker({
         className="w-[min(22rem,calc(100vw-2rem))] max-w-none p-1"
         footer={upgradeNote}
       >
-        {/* The fixed model is the list's one entry, by its label: the list
-            never opens while it is fixed, and a locked entry's "needs Pro"
-            would be wrong of a model the preset answers with. */}
-        {fixed !== null && (
-          <SelectItem value={fixed.model} data-mw-model="">
-            {fixedEntry?.label ?? fixed.model}
+        <SelectItem
+          value={DEFAULT_VALUE}
+          data-mw-model=""
+          description={defaultEntry === undefined ? "This deployment's choice." : describeModel(defaultEntry)}
+        >
+          {defaultName === null ? "Default" : `Default (${defaultName})`}
+        </SelectItem>
+        {/* The fixed model has to be an entry for the control to name it,
+            even though the list never opens while it is fixed. */}
+        {fixed !== null && fixedEntry === undefined && (
+          <SelectItem value={fixed.model} data-mw-model={fixed.model} description="Set by the preset.">
+            {fixed.model}
           </SelectItem>
         )}
-        {fixed === null && (
-          <SelectItem
-            value={DEFAULT_VALUE}
-            data-mw-model=""
-            description={defaultEntry === undefined ? "This deployment's choice." : describeModel(defaultEntry)}
-          >
-            {defaultName === null ? "Default" : `Default (${defaultName})`}
-          </SelectItem>
-        )}
-        {fixed === null && models?.map(itemFor)}
-        {fixed === null && partners.length > 0 && (
+        {models?.map(itemFor)}
+        {partners.length > 0 && (
           // Another provider's models: offered for testing and usable only
           // on a plan that names them, so never mixed into the list above.
           <SelectGroup className="p-0">
@@ -229,7 +226,7 @@ export function ModelPicker({
             {partners.map(itemFor)}
           </SelectGroup>
         )}
-        {fixed === null && previews.length > 0 && (
+        {previews.length > 0 && (
           // Research previews stay in their own group, never in the main
           // list and never the default -- the default above is the
           // server's, and a research preview is never the default.

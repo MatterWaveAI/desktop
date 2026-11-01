@@ -198,6 +198,8 @@ export interface ChatAdapterHooks {
   onNotice?: (message: string) => void;
   /** The answer, by its stored id, ran out of tokens before it finished. */
   onLengthTruncated?: (messageId: string) => void;
+  /** The stream reached `done`: an answer is ready to read. */
+  onDone?: (conversationId: string) => void;
   /**
    * The API refused the send because the conversation is a connector's --
    * one started from Slack, answered in its own thread -- and said which
@@ -205,8 +207,6 @@ export interface ChatAdapterHooks {
    * pointing there, so `onError` is not called for it.
    */
   onConnectorConversation?: (source: ConversationSource) => void;
-  /** The stream reached `done`: an answer is ready to read. */
-  onDone?: (conversationId: string) => void;
 }
 
 /** The prompt we send: the user's text, which is all a user turn carries. */

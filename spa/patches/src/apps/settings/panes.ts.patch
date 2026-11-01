@@ -1,5 +1,5 @@
 diff --git a/src/apps/settings/panes.ts b/src/apps/settings/panes.ts
-index 402e10a..25ca0bc 100644
+index 59d90a2..c993d0d 100644
 --- a/src/apps/settings/panes.ts
 +++ b/src/apps/settings/panes.ts
 @@ -9,6 +9,8 @@ import { msg } from "@lingui/core/macro";
@@ -34,7 +34,7 @@ index 402e10a..25ca0bc 100644
    {
      id: "account",
      group: "You",
-@@ -139,6 +155,16 @@ export const settingsPanes: readonly SettingsPane[] = [
+@@ -158,6 +174,16 @@ export const settingsPanes: readonly SettingsPane[] = [
    },
  ];
  

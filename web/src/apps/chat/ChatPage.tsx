@@ -465,11 +465,6 @@ function ThreadRuntime(props: {
   // conversation; the state is what the header and the notice render.
   const [temporary, setTemporary] = useState(props.temporary);
   const temporaryRef = useRef(props.temporary);
-  // A connector's conversation: the stored flag, or what the API answered
-  // a send with when the list was stale. Either way the thread is answered
-  // in its own channel, so the composer gives way to the notice and the
-  // fork is the way to continue here.
-  const [source, setSource] = useState(props.source);
   // The preset in force: the stored conversation's, or the picker's choice
   // on a new chat. The ref is what the adapter sends on the create; the
   // state is what the pickers and the empty state render. The full preset
@@ -479,6 +474,11 @@ function ThreadRuntime(props: {
   const presetRef = useRef<string | null>(props.preset?.id ?? null);
   const [presets, setPresets] = useState<readonly Preset[]>([]);
   const activePreset = preset === null ? null : (presets.find((p) => p.id === preset.id) ?? null);
+  // A connector's conversation: the stored flag, or what the API answered
+  // a send with when the list was stale. Either way the thread is answered
+  // in its own channel, so the composer gives way to the notice and the
+  // fork is the way to continue here.
+  const [source, setSource] = useState(props.source);
   // The adapter reports a detail string; it is classified here and the string
   // itself is dropped. Nothing downstream can render it by accident. The
   // correlation id is kept, because it is the one piece of the failure that is
@@ -551,7 +551,7 @@ function ThreadRuntime(props: {
         onSettled: () => hooksRef.current.onSettled(),
         // `meta` forwarded, not dropped: it carries the correlation id and the
         // refusal code, and a one-argument wrapper here silently threw both
-        // away — the id reached this line and got no further.
+        // away â€” the id reached this line and got no further.
         onError: (message, meta) => hooksRef.current.onError(message, meta),
         onCompaction: (frame) => compactionRef.current(frame),
         // State setters are stable, so these need no ref.
@@ -559,11 +559,11 @@ function ThreadRuntime(props: {
         onContext: (frame) => setContext(readingOfFrame(frame)),
         onNotice: setNotice,
         onLengthTruncated: (id) => setLengthCut((current) => new Set(current).add(id)),
+        onDone: (id) => answerReadyRef.current(id),
         onConnectorConversation: (found) => {
           setSource(found);
           setError(null);
         },
-        onDone: (id) => answerReadyRef.current(id),
       }),
     [],
   );
@@ -882,7 +882,6 @@ function ThreadRuntime(props: {
           />
         )}
       </div>
-      {/* The preset ahead of the model: when one is on, it is what picks the model. */}
       <PresetPicker
         conversationId={conversationId}
         value={preset}
@@ -1180,14 +1179,14 @@ function ThreadView(props: {
     endedStopped(lastEntry.message);
 
   // Mirror every keystroke to storage. Cheap (one small string) and the
-  // alternative — debouncing — loses exactly the last few characters in the
+  // alternative â€” debouncing â€” loses exactly the last few characters in the
   // case this exists for, because an eviction gives no warning to flush on.
   useEffect(() => {
     saveDraft(conversationId, draft);
   }, [conversationId, draft]);
 
   // Follow the stream unless the reader scrolled up, AND re-pin when the
-  // on-screen keyboard opens or closes — the keyboard shrinks
+  // on-screen keyboard opens or closes â€” the keyboard shrinks
   // the box without changing the content, so a content-keyed effect never
   // sees it. useStickToBottom owns both rules. Keyed on everything the
   // transcript draws, not on `messages` alone: an edit, a regenerate or a
@@ -1215,7 +1214,7 @@ function ThreadView(props: {
   // The guard runs before the pre-check and before any upload, so attaching
   // an image to a text-only model costs the user nothing but the sentence
   // that explains it. It reads the same `supports_vision` the API's 422 reads,
-  // and makes the same trade for `null` (unknown is allowed through —
+  // and makes the same trade for `null` (unknown is allowed through â€”
   // `vision.ts` has the reasoning), so the two cannot disagree about a model
   // the gateway described.
   const { models, selectedModel } = props;
@@ -1285,7 +1284,15 @@ function ThreadView(props: {
               message.role === "user" ? (
                 <UserMessage key={i} message={message} />
               ) : (
-                <AssistantMessage key={i} message={message} modelLabel={labelOf} />
+                <AssistantMessage
+                  key={i}
+                  message={message}
+                  modelLabel={labelOf}
+                  /* Only the reply being written can have a tool still
+                     running; an earlier one, or this one once the turn
+                     has ended, says a call without a result got none. */
+                  running={props.busy && i === props.messages.length - 1}
+                />
               ),
             )}
             {rows.map((row) =>
@@ -1362,7 +1369,7 @@ function ThreadView(props: {
             {props.phase === "streaming" && <StreamingIndicator />}
             {props.reattaching && (
               <p data-mw-reattaching="" className="py-2 text-sm text-mw-text-muted">
-                Picking up the reply that was being written…
+                Picking up the reply that was being writtenâ€¦
               </p>
             )}
             {/* In the transcript, at the point of failure - not a toast. */}
@@ -1482,7 +1489,7 @@ function ThreadNotice(props: { text: string; onDismiss: () => void }) {
  * The server stores the real `image` and `document` parts and a reload shows
  * those; this is the optimistic echo, so a person who just sent a screenshot
  * sees it in the transcript instead of a bare line of text. `text: null` on
- * the document part is the honest value here — the client has not extracted
+ * the document part is the honest value here â€” the client has not extracted
  * anything and does not know whether the server will, so claiming otherwise
  * would put a wrong "the model read this" in the transcript for the few
  * seconds before the reload corrects it.
@@ -1526,9 +1533,9 @@ function attachmentHint(attachments: UseAttachments, blocked: boolean): string {
   if (blocked) return "You are offline";
   const kinds = "Images, PDF, text and Markdown";
   const { limits } = attachments;
-  if (limits === null) return `Attach a file — ${kinds}`;
+  if (limits === null) return `Attach a file â€” ${kinds}`;
   return (
-    `Attach a file — ${kinds}, up to ${humanSize(limits.max_upload_bytes)} each, ` +
+    `Attach a file â€” ${kinds}, up to ${humanSize(limits.max_upload_bytes)} each, ` +
     `${humanSize(limits.quota_remaining_bytes)} left of your ${humanSize(limits.quota_bytes)} quota`
   );
 }
@@ -1729,7 +1736,7 @@ function Composer(props: {
           className="mx-auto mb-2 w-full max-w-3xl rounded-lg border border-mw-danger bg-mw-danger-subtle px-3 py-2 text-xs text-mw-danger-strong"
         >
           An attachment did not upload, so nothing was sent. Retry it or remove it, then send
-          again — your message is still here.
+          again â€” your message is still here.
         </p>
       )}
       <DictationNotices dictation={dictation} />
@@ -1773,7 +1780,7 @@ function Composer(props: {
             //
             // `preventDefault` ONLY when files were found. A clipboard with
             // text in it also carries `text/plain` items, and swallowing the
-            // paste unconditionally would break every ordinary Ctrl+V — so
+            // paste unconditionally would break every ordinary Ctrl+V â€” so
             // the default is left alone unless this really is a file paste,
             // in which case the default would insert the filename as text.
             if (!attachments.available) return;
@@ -1796,17 +1803,17 @@ function Composer(props: {
           aria-activedescendant={menu.active ? optionId(menuId, menu.active) : undefined}
           placeholder={
             props.readOnly
-              ? "Read only — support sessions cannot send messages"
+              ? "Read only â€” support sessions cannot send messages"
               : !props.online
-                ? "Offline — your draft is kept"
-                : "Message MatterWave…"
+                ? "Offline â€” your draft is kept"
+                : "Message MatterWaveâ€¦"
           }
           /*
            * 16px (`text-base`) below the md breakpoint, 14px
            * (`text-sm`) above it.
            *
            * Safari zooms the page when a text field with a computed font-size
-           * UNDER 16px is focused, and it never zooms back out — the user is
+           * UNDER 16px is focused, and it never zooms back out â€” the user is
            * left on a zoomed, horizontally-scrolling page for the rest of the
            * session. Measured at 14px before this change on every phone
            * viewport. Suppressing zoom with `maximum-scale=1` in the viewport
@@ -1864,7 +1871,7 @@ function Composer(props: {
                    no explanation during a 20-second upload is the frozen UI
                    this step exists to prevent, and the chip's progress bar
                    is the answer to "how long" -- this is the answer to "why". */
-                aria-label={uploading ? "Uploading…" : "Send"}
+                aria-label={uploading ? "Uploadingâ€¦" : "Send"}
                 title={
                   props.readOnly
                     ? "Support sessions are read only"
@@ -1916,13 +1923,13 @@ function BranchedRow(props: {
   onFeedbackChange: (messageId: string, next: Feedback | null) => void;
   /** A model id to the label a person knows it by. */
   modelLabel: (id: string) => string;
+  /** False where the reader's own turns may not be rewritten: a connector's conversation. */
+  canEdit: boolean;
   /** Read aloud, on a reply, where the webview can speak; absent otherwise. */
   readAloud?: {
     speaking: boolean;
     onToggle: () => void;
   };
-  /** False where the reader's own turns may not be rewritten: a connector's conversation. */
-  canEdit: boolean;
 }) {
   const { editing, onEditingChange: setEditing } = props;
   const { message, branch } = props.entry;
@@ -2076,7 +2083,11 @@ function UserMessage(props: { message: ChatMessage }) {
   );
 }
 
-function AssistantMessage(props: { message: ChatMessage; modelLabel: (id: string) => string }) {
+function AssistantMessage(props: {
+  message: ChatMessage;
+  modelLabel: (id: string) => string;
+  running: boolean;
+}) {
   const model = props.message.metadata?.custom?.model ?? "";
   return (
     <AssistantRow>
@@ -2084,7 +2095,7 @@ function AssistantMessage(props: { message: ChatMessage; modelLabel: (id: string
           build does not know. Text still goes through the markdown renderer -- no
           rehype-raw, URL allowlist, same-origin images, per-message error
           boundary -- which MessageParts is the only caller of here. */}
-      <MessageParts parts={props.message.content} />
+      <MessageParts parts={props.message.content} running={props.running} />
       {model && (
         <div className="mt-2 flex min-h-8 items-center">
           <ModelName label={props.modelLabel(model)} />

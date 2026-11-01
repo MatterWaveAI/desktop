@@ -197,176 +197,176 @@ export function UsagePane() {
       )}
 
       <PaneSection
-        title={t`This period`}
-        description={t`${planName} plan · ${periodMonth}`}
-      >
-        {state.tone === "ok" ? (
-          <div data-usage-state="ok" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <p className="text-lg font-semibold tabular-nums">{state.title}</p>
-            <p className="text-sm text-mw-text-subtle">{state.detail}</p>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <p className="text-lg font-semibold tabular-nums">
-              <Trans>{remaining} left</Trans>
-            </p>
-            <p className="text-sm text-mw-text-subtle">
-              <Trans>Resets on {resetDate}.</Trans>
-            </p>
-          </div>
-        )}
-
-        <div
-          role="meter"
-          aria-label={t`Included tokens used this period`}
-          aria-valuemin={0}
-          aria-valuemax={usage.included}
-          aria-valuenow={Math.min(usage.used, usage.included)}
-          className="mt-3"
+          title={t`This period`}
+          description={t`${planName} plan · ${periodMonth}`}
         >
-          <Meter tone={METER_TONE[state.tone]} value={fill} className="h-2" />
-        </div>
-
-        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
-          <div>
-            <dt className="text-mw-text-subtle">
-              <Trans>Used</Trans>
-            </dt>
-            <dd className="font-medium tabular-nums">{formatNumber(usage.used)}</dd>
-          </div>
-          <div>
-            <dt className="text-mw-text-subtle">
-              <Trans>Included</Trans>
-            </dt>
-            <dd className="font-medium tabular-nums">{formatNumber(usage.included)}</dd>
-          </div>
-          <div>
-            <dt className="text-mw-text-subtle">
-              <Trans>Remaining</Trans>
-            </dt>
-            <dd className="font-medium tabular-nums">{formatNumber(usage.remaining)}</dd>
-          </div>
-          <div>
-            <dt className="text-mw-text-subtle">
-              <Trans>Resets</Trans>
-            </dt>
-            <dd className="font-medium">{resetDate}</dd>
-          </div>
-          {overage && (
-            <>
-              <div>
-                <dt className="text-mw-text-subtle">
-                  <Trans>Overage billed</Trans>
-                </dt>
-                <dd className="font-medium tabular-nums">{formatMicros(usage.overage.spent_micros)}</dd>
-              </div>
-              <div>
-                <dt className="text-mw-text-subtle">
-                  <Trans>Overage cap</Trans>
-                </dt>
-                <dd className="font-medium tabular-nums">{formatMicros(usage.overage.cap_micros)}</dd>
-              </div>
-            </>
-          )}
-        </dl>
-        {usage.seats && (
-          <p data-usage-seats className="mt-3 text-sm text-mw-text-subtle">
-            <Trans>Included: {billedSeats} × {perSeat}, one pool for the whole organisation.</Trans>
-          </p>
-        )}
-
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3">
-          <LearnMore>
-            <p>
-              <Trans>Token counts are weighted: each model&apos;s tokens count times its multiplier.</Trans>
-            </p>
-            {overage && (
-              <p>
-                <Trans>
-                  Past the included tokens, usage is billed at each model&apos;s list price until the overage cap.
-                </Trans>
+          {state.tone === "ok" ? (
+            <div data-usage-state="ok" className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <p className="text-lg font-semibold tabular-nums">{state.title}</p>
+              <p className="text-sm text-mw-text-subtle">{state.detail}</p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <p className="text-lg font-semibold tabular-nums">
+                <Trans>{remaining} left</Trans>
               </p>
+              <p className="text-sm text-mw-text-subtle">
+                <Trans>Resets on {resetDate}.</Trans>
+              </p>
+            </div>
+          )}
+
+          <div
+            role="meter"
+            aria-label={t`Included tokens used this period`}
+            aria-valuemin={0}
+            aria-valuemax={usage.included}
+            aria-valuenow={Math.min(usage.used, usage.included)}
+            className="mt-3"
+          >
+            <Meter tone={METER_TONE[state.tone]} value={fill} className="h-2" />
+          </div>
+
+          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+            <div>
+              <dt className="text-mw-text-subtle">
+                <Trans>Used</Trans>
+              </dt>
+              <dd className="font-medium tabular-nums">{formatNumber(usage.used)}</dd>
+            </div>
+            <div>
+              <dt className="text-mw-text-subtle">
+                <Trans>Included</Trans>
+              </dt>
+              <dd className="font-medium tabular-nums">{formatNumber(usage.included)}</dd>
+            </div>
+            <div>
+              <dt className="text-mw-text-subtle">
+                <Trans>Remaining</Trans>
+              </dt>
+              <dd className="font-medium tabular-nums">{formatNumber(usage.remaining)}</dd>
+            </div>
+            <div>
+              <dt className="text-mw-text-subtle">
+                <Trans>Resets</Trans>
+              </dt>
+              <dd className="font-medium">{resetDate}</dd>
+            </div>
+            {overage && (
+              <>
+                <div>
+                  <dt className="text-mw-text-subtle">
+                    <Trans>Overage billed</Trans>
+                  </dt>
+                  <dd className="font-medium tabular-nums">{formatMicros(usage.overage.spent_micros)}</dd>
+                </div>
+                <div>
+                  <dt className="text-mw-text-subtle">
+                    <Trans>Overage cap</Trans>
+                  </dt>
+                  <dd className="font-medium tabular-nums">{formatMicros(usage.overage.cap_micros)}</dd>
+                </div>
+              </>
             )}
-          </LearnMore>
-          {state.tone === "ok" && way && <div className="ml-auto">{way}</div>}
-        </div>
+          </dl>
+          {usage.seats && (
+            <p data-usage-seats className="mt-3 text-sm text-mw-text-subtle">
+              <Trans>Included: {billedSeats} × {perSeat}, one pool for the whole organisation.</Trans>
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-3">
+            <LearnMore>
+              <p>
+                <Trans>Token counts are weighted: each model&apos;s tokens count times its multiplier.</Trans>
+              </p>
+              {overage && (
+                <p>
+                  <Trans>
+                    Past the included tokens, usage is billed at each model&apos;s list price until the overage cap.
+                  </Trans>
+                </p>
+              )}
+            </LearnMore>
+            {state.tone === "ok" && way && <div className="ml-auto">{way}</div>}
+          </div>
       </PaneSection>
 
       <PaneSection
-        title={t`By model`}
-        description={
-          <>
-            <Trans>What each model counted against the allowance.</Trans>
-            <LearnMore className="mt-1">
-              <p>
-                <Trans>List price is what the tokens cost without a plan; only overage is billed on top of it.</Trans>
-              </p>
-            </LearnMore>
-          </>
-        }
-      >
-        {usage.models.length === 0 ? (
-          <p className="text-sm text-mw-text-subtle">
-            <Trans>No model has been used yet this period.</Trans>
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" aria-label={t`Usage by model`}>
-              <thead>
-                <tr className="text-left text-mw-text-subtle">
-                  <th scope="col" className={TH_CLASS}>
-                    <Trans>Model</Trans>
-                  </th>
-                  <th scope="col" className={TH_CLASS}>
-                    <Trans>Tokens</Trans>
-                  </th>
-                  <th scope="col" className={TH_CLASS}>
-                    <Trans>Multiplier</Trans>
-                  </th>
-                  <th scope="col" className={TH_CLASS}>
-                    <Trans>Weighted tokens</Trans>
-                  </th>
-                  <th scope="col" className={TH_CLASS}>
-                    <Trans>At list price</Trans>
-                  </th>
-                  {overage && (
+          title={t`By model`}
+          description={
+            <>
+              <Trans>What each model counted against the allowance.</Trans>
+              <LearnMore className="mt-1">
+                <p>
+                  <Trans>List price is what the tokens cost without a plan; only overage is billed on top of it.</Trans>
+                </p>
+              </LearnMore>
+            </>
+          }
+        >
+          {usage.models.length === 0 ? (
+            <p className="text-sm text-mw-text-subtle">
+              <Trans>No model has been used yet this period.</Trans>
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" aria-label={t`Usage by model`}>
+                <thead>
+                  <tr className="text-left text-mw-text-subtle">
                     <th scope="col" className={TH_CLASS}>
-                      <Trans>Overage billed</Trans>
+                      <Trans>Model</Trans>
                     </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {usage.models.map((row) => {
-                  const summaryTokens = formatNumber(row.compaction_weighted_tokens ?? 0);
-                  return (
-                    <tr key={row.model} data-model={row.model} className="border-t border-border">
-                      {/* The summaries are inside this row's totals; the note says how much. */}
-                      <td className="py-1.5 pr-3">
-                        {row.label}
-                        {(row.compaction_requests ?? 0) > 0 && (
-                          <span data-usage-compaction-row className="block text-xs text-mw-text-subtle">
-                            <Trans>{summaryTokens} weighted on summaries</Trans>
-                          </span>
-                        )}
-                      </td>
-                      <td className={NUM_CLASS}>{formatNumber(row.tokens)}</td>
-                      <td className={NUM_CLASS}>{formatMultiplier(row.multiplier)}</td>
-                      <td className={NUM_CLASS}>{formatNumber(row.weighted_tokens)}</td>
-                      <td className={NUM_CLASS}>{formatMicros(row.cost_micros)}</td>
-                      {overage && <td className={NUM_CLASS}>{formatMicros(row.overage_micros)}</td>}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {usage.compaction && usage.compaction.requests > 0 && (
-          <p data-usage-compaction className="mt-2 text-xs text-mw-text-subtle">
-            {compactionNote(usage.compaction.weighted_tokens, usage.compaction.requests)}
-          </p>
-        )}
+                    <th scope="col" className={TH_CLASS}>
+                      <Trans>Tokens</Trans>
+                    </th>
+                    <th scope="col" className={TH_CLASS}>
+                      <Trans>Multiplier</Trans>
+                    </th>
+                    <th scope="col" className={TH_CLASS}>
+                      <Trans>Weighted tokens</Trans>
+                    </th>
+                    <th scope="col" className={TH_CLASS}>
+                      <Trans>At list price</Trans>
+                    </th>
+                    {overage && (
+                      <th scope="col" className={TH_CLASS}>
+                        <Trans>Overage billed</Trans>
+                      </th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {usage.models.map((row) => {
+                    const summaryTokens = formatNumber(row.compaction_weighted_tokens ?? 0);
+                    return (
+                      <tr key={row.model} data-model={row.model} className="border-t border-border">
+                        {/* The summaries are inside this row's totals; the note says how much. */}
+                        <td className="py-1.5 pr-3">
+                          {row.label}
+                          {(row.compaction_requests ?? 0) > 0 && (
+                            <span data-usage-compaction-row className="block text-xs text-mw-text-subtle">
+                              <Trans>{summaryTokens} weighted on summaries</Trans>
+                            </span>
+                          )}
+                        </td>
+                        <td className={NUM_CLASS}>{formatNumber(row.tokens)}</td>
+                        <td className={NUM_CLASS}>{formatMultiplier(row.multiplier)}</td>
+                        <td className={NUM_CLASS}>{formatNumber(row.weighted_tokens)}</td>
+                        <td className={NUM_CLASS}>{formatMicros(row.cost_micros)}</td>
+                        {overage && <td className={NUM_CLASS}>{formatMicros(row.overage_micros)}</td>}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {usage.compaction && usage.compaction.requests > 0 && (
+            <p data-usage-compaction className="mt-2 text-xs text-mw-text-subtle">
+              {compactionNote(usage.compaction.weighted_tokens, usage.compaction.requests)}
+            </p>
+          )}
       </PaneSection>
 
       <PaneSection title={t`By day`} description={t`Weighted tokens and requests this period, oldest first.`}>
@@ -614,10 +614,7 @@ function MembersSection(props: { period: string; manages: boolean }) {
           )}
         </div>
       </PaneSection>
-
-      {state.phase === "ready" && (
-        <ConnectionsSection rows={state.report.by_connection} month={month} own={own} />
-      )}
+      {state.phase === "ready" && <ConnectionsSection rows={state.report.by_connection} month={month} own={own} />}
     </>
   );
 }

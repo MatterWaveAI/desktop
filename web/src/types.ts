@@ -196,7 +196,7 @@ export interface Conversation {
    */
   current_leaf_message_id?: string | null;
   /**
-   * Pin and archive are nullable timestamps, not booleans — the API
+   * Pin and archive are nullable timestamps, not booleans â€” the API
    * sends the ISO string or null, and "when" is what orders two pinned rows.
    * Optional here because the seeder and older fixtures predate the columns.
    */

@@ -41,11 +41,14 @@ import {
   type VerifyOutcome,
 } from "../../../lib/orgSso";
 import {
+  agentToolsStatusLine,
   allowListAfter,
   auditCsvPath,
   downloadCsv,
+  fetchAgentTools,
   fetchAuditPage,
   fetchOrgModels,
+  setAgentTools,
   setOrgModels,
   type AuditFilters,
   type AuditRow,
@@ -179,6 +182,7 @@ function OrgAdmin() {
               <ModelsSection />
               {/* Loads its own data too, for the same reason. */}
               <SharingSection />
+              <AgentToolsSection />
               <CloseOrgSection org={state.org} />
             </>
           ),
@@ -1668,6 +1672,101 @@ function ModelSwitches(props: {
         );
       })}
     </ul>
+  );
+}
+
+// --- local agent tools ------------------------------------------------------------
+
+/**
+ * Whether members' coding clients may run their agent tools -- reading and
+ * editing files, running commands -- on the member's own computer. The
+ * clients read the answer from `/api/me` and keep agent mode off when it is
+ * false; the server never runs those tools, so this is the organisation's
+ * policy for its clients rather than a gate on any request.
+ */
+function AgentToolsSection() {
+  const { t } = useLingui();
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const switchId = useId();
+
+  useEffect(() => {
+    let alive = true;
+    fetchAgentTools()
+      .then((policy) => {
+        if (alive) setEnabled(policy.local_agent_tools);
+      })
+      .catch((err: unknown) => {
+        if (alive) setError(failureMessage(err));
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function save(on: boolean) {
+    if (busy || enabled === null) return;
+    const before = enabled;
+    setEnabled(on);
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const after = await setAgentTools(on);
+      setEnabled(after.local_agent_tools);
+      setSaved(true);
+    } catch (err) {
+      setEnabled(before);
+      setError(failureMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <PaneSection
+      title={t`Local agent tools`}
+      description={
+        <>
+          <Trans>What the coding clients may do on a member's own computer.</Trans>
+          <LearnMore className="mt-1">
+            <p>
+              <Trans>
+                The terminal app and the VS Code extension have an agent mode: the model reads and
+                edits files and runs commands in the folder a member opens, on that member's
+                computer. MatterWave never runs these tools itself; the files the model reads are
+                sent to it like any other message. Switch it off and the clients keep agent mode
+                off for everyone in this organisation, while chat in them still works.
+              </Trans>
+            </p>
+          </LearnMore>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <label htmlFor={switchId} className="min-w-0 text-sm font-medium">
+            <Trans>Allow local agent tools</Trans>
+          </label>
+          <Switch
+            id={switchId}
+            checked={enabled ?? true}
+            busy={busy}
+            disabled={enabled === null}
+            onCheckedChange={(next) => void save(next)}
+          />
+        </div>
+        <SavedStatus shown={saved} marker="agent-tools" />
+        <ActionError message={error} />
+        {enabled !== null && (
+          <p data-agent-tools-enabled={enabled} className="text-sm">
+            {agentToolsStatusLine(enabled)}
+          </p>
+        )}
+      </div>
+    </PaneSection>
   );
 }
 

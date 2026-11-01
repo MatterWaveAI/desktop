@@ -24,6 +24,15 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
 
 ### Changed
 
+- **The bundled SPA carries the platform's connectors work** (platform
+  commit `39f3966`): organisation presets (Settings → Presets, and the
+  composer's picker, whose preset fixes the model), conversations started
+  from a connector marked with their source and answered in their own
+  thread (the composer gives way to a notice; a fork continues here),
+  Settings → Connections (connecting Slack, routing, identities,
+  notifications and the event log), and a tool call that never got a
+  result saying so. Copied by `pnpm spa:pull`, the desktop's changes
+  replayed on top.
 - **The bundled SPA is the platform's develop again** (platform commit
   `518e2a8`): the localised interface (en-GB, en-US, es-ES), the
   compaction fixes, Get help, the answer-ready signals, the terms notice,

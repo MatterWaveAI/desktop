@@ -7,7 +7,7 @@ import { ChatPage } from "./ChatPage";
 
 /**
  * A preset in the composer: a stored conversation on one opens with its
- * name in the preset box and its model fixed in the model box; a new
+ * name on the preset pill and its model fixed on the model pill; a new
  * chat shows the picked preset's welcome message in the empty state and
  * creates the conversation on it. Same harness as ChatPage.branch.test.tsx.
  */
@@ -150,17 +150,12 @@ function render(active: string | null): void {
   });
 }
 
-function presetBox(): HTMLSelectElement | null {
-  return container!.querySelector<HTMLSelectElement>("[data-mw-preset-picker]");
+function presetPill(): HTMLElement | null {
+  return container!.querySelector<HTMLElement>("[data-mw-preset-picker]");
 }
 
-/** The model pill: its text is the model in force, by its label. */
-function modelBox(): HTMLElement {
+function modelPill(): HTMLElement {
   return container!.querySelector<HTMLElement>("[data-mw-model-picker]")!;
-}
-
-function shown(select: HTMLSelectElement): string | undefined {
-  return select.selectedOptions[0]?.textContent ?? undefined;
 }
 
 describe("a preset in the composer", () => {
@@ -171,9 +166,9 @@ describe("a preset in the composer", () => {
     await flush();
     await flush();
     expect(container!.textContent).toContain("Two invoices overlapped.");
-    expect(shown(presetBox()!)).toBe("Support desk");
-    expect(modelBox().textContent).toBe("GRT Nano Pro");
-    expect(modelBox().hasAttribute("data-mw-model-fixed")).toBe(true);
+    expect(presetPill()!.textContent).toBe("Support desk");
+    expect(modelPill().textContent).toBe("GRT Nano Pro");
+    expect(modelPill().hasAttribute("data-mw-model-fixed")).toBe(true);
   });
 
   it("shows the picked preset's welcome message on a new chat and fixes its model", async () => {
@@ -183,20 +178,25 @@ describe("a preset in the composer", () => {
     await flush();
     await flush();
     expect(container!.textContent).toContain("MatterWave is a chat workspace");
-    expect(modelBox().hasAttribute("data-mw-model-fixed")).toBe(false);
+    expect(modelPill().hasAttribute("data-mw-model-fixed")).toBe(false);
 
-    const select = presetBox()!;
-    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+    const pill = presetPill()!;
     await act(async () => {
-      setter.call(select, "p-support");
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+      pill.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+      pill.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+      pill.click();
+    });
+    await flush();
+    const option = document.querySelector<HTMLElement>("[role='option'][data-mw-preset='p-support']")!;
+    await act(async () => {
+      option.click();
     });
     await flush();
 
-    expect(shown(presetBox()!)).toBe("Support desk");
+    expect(presetPill()!.textContent).toBe("Support desk");
     expect(container!.querySelector("[data-mw-preset-welcome]")!.textContent).toBe("Hello! Ask me about your account.");
     expect(container!.textContent).not.toContain("MatterWave is a chat workspace");
-    expect(modelBox().textContent).toBe("GRT Nano Pro");
-    expect(modelBox().hasAttribute("data-mw-model-fixed")).toBe(true);
+    expect(modelPill().textContent).toBe("GRT Nano Pro");
+    expect(modelPill().hasAttribute("data-mw-model-fixed")).toBe(true);
   });
 });

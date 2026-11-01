@@ -1,8 +1,8 @@
 diff --git a/src/apps/chat/ChatPage.tsx b/src/apps/chat/ChatPage.tsx
-index 0609608..b00da8c 100644
+index 99b4b46..ce36689 100644
 --- a/src/apps/chat/ChatPage.tsx
 +++ b/src/apps/chat/ChatPage.tsx
-@@ -75,6 +75,7 @@ import { fetchFeedback, type Feedback } from "./feedback";
+@@ -80,6 +80,7 @@ import { fetchFeedback, type Feedback } from "./feedback";
  import { COMPACT_HINT, CompactionDivider, ContextMeter, SummaryMarker } from "./CompactionDivider";
  import { DictationButton, DictationNotices } from "./DictationButton";
  import { useDictation } from "./useDictation";
@@ -10,10 +10,10 @@ index 0609608..b00da8c 100644
  import {
    compactConversation,
    endedOnLength,
-@@ -1076,6 +1077,10 @@ function ThreadView(props: {
-   // composer's ArrowUp can open the last one.
-   const [editingId, setEditingId] = useState<string | null>(null);
-   const editLastId = props.busy ? null : lastEditableId(props.branched);
+@@ -1147,6 +1148,10 @@ function ThreadView(props: {
+   // in its own channel, and a rewritten question would be refused the way a
+   // new one is.
+   const editLastId = props.busy || props.source !== null ? null : lastEditableId(props.branched);
 +  // Read-aloud for the stored replies. One hook above the transcript owns
 +  // the synth, so starting one reply stops the previous; a new generation
 +  // (the busy flag) stops whichever was reading.
@@ -21,7 +21,7 @@ index 0609608..b00da8c 100644
    const copiedWhat = useCopyShortcuts({
      branched: props.branched,
      messages: props.messages,
-@@ -1258,6 +1263,15 @@ function ThreadView(props: {
+@@ -1340,6 +1345,15 @@ function ThreadView(props: {
                    feedback={props.feedback.get(row.entry.message.id) ?? null}
                    onFeedbackChange={props.onFeedbackChange}
                    modelLabel={labelOf}
@@ -37,10 +37,10 @@ index 0609608..b00da8c 100644
                  />
                ),
              )}
-@@ -1820,6 +1834,11 @@ function BranchedRow(props: {
-   onFeedbackChange: (messageId: string, next: Feedback | null) => void;
-   /** A model id to the label a person knows it by. */
+@@ -1911,6 +1925,11 @@ function BranchedRow(props: {
    modelLabel: (id: string) => string;
+   /** False where the reader's own turns may not be rewritten: a connector's conversation. */
+   canEdit: boolean;
 +  /** Read aloud, on a reply, where the webview can speak; absent otherwise. */
 +  readAloud?: {
 +    speaking: boolean;
@@ -49,7 +49,7 @@ index 0609608..b00da8c 100644
  }) {
    const { editing, onEditingChange: setEditing } = props;
    const { message, branch } = props.entry;
-@@ -1872,6 +1891,7 @@ function BranchedRow(props: {
+@@ -1964,6 +1983,7 @@ function BranchedRow(props: {
              }
            : undefined
        }

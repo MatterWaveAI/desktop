@@ -1146,6 +1146,10 @@ msgstr "Administrators invite members and set roles and spending limits. The Tea
 msgid "After {disableAfter} failed deliveries in a row nothing more is sent, and the owners and admins were emailed. Fix the receiver, enable the endpoint, then redeliver what was missed from its delivery log."
 msgstr "After {disableAfter} failed deliveries in a row nothing more is sent, and the owners and admins were emailed. Fix the receiver, enable the endpoint, then redeliver what was missed from its delivery log."
 
+#: src/lib/orgPolicy.ts
+msgid "Agent mode is off. The terminal app and the VS Code extension keep to chat for everyone in this organisation."
+msgstr "Agent mode is off. The terminal app and the VS Code extension keep to chat for everyone in this organisation."
+
 #: src/apps/admin/IntegrationsTab.tsx
 #: src/shell/conversationSidebar.tsx
 msgid "All"
@@ -1167,6 +1171,10 @@ msgstr "All outcomes"
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Allow {modelLabel}"
 msgstr "Allow {modelLabel}"
+
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "Allow local agent tools"
+msgstr "Allow local agent tools"
 
 #: src/apps/settings/panes/OrganisationPane.tsx
 msgid "Allow sharing by link"
@@ -4932,6 +4940,10 @@ msgstr "Loading two-factor settings…"
 msgid "Loading…"
 msgstr "Loading…"
 
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "Local agent tools"
+msgstr "Local agent tools"
+
 #: src/apps/admin/IntegrationsTab.tsx
 msgid "Login"
 msgstr "Login"
@@ -5118,6 +5130,10 @@ msgstr "Members can share a conversation as a public, read-only link: a snapshot
 #: src/apps/share/share.ts
 msgid "Members can share a conversation by public link. Each link is a snapshot, and whoever made it can revoke it."
 msgstr "Members can share a conversation by public link. Each link is a snapshot, and whoever made it can revoke it."
+
+#: src/lib/orgPolicy.ts
+msgid "Members can use agent mode in the terminal app and the VS Code extension, where the model reads and edits files and runs commands on the member's own computer."
+msgstr "Members can use agent mode in the terminal app and the VS Code extension, where the model reads and edits files and runs commands on the member's own computer."
 
 #: src/apps/admin/integrationsApi.ts
 msgid "Members changed"
@@ -9047,6 +9063,10 @@ msgstr "The spend data could not be read. Retry."
 msgid "The support page opens in a new tab: paste the details into your request."
 msgstr "The support page opens in a new tab: paste the details into your request."
 
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "The terminal app and the VS Code extension have an agent mode: the model reads and edits files and runs commands in the folder a member opens, on that member's computer. MatterWave never runs these tools itself; the files the model reads are sent to it like any other message. Switch it off and the clients keep agent mode off for everyone in this organisation, while chat in them still works."
+msgstr "The terminal app and the VS Code extension have an agent mode: the model reads and edits files and runs commands in the folder a member opens, on that member's computer. MatterWave never runs these tools itself; the files the model reads are sent to it like any other message. Switch it off and the clients keep agent mode off for everyone in this organisation, while chat in them still works."
+
 #: src/shell/AcceptTermsNotice.tsx
 msgid "The terms have <0>changed</0>"
 msgstr "The terms have <0>changed</0>"
@@ -10182,6 +10202,10 @@ msgstr "What should we call you?"
 #: src/shell/HelpPage.tsx
 msgid "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
 msgstr "What the chat does that is not written on its buttons: the shortcuts, what talking to an AI means here, and how to report, export and keep track of usage."
+
+#: src/apps/settings/panes/OrganisationPane.tsx
+msgid "What the coding clients may do on a member's own computer."
+msgstr "What the coding clients may do on a member's own computer."
 
 #: src/apps/admin/ModerationTab.tsx
 msgid "What the screening provider flagged, newest first: the category and score, and whether the prompt was blocked or only counted. No text is stored, so none is shown."
