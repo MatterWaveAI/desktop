@@ -175,6 +175,12 @@ export interface ChatAdapterHooks {
    * raised before the API answered has neither.
    */
   onError: (message: string, meta?: { requestId?: string | null; code?: string }) => void;
+  /**
+   * The server is folding older turns before this one starts: a long wait
+   * with no token that is not a stall, so the first-token clock restarts.
+   * Again on the fold's own frame or its notice, when the turn itself begins.
+   */
+  onCompacting?: (folding: boolean) => void;
   /** The server folded older turns into a summary before this one. */
   onCompaction?: (frame: CompactionFrame) => void;
   /** The real token count for the turn just finished, beside `done`. */
@@ -411,13 +417,17 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
             });
             settle();
             return;
+          } else if (event.event === "compacting") {
+            hooks.onCompacting?.(true);
           } else if (event.event === "compaction") {
             // Before the user turn's `message` frame. Not terminal: the
             // answer has not started, so a body that ends here is still cut.
+            hooks.onCompacting?.(false);
             hooks.onCompaction?.(JSON.parse(event.data) as CompactionFrame);
           } else if (event.event === "context") {
             hooks.onContext?.(JSON.parse(event.data) as ContextFrame);
           } else if (event.event === "notice") {
+            hooks.onCompacting?.(false);
             hooks.onNotice?.(noticeText(event.data));
           } else if (event.event === "done") {
             sawTerminal = true;

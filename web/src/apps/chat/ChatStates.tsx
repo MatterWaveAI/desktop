@@ -178,7 +178,11 @@ const STALL_GIVE_UP_MS = 60_000;
  * stopping the turn and offering Retry -- a spinner that never ends is the
  * hang this exists to rule out.
  */
-export function AwaitingFirstToken(props: { onGiveUp?: () => void }) {
+export function AwaitingFirstToken(props: {
+  onGiveUp?: () => void;
+  /** The server is summarising older turns first, which is not a stall. */
+  folding?: boolean;
+}) {
   const [slow, setSlow] = useState(false);
   const giveUp = useRef(props.onGiveUp);
   useEffect(() => {
@@ -204,9 +208,11 @@ export function AwaitingFirstToken(props: { onGiveUp?: () => void }) {
         <span className="size-1.5 animate-pulse rounded-full bg-mw-text-muted" />
         <span className="size-1.5 animate-pulse rounded-full bg-mw-text-muted" />
       </span>
-      {slow
-        ? "Still waiting — the model is taking longer than usual. Keep waiting, or Stop and try another model."
-        : "Waiting for the model… a cold model can take a few seconds."}
+      {props.folding
+        ? "Summarising the earlier messages so this turn fits the model's context window…"
+        : slow
+          ? "Still waiting — the model is taking longer than usual. Keep waiting, or Stop and try another model."
+          : "Waiting for the model… a cold model can take a few seconds."}
     </p>
   );
 }

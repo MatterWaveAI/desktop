@@ -197,6 +197,11 @@ describe("awaiting the first token", () => {
       vi.useRealTimers();
     }
   });
+
+  it("says a fold is being written while the turn waits for it", () => {
+    render(<AwaitingFirstToken folding />);
+    expect(container!.textContent).toMatch(/Summarising the earlier messages/);
+  });
 });
 
 describe("an answer the person stopped", () => {

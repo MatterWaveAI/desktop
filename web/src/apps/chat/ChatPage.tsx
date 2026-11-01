@@ -413,6 +413,10 @@ function ThreadRuntime(props: {
   // notice quotes its number rather than a copy of it; null until it has
   // answered, when the 409's own detail carries the number instead.
   const [keepPairs, setKeepPairs] = useState<number | null>(null);
+  // A fold the server is running before the turn: each change restarts the
+  // first-token clock (the key below), since the wait is the summary being
+  // written, not a stalled model.
+  const [folding, setFolding] = useState<{ on: boolean; tick: number }>({ on: false, tick: 0 });
   // A fold that failed or had nothing to do, or a command's answer.
   // Information, not an error: no turn was lost, so it does not take the
   // error slot or offer a retry.
@@ -496,6 +500,7 @@ function ThreadRuntime(props: {
         onError: (message, meta) => hooksRef.current.onError(message, meta),
         onCompaction: (frame) => compactionRef.current(frame),
         // State setters are stable, so these need no ref.
+        onCompacting: (on) => setFolding((current) => ({ on, tick: current.tick + 1 })),
         onContext: (frame) => setContext(readingOfFrame(frame)),
         onNotice: setNotice,
         onLengthTruncated: (id) => setLengthCut((current) => new Set(current).add(id)),
@@ -856,6 +861,7 @@ function ThreadRuntime(props: {
         reattaching={props.reattaching}
         readOnly={readOnly}
         onGiveUp={giveUp}
+        folding={folding}
         models={models}
         selectedModel={selectedModel}
         csrfCookieName={shell.authConfig.csrf_cookie}
@@ -947,6 +953,8 @@ function ThreadView(props: {
   readOnly: boolean;
   /** A minute with no first token: stop and say so. */
   onGiveUp: () => void;
+  /** A fold the server is running before the turn, and a count of changes to it. */
+  folding?: { on: boolean; tick: number };
   /** The gateway's models, for the vision gate; null until loaded. */
   models: readonly ModelInfo[] | null;
   /** The picker's current choice; null is "Default", resolved server-side. */
@@ -1206,7 +1214,11 @@ function ThreadView(props: {
             {/* Two distinct states, not one "running": waiting for a
                 cold model reads as a hang unless it is labelled as waiting. */}
             {props.phase === "awaiting-first-token" && (
-              <AwaitingFirstToken onGiveUp={props.onGiveUp} />
+              <AwaitingFirstToken
+                key={props.folding?.tick ?? 0}
+                onGiveUp={props.onGiveUp}
+                folding={props.folding?.on ?? false}
+              />
             )}
             {props.phase === "streaming" && <StreamingIndicator />}
             {props.reattaching && (
