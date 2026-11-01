@@ -457,8 +457,9 @@ export function createChatAdapter(hooks: ChatAdapterHooks): ChatModelAdapter {
             hooks.onDone?.(conversationId);
             settle();
             // The answer is complete; whether anyone saw it land is the
-            // native side's call -- it notifies only an unfocused window.
-            notifyGenerationComplete();
+            // native side's call -- it notifies only an unfocused window,
+            // and a click on the notification opens this conversation.
+            notifyGenerationComplete(conversationId);
           }
         }
 

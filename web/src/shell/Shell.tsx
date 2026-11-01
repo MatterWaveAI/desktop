@@ -13,7 +13,8 @@ import { apps, type AppDescriptor } from "../apps/registry";
 import { ShellContext, useShell, type ShellContextValue } from "./shellContext";
 import { useShellState, writeChatHref, writeConversationUrl } from "./useShellState";
 import { JUMP_TO_MESSAGE_EVENT, type JumpToMessageDetail } from "./useConversationSearch";
-import { registerDesktopShell } from "../lib/desktopNavigation";
+import { desktopRecentConversations, registerDesktopShell } from "../lib/desktopNavigation";
+import { desktopSetRecentConversations, isDesktop } from "../lib/desktopAuth";
 import { useVisualViewportFix } from "./useVisualViewport";
 import { AccountSummary, UserMenu } from "./UserMenu";
 import { usePlan } from "./account";
@@ -114,12 +115,14 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
     [context, navigate],
   );
 
-  // A conversation link opened from outside the desktop app: selected the
-  // way a sidebar search hit is, so it opens even while another one is on
-  // screen, with `?m=` on the address for the chat page to scroll to.
+  // A conversation link opened from outside the desktop app, or the
+  // app's menu and tray: selected the way a sidebar search hit is, so it
+  // opens even while another one is on screen, with `?m=` on the address
+  // for the chat page to scroll to; New chat is the shell's own.
   useEffect(
     () =>
       registerDesktopShell({
+        startNewChat,
         openConversation: (id, message) => {
           if (!message) {
             openConversation(id);
@@ -142,8 +145,18 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
           );
         },
       }),
-    [context, navigate, openConversation],
+    [context, navigate, openConversation, startNewChat],
   );
+
+  // The desktop tray's recent chats: the conversations the sidebar lists
+  // first, ids and titles only. Nothing leaves the page in a browser.
+  const recent = desktopRecentConversations(context.conversations);
+  useEffect(() => {
+    if (!isDesktop()) return;
+    desktopSetRecentConversations(JSON.parse(recent)).catch((err: unknown) => {
+      console.warn("[desktop] could not update the tray's recent chats", err);
+    });
+  }, [recent]);
 
   // An answer that finished while the tab was hidden marks the title and
   // the icon until the person comes back; its notification opens the

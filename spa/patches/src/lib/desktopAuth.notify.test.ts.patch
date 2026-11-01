@@ -1,9 +1,9 @@
 diff --git a/src/lib/desktopAuth.notify.test.ts b/src/lib/desktopAuth.notify.test.ts
 new file mode 100644
-index 0000000..ea0dd05
+index 0000000..85d50e7
 --- /dev/null
 +++ b/src/lib/desktopAuth.notify.test.ts
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,71 @@
 +import { afterEach, describe, expect, it, vi } from "vitest";
 +
 +/**
@@ -33,11 +33,25 @@ index 0000000..ea0dd05
 +    const invoke = fakeTauri();
 +    const { notifyGenerationComplete } = await load();
 +
-+    notifyGenerationComplete();
++    notifyGenerationComplete("c1");
 +    await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce());
 +    expect(invoke).toHaveBeenCalledWith("notify_generation_complete", {
 +      title: "MatterWave",
 +      body: "Your reply is ready.",
++      conversationId: "c1",
++    });
++  });
++
++  it("sends no conversation when the stream named none", async () => {
++    const invoke = fakeTauri();
++    const { notifyGenerationComplete } = await load();
++
++    notifyGenerationComplete(null);
++    await vi.waitFor(() => expect(invoke).toHaveBeenCalledOnce());
++    expect(invoke).toHaveBeenCalledWith("notify_generation_complete", {
++      title: "MatterWave",
++      body: "Your reply is ready.",
++      conversationId: null,
 +    });
 +  });
 +

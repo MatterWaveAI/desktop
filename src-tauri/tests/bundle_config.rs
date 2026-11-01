@@ -102,3 +102,21 @@ fn the_csp_allows_the_inline_theme_script_by_its_hash() {
         "script-src should allow 'sha256-{hash}': {csp}"
     );
 }
+
+/// Ctrl (Cmd on macOS) with +, - and 0 zoom the page. On macOS and Linux
+/// Tauri does it with a script that calls the webview's zoom command, which
+/// the capability has to allow or every press is refused.
+#[test]
+fn the_window_zooms_on_the_standard_shortcuts() {
+    assert_eq!(
+        main_window(&config())["zoomHotkeysEnabled"],
+        Value::Bool(true)
+    );
+    let capability: Value =
+        serde_json::from_str(&read("capabilities/default.json")).expect("the capability parses");
+    assert!(capability["permissions"]
+        .as_array()
+        .expect("permissions")
+        .iter()
+        .any(|p| p == "core:webview:allow-set-webview-zoom"));
+}

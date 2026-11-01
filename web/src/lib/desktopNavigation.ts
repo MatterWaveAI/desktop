@@ -1,10 +1,10 @@
 /**
  * The desktop shell sending the SPA somewhere: a `matterwave://` link
- * opened from outside the app, warm or the one that launched it
- * (src-tauri/src/navigation.rs). The native side keeps one request and
- * announces it as the `navigate` event; this module takes it on start-up
- * and on every event, so the launch link opens once the page is up and a
- * later link opens exactly once.
+ * opened from outside the app (warm, or the one that launched it), a menu
+ * or tray item, a click on a notification (src-tauri/src/navigation.rs).
+ * The native side keeps one request and announces it as the `navigate`
+ * event; this module takes it on start-up and on every event, so the launch
+ * link opens once the page is up and a later link opens exactly once.
  *
  * A conversation goes through the signed-in shell when there is one
  * (`registerDesktopShell`): the chat page reads `?c=` only when nothing is
@@ -31,6 +31,7 @@ const ID = /^[A-Za-z0-9_-]{1,128}$/;
 /** What the signed-in shell does for a target, in place of a bare navigation. */
 export interface DesktopShellActions {
   openConversation: (id: string, message: string | null) => void;
+  startNewChat: () => void;
 }
 
 let shell: DesktopShellActions | null = null;
@@ -41,6 +42,24 @@ export function registerDesktopShell(actions: DesktopShellActions): () => void {
   return () => {
     if (shell === actions) shell = null;
   };
+}
+
+/** How many conversations the tray lists, and how they are chosen. */
+const RECENT_LIMIT = 3;
+
+/**
+ * The tray's recent chats as a stable string (JSON), so a re-render with
+ * the same list sends nothing: the first few conversations not archived,
+ * in the sidebar's order, by id and title.
+ */
+export function desktopRecentConversations(
+  conversations: readonly { id: string; title: string; archived_at?: string | null }[],
+): string {
+  const recent = conversations
+    .filter((c) => !c.archived_at && ID.test(c.id))
+    .slice(0, RECENT_LIMIT)
+    .map(({ id, title }) => ({ id, title }));
+  return JSON.stringify(recent);
 }
 
 /** The route for a target, or null for anything malformed. */
@@ -56,6 +75,10 @@ export function hrefFor(target: DesktopNavigationTarget | null): string | null {
       return ID.test(target.token) ? `/share/${target.token}` : null;
     case "billing":
       return "/settings/billing";
+    case "new-chat":
+      return CHAT_PATH;
+    case "settings":
+      return "/settings";
     default:
       return null;
   }
@@ -66,6 +89,12 @@ function open(target: DesktopNavigationTarget | null, navigate: (href: string) =
   if (!href || !target) return;
   if (target.kind === "conversation" && shell) {
     shell.openConversation(target.id, target.message && ID.test(target.message) ? target.message : null);
+    return;
+  }
+  // The shell's New chat also empties a conversation that is open; the
+  // route alone would leave it on screen.
+  if (target.kind === "new-chat" && shell) {
+    shell.startNewChat();
     return;
   }
   navigate(href);

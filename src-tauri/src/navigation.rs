@@ -1,5 +1,6 @@
 //! Sending the SPA somewhere from the native side: a `matterwave://` link
-//! opened from outside the app, the way back from Stripe included. The native side says *what* to open -- a
+//! opened from outside the app (the way back from Stripe included), a menu
+//! or tray item, a click on a notification. The native side says *what* to open -- a
 //! conversation, a share -- and the SPA decides *where* that is in its own
 //! router, so a renamed route is the SPA's change alone.
 //!
@@ -31,6 +32,10 @@ pub enum Target {
     /// Back from Stripe in the browser: the billing settings, which read the
     /// subscription afresh.
     Billing,
+    /// An empty conversation, from the menu's New Chat.
+    NewChat,
+    /// The settings, from the menu's Settings.
+    Settings,
 }
 
 /// The link's target, or nothing: only the shapes below open anything, and
@@ -69,7 +74,7 @@ pub fn from_deep_link(raw: &str) -> Option<Target> {
 
 /// Ids and tokens as the platform mints them: URL-safe, bounded, nothing a
 /// router could read as a path or a query.
-fn is_id(s: &str) -> bool {
+pub(crate) fn is_id(s: &str) -> bool {
     (1..=128).contains(&s.len())
         && s.bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
@@ -190,6 +195,10 @@ mod tests {
         assert_eq!(json, serde_json::json!({"kind": "share", "token": "t"}));
         let json = serde_json::to_value(Target::Billing).unwrap();
         assert_eq!(json, serde_json::json!({"kind": "billing"}));
+        let json = serde_json::to_value(Target::NewChat).unwrap();
+        assert_eq!(json, serde_json::json!({"kind": "new-chat"}));
+        let json = serde_json::to_value(Target::Settings).unwrap();
+        assert_eq!(json, serde_json::json!({"kind": "settings"}));
     }
 
     /// One request, taken once; a newer one replaces an untaken older one.

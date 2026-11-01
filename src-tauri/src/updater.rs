@@ -148,6 +148,32 @@ pub async fn download_and_install(app: &AppHandle) -> Result<(), String> {
     app.restart()
 }
 
+/// The menu's Check for Updates: the same check, with an answer the person
+/// can see. A newer version brings the window forward, where the banner
+/// offers it; none, or a check that failed, is said in a notification.
+pub fn check_from_menu(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let body = match check(&app).await {
+            Ok(Some(_)) => {
+                crate::summon::summon_main(&app);
+                return;
+            }
+            Ok(None) => "You have the latest version of MatterWave.".to_string(),
+            Err(e) => format!("Could not check for updates: {e}"),
+        };
+        use tauri_plugin_notification::NotificationExt;
+        if let Err(e) = app
+            .notification()
+            .builder()
+            .title("MatterWave")
+            .body(body)
+            .show()
+        {
+            eprintln!("updater: {e}");
+        }
+    });
+}
+
 /// One check at launch, in the background; failures are logged, never shown.
 pub fn check_on_launch(app: AppHandle) {
     tauri::async_runtime::spawn(async move {

@@ -24,6 +24,10 @@
     "allow-unpair-device",
     "allow-global-shortcut-state",
     "allow-set-global-shortcut",
-    "allow-take-navigation"
+    "allow-take-navigation",
+    "allow-autostart-state",
+    "allow-set-autostart",
+    "allow-set-recent-conversations",
+    "core:webview:allow-set-webview-zoom"
   ]
 }

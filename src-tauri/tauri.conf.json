@@ -18,7 +18,8 @@
         "height": 800,
         "minWidth": 400,
         "minHeight": 500,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "zoomHotkeysEnabled": true
       }
     ],
     "security": {

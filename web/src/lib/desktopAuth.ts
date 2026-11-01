@@ -487,7 +487,34 @@ export async function desktopOpenExternal(url: string): Promise<void> {
 export type DesktopNavigationTarget =
   | { kind: "conversation"; id: string; message?: string }
   | { kind: "share"; token: string }
-  | { kind: "billing" };
+  | { kind: "billing" }
+  | { kind: "new-chat" }
+  | { kind: "settings" };
+
+/**
+ * Whether the app starts at login (the OS's own login items), and the
+ * switch for it; the answer is the state after.
+ */
+export async function desktopAutostartState(): Promise<boolean> {
+  return call<boolean>("autostart_state");
+}
+
+export async function desktopSetAutostart(enabled: boolean): Promise<boolean> {
+  return call<boolean>("set_autostart", { enabled });
+}
+
+/** A conversation the tray lists: its id and title, nothing else. */
+export interface DesktopRecentConversation {
+  id: string;
+  title: string;
+}
+
+/** Hand the tray the conversations the sidebar lists first. */
+export async function desktopSetRecentConversations(
+  conversations: DesktopRecentConversation[],
+): Promise<void> {
+  await call<void>("set_recent_conversations", { conversations });
+}
 
 /** The waiting request, taken (each opens once), or null. */
 export async function desktopTakeNavigation(): Promise<DesktopNavigationTarget | null> {
@@ -500,13 +527,16 @@ export async function desktopTakeNavigation(): Promise<DesktopNavigationTarget |
  * state in which a reply can land unseen (`lib.rs`). Fire-and-forget: a
  * notification is never worth an error path, and in a browser there is no
  * native side, so this is nothing at all. The copy is fixed here; reply
- * content never goes into a notification.
+ * content never goes into a notification; its conversation's id goes along,
+ * so a click on the notification opens it.
  */
-export function notifyGenerationComplete(): void {
+export function notifyGenerationComplete(conversationId?: string | null): void {
   if (!isDesktop()) return;
   call<void>("notify_generation_complete", {
     title: "MatterWave",
     body: "Your reply is ready.",
+    // Which conversation a click on the notification opens; the id only.
+    conversationId: conversationId ?? null,
   }).catch(() => {});
 }
 

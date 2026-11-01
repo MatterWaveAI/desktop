@@ -4,7 +4,8 @@ The web app (`web/`, bundled in this repo) in a native window, built with Tauri 
 bundled, not loaded from the server; the native side adds what a browser tab cannot: a sign-in
 that survives restarts with the tokens in the OS keychain (or an API key in its place, for
 machines nobody sits at), deep links (`matterwave://`), an OS notification when a reply lands
-while the window is unfocused, a tray with Show and Quit, an update check and install the
+while the window is unfocused, an app menu and a tray with New Chat and the recent chats, a
+switch to start at login, an update check and install the
 SPA can run, and a window whose size and position survive a restart. Tauri rather than
 Electron: the installer is about 10 MB because it uses the OS webview instead of shipping
 Chromium, the renderer has no Node and its IPC is allow-listed per command, and the native
@@ -225,9 +226,24 @@ focused. The SPA tells the native side when a stream ends in `done`
 (`web/src/apps/chat/chatAdapter.ts`); the native side checks focus and shows the notification
 only when the window is unfocused (`notify_generation_complete` in `src-tauri/src/lib.rs`) --
 a focused window already shows the reply land. The copy is fixed ("Your reply is ready.");
-reply text never goes into a notification. Clicking it does nothing (no notification actions
-are wired), and an error or a cancellation sends none: the in-app notices cover those when the
-person comes back.
+reply text never goes into a notification, only the conversation's id, so clicking it brings the
+window forward on that conversation (the plugin reports the click; on Windows only while the
+toast is on screen, not from the Action Center). An error or a cancellation sends none: the
+in-app notices cover those when the person comes back.
+
+## Menus, tray and start at login
+
+The window has a menu (`src-tauri/src/menu.rs`): New Chat (`Ctrl+N`, `Cmd+N` on macOS),
+Settings (`Ctrl+,`), Check for Updates (off in a build without the updater; with it, a newer
+version brings up the banner and "up to date" or a failed check is said in a notification), the
+standard Edit items, full screen and Minimize -- on macOS under the usual app, File, Edit, View and
+Window menus, on Windows and Linux in the window's menu bar with Settings and Quit under File.
+`Ctrl` (`Cmd`) with `+`, `-` and `0` zoom the page. The tray's menu, on left click too, is Show,
+New Chat, the three conversations the sidebar lists first (ids and titles only, handed over by
+the SPA) and Quit. Every item that acts on the page is a navigation request, the same path links
+take ("Links into the app"). Preferences (desktop only) has "Open MatterWave at login", the
+operating system's own login item (`tauri-plugin-autostart`: a Launch Agent on macOS, the `Run`
+key on Windows, an autostart entry on Linux).
 
 ## Global hotkey
 

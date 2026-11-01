@@ -11,6 +11,7 @@ mod device_pairing;
 mod hotkey;
 mod keychain;
 mod loopback;
+mod menu;
 mod navigation;
 mod oidc;
 mod pkce;
@@ -467,9 +468,15 @@ fn app_info(app: AppHandle) -> AppInfo {
 /// somebody in another window while the model streams. Shown only when the
 /// main window is not focused -- a focused window already shows the reply
 /// land. `title` and `body` are the SPA's fixed copy; reply text never goes
-/// into a notification.
+/// into a notification. The conversation it belongs to rides along, so a
+/// click on it opens that conversation (`open_notified_conversation`).
 #[tauri::command]
-fn notify_generation_complete(app: AppHandle, title: String, body: String) -> Result<bool, String> {
+fn notify_generation_complete(
+    app: AppHandle,
+    title: String,
+    body: String,
+    conversation_id: Option<String>,
+) -> Result<bool, String> {
     let focused = app
         .get_webview_window("main")
         .and_then(|w| w.is_focused().ok())
@@ -478,13 +485,42 @@ fn notify_generation_complete(app: AppHandle, title: String, body: String) -> Re
         return Ok(false);
     }
     use tauri_plugin_notification::NotificationExt;
-    app.notification()
-        .builder()
-        .title(title)
-        .body(body)
-        .show()
-        .map_err(|e| e.to_string())?;
+    let mut notification = app.notification().builder().title(title).body(body);
+    if let Some(id) = conversation_id.filter(|id| navigation::is_id(id)) {
+        notification = notification.extra(NOTIFIED_CONVERSATION, id);
+    }
+    notification.show().map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+/// Where a reply-ready notification keeps its conversation.
+const NOTIFIED_CONVERSATION: &str = "conversation";
+
+/// A click on a reply-ready notification: the window comes forward on the
+/// conversation the reply belongs to. A click on any other notification
+/// (the update check's, the test one) only brings the window forward.
+fn open_notified_conversation(
+    app: &AppHandle,
+    action: &tauri_plugin_notification::ActionPerformed,
+) {
+    if action.action_id() != "tap" {
+        return;
+    }
+    let conversation = action
+        .notification()
+        .and_then(|n| n.extra().get(NOTIFIED_CONVERSATION))
+        .and_then(|v| v.as_str())
+        .filter(|id| navigation::is_id(id));
+    if let Some(id) = conversation {
+        navigation::request(
+            app,
+            navigation::Target::Conversation {
+                id: id.to_string(),
+                message: None,
+            },
+        );
+    }
+    summon::summon_main(app);
 }
 
 /// The dev pane's proof that OS notifications work (`send-test
@@ -558,34 +594,37 @@ fn set_global_shortcut(
     Ok(hotkey::state_of(current.as_deref()))
 }
 
-/// The system tray: Show and Quit, nothing else. The menu on left click
-/// too, because the tray item is not a drop target for anything and a menu
-/// that needs a right click is a menu half the world never finds. Show
-/// always summons: opening the tray menu takes focus from the window, so a
-/// toggle here could never tell "in front" from "behind" -- putting the
-/// window away is the hotkey's job (summon.rs).
-#[cfg(desktop)]
-fn build_tray(app: &tauri::App) -> Result<(), tauri::Error> {
-    use tauri::menu::{Menu, MenuItem};
-    use tauri::tray::TrayIconBuilder;
-    let show = MenuItem::with_id(app, "show", "Show MatterWave", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit MatterWave", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
-    TrayIconBuilder::with_id("matterwave")
-        .icon(app.default_window_icon().cloned().ok_or_else(|| {
-            tauri::Error::InvalidIcon(std::io::Error::other(
-                "the bundle has no window icon for the tray",
-            ))
-        })?)
-        .menu(&menu)
-        .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => summon::summon_main(app),
-            "quit" => app.exit(0),
-            _ => {}
-        })
-        .build(app)?;
-    Ok(())
+/// Whether the app starts when the person logs in (Preferences, desktop
+/// only): the OS's own login items -- a Launch Agent on macOS, the `Run`
+/// key on Windows, an autostart entry on Linux.
+#[tauri::command]
+fn autostart_state(app: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
+/// Turn starting at login on or off; the answer is the state after.
+#[tauri::command]
+fn set_autostart(app: AppHandle, enabled: bool) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let launcher = app.autolaunch();
+    if enabled {
+        launcher.enable()
+    } else {
+        launcher.disable()
+    }
+    .map_err(|e| e.to_string())?;
+    launcher.is_enabled().map_err(|e| e.to_string())
+}
+
+/// The conversations the SPA lists first, for the tray's recent items. Only
+/// ids and titles cross over, and only the first few are kept (menu.rs).
+#[tauri::command]
+fn set_recent_conversations(
+    app: AppHandle,
+    conversations: Vec<menu::RecentConversation>,
+) -> Result<(), String> {
+    menu::set_recent(&app, &conversations).map_err(|e| e.to_string())
 }
 
 /// The SPA's half of a navigation request (navigation.rs): the target a
@@ -638,6 +677,11 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_notification::init())
+        // Start at login, when the person turns it on in Preferences.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         // The global hotkey: pressed means toggle -- a focused window is put
         // away, any other is brought forward (summon.rs).
         .plugin(
@@ -659,6 +703,10 @@ pub fn run() {
 
     builder
         .manage(state)
+        // One menu for every window, and one handler for every menu event,
+        // the tray's included (menu.rs).
+        .menu(menu::app_menu)
+        .on_menu_event(|app, event| menu::handle(app, event.id().as_ref()))
         .setup(|app| {
             // Windows and Linux can register the scheme at runtime, which is
             // what makes the deep link work in dev and from an AppImage.
@@ -683,8 +731,14 @@ pub fn run() {
             }
             // The tray ships whatever the updater does: it is part of the
             // app, not of a build flag.
-            #[cfg(desktop)]
-            build_tray(app)?;
+            menu::build_tray(app)?;
+            // A click on a reply-ready notification opens its conversation.
+            {
+                use tauri_plugin_notification::NotificationExt;
+                let handle = app.handle().clone();
+                app.notification()
+                    .on_action(move |action| open_notified_conversation(&handle, action))?;
+            }
             // The hotkey registers here, with the persisted choice or the
             // default, so a press reaches the app before the SPA is up.
             hotkey::register_on_launch(app);
@@ -709,7 +763,10 @@ pub fn run() {
             unpair_device,
             global_shortcut_state,
             set_global_shortcut,
-            take_navigation
+            take_navigation,
+            autostart_state,
+            set_autostart,
+            set_recent_conversations
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MatterWave desktop app");

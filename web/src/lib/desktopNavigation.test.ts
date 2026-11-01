@@ -70,19 +70,45 @@ describe("hrefFor", () => {
     expect(hrefFor({ kind: "billing" })).toBe("/settings/billing");
   });
 
+  it("routes the menu's New chat and Settings", async () => {
+    const { hrefFor } = await load();
+    expect(hrefFor({ kind: "new-chat" })).toBe("/apps/chat");
+    expect(hrefFor({ kind: "settings" })).toBe("/settings");
+  });
+
   it("refuses ids that would be read as more than an id", async () => {
     const { hrefFor } = await load();
     expect(hrefFor({ kind: "conversation", id: "c1&x=1" })).toBeNull();
     expect(hrefFor({ kind: "conversation", id: "" })).toBeNull();
     expect(hrefFor({ kind: "conversation", id: "c1", message: "../m" })).toBe("/apps/chat?c=c1");
     expect(hrefFor({ kind: "share", token: "../../settings" })).toBeNull();
-    expect(hrefFor({ kind: "settings" } as never)).toBeNull();
+    expect(hrefFor({ kind: "elsewhere" } as never)).toBeNull();
     expect(hrefFor(null)).toBeNull();
   });
 
   it("uses the chat app's own route", async () => {
     const { CHAT_PATH } = await load();
     expect(apps.find((app) => app.id === "chat")?.path).toBe(CHAT_PATH);
+  });
+});
+
+describe("desktopRecentConversations", () => {
+  it("hands the tray the first three live conversations, ids and titles only", async () => {
+    const { desktopRecentConversations } = await load();
+    const list = [
+      { id: "a1", title: "One", updated_at: "x" },
+      { id: "a2", title: "Archived", archived_at: "2026-10-01T00:00:00Z" },
+      { id: "a3", title: "Two" },
+      { id: "bad id", title: "skipped" },
+      { id: "a4", title: "Three" },
+      { id: "a5", title: "Four" },
+    ];
+    expect(JSON.parse(desktopRecentConversations(list))).toEqual([
+      { id: "a1", title: "One" },
+      { id: "a3", title: "Two" },
+      { id: "a4", title: "Three" },
+    ]);
+    expect(desktopRecentConversations(list)).toBe(desktopRecentConversations([...list]));
   });
 });
 
@@ -115,7 +141,8 @@ describe("installDesktopNavigation", () => {
     const { installDesktopNavigation, registerDesktopShell } = await load();
     const navigate = vi.fn();
     const openConversation = vi.fn();
-    const unregister = registerDesktopShell({ openConversation });
+    const startNewChat = vi.fn();
+    const unregister = registerDesktopShell({ openConversation, startNewChat });
     installDesktopNavigation(navigate);
     await vi.waitFor(() => expect(bridge.listening()).toBe(true));
 
@@ -123,6 +150,10 @@ describe("installDesktopNavigation", () => {
     await vi.waitFor(() => expect(openConversation).toHaveBeenCalledWith("c3", "m2"));
     bridge.request({ kind: "share", token: "t2" });
     await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/share/t2"));
+    bridge.request({ kind: "new-chat" });
+    await vi.waitFor(() => expect(startNewChat).toHaveBeenCalledOnce());
+    bridge.request({ kind: "settings" });
+    await vi.waitFor(() => expect(navigate).toHaveBeenCalledWith("/settings"));
 
     // Signed out again: the route is the way in, for the front door to keep.
     unregister();

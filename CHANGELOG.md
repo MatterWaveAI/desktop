@@ -8,6 +8,16 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
 
 ## [Unreleased]
 
+### Added
+
+- **Native menus, the tray's recent chats and start at login**: an app
+  menu (New Chat on `Ctrl/Cmd+N`, Settings on `Ctrl/Cmd+,`, Check for
+  Updates, the standard Edit items, full screen; the macOS app menu with
+  About, Services and Hide), the tray with New Chat and the three most
+  recent conversations, `Ctrl/Cmd` with `+`, `-` and `0` to zoom, and a
+  Preferences switch to open the app at login. A click on the
+  reply-ready notification opens its conversation.
+
 ### Changed
 
 - **The bundled SPA is the platform's develop again** (platform commit

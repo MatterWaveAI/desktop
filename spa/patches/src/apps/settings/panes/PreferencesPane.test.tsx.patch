@@ -1,8 +1,8 @@
 diff --git a/src/apps/settings/panes/PreferencesPane.test.tsx b/src/apps/settings/panes/PreferencesPane.test.tsx
-index 34ffbe4..31d5388 100644
+index 34ffbe4..a23b26c 100644
 --- a/src/apps/settings/panes/PreferencesPane.test.tsx
 +++ b/src/apps/settings/panes/PreferencesPane.test.tsx
-@@ -24,6 +24,25 @@ import {
+@@ -24,6 +24,27 @@ import {
   * the whole shape so the API can validate it as one.
   */
  
@@ -18,6 +18,8 @@ index 34ffbe4..31d5388 100644
 +    accelerator: shortcut,
 +    default: "CommandOrControl+Shift+M",
 +  })),
++  desktopAutostartState: vi.fn<() => Promise<boolean>>(async () => false),
++  desktopSetAutostart: vi.fn<(enabled: boolean) => Promise<boolean>>(async (enabled) => enabled),
 +}));
 +
 +vi.mock("../../../lib/desktopAuth", async (importOriginal) => {
@@ -28,7 +30,7 @@ index 34ffbe4..31d5388 100644
  const STORED: Preferences = {
    email: { product_updates: false, usage_alerts: true, billing_receipts: true },
    locale: null,
-@@ -38,6 +57,15 @@ afterEach(async () => {
+@@ -38,6 +59,17 @@ afterEach(async () => {
    vi.unstubAllGlobals();
    vi.restoreAllMocks();
    localStorage.clear();
@@ -41,10 +43,12 @@ index 34ffbe4..31d5388 100644
 +    accelerator: shortcut,
 +    default: "CommandOrControl+Shift+M",
 +  }));
++  desktop.desktopAutostartState.mockResolvedValue(false);
++  desktop.desktopSetAutostart.mockImplementation(async (enabled) => enabled);
    await activateLocale(SOURCE_LOCALE);
  });
  
-@@ -262,3 +290,179 @@ describe("the language", () => {
+@@ -262,3 +294,233 @@ describe("the language", () => {
      );
    });
  });
@@ -135,6 +139,60 @@ index 34ffbe4..31d5388 100644
 +    expect(mounted.container.textContent).toContain(
 +      "This voice is not available right now; Automatic is used until it is.",
 +    );
++  });
++});
++
++describe("start at login (desktop only)", () => {
++  function prefsAnswer() {
++    stubApi(({ method, url }) =>
++      method === "GET" && url === "/api/me/preferences" ? { status: 200, body: STORED } : undefined,
++    );
++  }
++
++  it("is absent in a browser, and in the app shows what the OS reports", async () => {
++    prefsAnswer();
++    mounted = await mount(<PreferencesPane />, principalWith([]));
++    await flush();
++    expect(mounted.container.textContent).not.toContain("Start with your computer");
++    expect(desktop.desktopAutostartState).not.toHaveBeenCalled();
++
++    desktop.isDesktop.mockReturnValue(true);
++    desktop.desktopAutostartState.mockResolvedValue(true);
++    mounted.unmount();
++    mounted = await mount(<PreferencesPane />, principalWith([]));
++    await flush();
++    expect(mounted.container.textContent).toContain("Start with your computer");
++    expect(toggle("Open MatterWave at login").checked).toBe(true);
++  });
++
++  it("turns it on and off through the native side, and shows the state it answers", async () => {
++    desktop.isDesktop.mockReturnValue(true);
++    prefsAnswer();
++    mounted = await mount(<PreferencesPane />, principalWith([]));
++    await flush();
++
++    await act(async () => toggle("Open MatterWave at login").click());
++    expect(desktop.desktopSetAutostart).toHaveBeenCalledExactlyOnceWith(true);
++    expect(toggle("Open MatterWave at login").checked).toBe(true);
++    expect(mounted.container.textContent).toContain("On: the app starts when you log in");
++
++    // The OS kept it on (a policy, say): the switch follows the OS, not the click.
++    desktop.desktopSetAutostart.mockResolvedValue(true);
++    await act(async () => toggle("Open MatterWave at login").click());
++    expect(desktop.desktopSetAutostart).toHaveBeenLastCalledWith(false);
++    expect(toggle("Open MatterWave at login").checked).toBe(true);
++  });
++
++  it("says why when the OS refuses", async () => {
++    desktop.isDesktop.mockReturnValue(true);
++    desktop.desktopSetAutostart.mockRejectedValue("access denied");
++    prefsAnswer();
++    mounted = await mount(<PreferencesPane />, principalWith([]));
++    await flush();
++
++    await act(async () => toggle("Open MatterWave at login").click());
++    expect(mounted.container.querySelector("[role='alert']")?.textContent).toBe("access denied");
++    expect(toggle("Open MatterWave at login").checked).toBe(false);
 +  });
 +});
 +

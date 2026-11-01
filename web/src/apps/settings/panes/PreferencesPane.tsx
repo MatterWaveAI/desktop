@@ -8,7 +8,9 @@ import { SimpleSelect } from "../../../components/ui/select";
 import { DEVICE_LOCALE, LOCALES, useLocalePreference, type LocalePreference } from "../../../i18n/locale";
 import { ApiError, apiFetch } from "../../../lib/api";
 import {
+  desktopAutostartState,
   desktopGlobalShortcutState,
+  desktopSetAutostart,
   desktopSetGlobalShortcut,
   isDesktop,
   type DesktopGlobalShortcutState,
@@ -433,6 +435,8 @@ export function PreferencesPane() {
       {canSpeak() && <ReadAloudChoice />}
 
       {isDesktop() && <GlobalHotkeyChoice />}
+
+      {isDesktop() && <LaunchAtLoginChoice />}
     </div>
   );
 }
@@ -567,6 +571,68 @@ export function GlobalHotkeyChoice() {
           )}
         </p>
       </div>
+    </PaneSection>
+  );
+}
+
+/**
+ * Start at login (desktop only): the operating system's own login items,
+ * through the native side -- a Launch Agent on macOS, the `Run` key on
+ * Windows, an autostart entry on Linux. The switch shows what the OS
+ * reports after each change, not what was asked for.
+ */
+export function LaunchAtLoginChoice() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    desktopAutostartState()
+      .then((state) => {
+        if (!cancelled) setEnabled(state);
+      })
+      .catch(() => {
+        // No native side to ask: no control that cannot work.
+        if (!cancelled) setEnabled(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const change = useCallback(async (next: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      setEnabled(await desktopSetAutostart(next));
+    } catch (err) {
+      setError(typeof err === "string" && err ? err : "The setting could not be changed.");
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  if (enabled === null) return null;
+
+  return (
+    <PaneSection title="Start with your computer" description="Open MatterWave when you log in to this computer.">
+      <Toggle
+        label="Open MatterWave at login"
+        hint={
+          enabled
+            ? "On: the app starts when you log in, ready in the tray and on the hotkey."
+            : "Off: the app starts when you open it."
+        }
+        checked={enabled}
+        disabled={busy}
+        onChange={(next) => void change(next)}
+      />
+      {error && (
+        <p role="alert" className="text-sm text-mw-danger">
+          {error}
+        </p>
+      )}
     </PaneSection>
   );
 }
