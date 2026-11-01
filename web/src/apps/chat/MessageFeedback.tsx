@@ -94,7 +94,7 @@ export function MessageFeedback(props: {
 
   const over = comment.length > FEEDBACK_COMMENT_MAX_LEN;
   const thumbClass = (lit: boolean) =>
-    `inline-flex size-7 items-center justify-center rounded-md pointer-coarse:size-11 ${lit ? "bg-mw-surface-hover text-mw-text" : "text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text"} disabled:opacity-40`;
+    `inline-flex size-8 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-mw-focus pointer-coarse:size-11 ${lit ? "bg-mw-surface-hover text-mw-text" : "text-mw-text-muted hover:bg-mw-surface-hover hover:text-mw-text"} disabled:text-mw-border-strong`;
 
   return (
     <div className="flex items-center gap-0.5" data-mw-feedback={rating ?? "none"}>

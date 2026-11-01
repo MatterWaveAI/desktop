@@ -1,4 +1,5 @@
 import type { RouteComponent } from "@tanstack/react-router";
+import { useLingui } from "@lingui/react/macro";
 import type { AppDescriptor } from "./registry";
 import { AppErrorBoundary } from "../shell/AppErrorBoundary";
 
@@ -18,8 +19,9 @@ import { AppErrorBoundary } from "../shell/AppErrorBoundary";
 export function withAppBoundary(app: AppDescriptor): RouteComponent {
   const Mounted = app.component;
   function BoundedApp() {
+    const { i18n } = useLingui();
     return (
-      <AppErrorBoundary appName={app.title}>
+      <AppErrorBoundary appName={i18n._(app.title)}>
         <Mounted />
       </AppErrorBoundary>
     );

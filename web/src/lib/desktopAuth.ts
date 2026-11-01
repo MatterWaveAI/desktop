@@ -1,6 +1,6 @@
 /**
- * The SPA inside the desktop shell (clients/desktop): a bearer instead of the
- * cookie.
+ * The SPA inside the desktop shell (MatterWaveAI/desktop): a bearer instead of
+ * the cookie.
  *
  * In a browser the session is the BFF's httponly cookie. The desktop app
  * bundles this build, so its origin is the webview's (`tauri://localhost`,

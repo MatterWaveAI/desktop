@@ -1,3 +1,5 @@
+import { t } from "@lingui/core/macro";
+import { formatPercent } from "../i18n/format";
 import {
   formatMicros,
   formatResetDate,
@@ -38,9 +40,12 @@ export function noticeFor(
 ): Notice | null {
   const manages = options.managesOrg ?? true;
   const sub = status ? (manages ? subscriptionNotice(status) : memberSubscriptionNotice(status)) : null;
-  if (sub) return { ...sub, kind: "subscription", link: { to: "/settings/$paneId", paneId: "billing", label: "Billing" } };
+  if (sub) {
+    return { ...sub, kind: "subscription", link: { to: "/settings/$paneId", paneId: "billing", label: t`Billing` } };
+  }
   if (!usage) return null;
-  const toUsage = { to: "/settings/$paneId", paneId: "usage", label: "Usage" } as const;
+  const toUsage = { to: "/settings/$paneId", paneId: "usage", label: t`Usage` } as const;
+  const resetDate = formatResetDate(usage.resets_at);
   if (usage.exhausted) {
     return {
       kind: "usage",
@@ -48,24 +53,28 @@ export function noticeFor(
       // Free stops at its allowance; a paid plan at its overage cap. The
       // wording matches the in-app notification for the same state.
       text: usage.overage.enabled
-        ? `Overage cap reached: requests are refused until ${formatResetDate(usage.resets_at)}.`
-        : `Out of tokens: requests are refused until ${formatResetDate(usage.resets_at)}.`,
+        ? t`Overage cap reached: requests are refused until ${resetDate}.`
+        : t`Out of tokens: requests are refused until ${resetDate}.`,
       link: toUsage,
     };
   }
   if (usage.in_overage) {
+    const spent = formatMicros(usage.overage.spent_micros);
+    const cap = formatMicros(usage.overage.cap_micros);
     return {
       kind: "usage",
       tone: "warning",
-      text: `Past your included tokens: ${formatMicros(usage.overage.spent_micros)} of overage billed at list price, of a ${formatMicros(usage.overage.cap_micros)} cap.`,
+      text: t`Past your included tokens: ${spent} of overage billed at list price, of a ${cap} cap.`,
       link: toUsage,
     };
   }
   if (usage.warn) {
+    const percent = formatPercent(usage.percent / 100);
+    const remaining = formatTokens(usage.remaining);
     return {
       kind: "usage",
       tone: "warning",
-      text: `${Math.round(usage.percent)}% of this period's included tokens used. ${formatTokens(usage.remaining)} left until ${formatResetDate(usage.resets_at)}.`,
+      text: t`${percent} of this period's included tokens used. ${remaining} left until ${resetDate}.`,
       link: toUsage,
     };
   }

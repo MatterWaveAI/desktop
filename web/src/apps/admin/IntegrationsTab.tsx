@@ -1,4 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, plural } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Alert } from "../../components/ui/alert";
 import { Badge, StatusDot } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -33,6 +36,7 @@ import { shortId, useLoad } from "./useLoad";
  * Every action is audited by the API. docs/salesforce.md is the setup.
  */
 export function IntegrationsTab() {
+  const { t } = useLingui();
   const [state, reload] = useLoad(fetchSalesforce, "salesforce");
   const [attempt, setAttempt] = useState(0);
   const refresh = () => {
@@ -41,7 +45,7 @@ export function IntegrationsTab() {
   };
   if (state.phase === "loading") return <LoadingSkeleton rows={4} />;
   if (state.phase === "error") {
-    return <ErrorState title="Could not load the Salesforce integration" message={state.message} onRetry={reload} />;
+    return <ErrorState title={t`Could not load the Salesforce integration`} message={state.message} onRetry={reload} />;
   }
   return (
     <div className="space-y-8">
@@ -54,6 +58,7 @@ export function IntegrationsTab() {
 }
 
 function Connection({ state, onChanged }: { state: SalesforceState; onChanged: () => void }) {
+  const { t } = useLingui();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -72,72 +77,105 @@ function Connection({ state, onChanged }: { state: SalesforceState; onChanged: (
 
   // fetchSalesforce fills the block in; this guards a state that came another way.
   const connection: Partial<SalesforceState["connection"]> = state.connection ?? {};
+  const username = state.username;
+  const lastError = connection.last_error;
+  const lastErrorAt = formatWhen(connection.last_error_at ?? null);
   return (
     <section aria-labelledby="sf-connection">
       <h3 id="sf-connection" className="text-sm font-medium text-mw-text">
         Salesforce
       </h3>
-      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" aria-label="Salesforce connection">
-        <dt className="text-mw-text-muted">Outbound sync</dt>
+      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" aria-label={t`Salesforce connection`}>
+        <dt className="text-mw-text-muted">
+          <Trans>Outbound sync</Trans>
+        </dt>
         <dd>
           {state.configured ? (
             <Badge variant="positive">
               <StatusDot tone="positive" />
-              configured
+              <Trans>configured</Trans>
             </Badge>
           ) : (
             <span>
               <Badge variant="secondary">
                 <StatusDot tone="neutral" />
-                off
+                <Trans>off</Trans>
               </Badge>{" "}
               <span className="text-mw-text-muted">
-                Set MW_SALESFORCE_CLIENT_ID, MW_SALESFORCE_USERNAME and MW_SALESFORCE_PRIVATE_KEY.
+                <Trans>Set MW_SALESFORCE_CLIENT_ID, MW_SALESFORCE_USERNAME and MW_SALESFORCE_PRIVATE_KEY.</Trans>
               </span>
             </span>
           )}
         </dd>
-        <dt className="text-mw-text-muted">Contract events</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Contract events</Trans>
+        </dt>
         <dd>
           {state.inbound_configured ? (
-            <Badge variant="positive">accepted</Badge>
+            <Badge variant="positive">
+              <Trans>accepted</Trans>
+            </Badge>
           ) : (
             <span>
-              <Badge variant="destructive">refused</Badge>{" "}
-              <span className="text-mw-text-muted">Set MW_SALESFORCE_WEBHOOK_SECRET.</span>
+              <Badge variant="destructive">
+                <Trans>refused</Trans>
+              </Badge>{" "}
+              <span className="text-mw-text-muted">
+                <Trans>Set MW_SALESFORCE_WEBHOOK_SECRET.</Trans>
+              </span>
             </span>
           )}
         </dd>
-        <dt className="text-mw-text-muted">Event endpoint</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Event endpoint</Trans>
+        </dt>
         <dd className="font-mono text-xs">{state.inbound_url}</dd>
-        <dt className="text-mw-text-muted">Login</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Login</Trans>
+        </dt>
         <dd>
           {state.login_url}
-          {state.username && <span className="ml-2 text-mw-text-muted">as {state.username}</span>}
-        </dd>
-        <dt className="text-mw-text-muted">Instance</dt>
-        <dd>{connection.instance_url ?? "Not reached yet"}</dd>
-        <dt className="text-mw-text-muted">Last success</dt>
-        <dd>{formatWhen(connection.last_ok_at ?? null)}</dd>
-        <dt className="text-mw-text-muted">Last error</dt>
-        <dd>
-          {connection.last_error ? (
-            <span className="text-mw-danger">
-              {connection.last_error} ({formatWhen(connection.last_error_at ?? null)})
+          {username && (
+            <span className="ml-2 text-mw-text-muted">
+              <Trans>as {username}</Trans>
             </span>
-          ) : (
-            "None"
           )}
         </dd>
-        <dt className="text-mw-text-muted">Last sync</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Instance</Trans>
+        </dt>
+        <dd>{connection.instance_url ?? t`Not reached yet`}</dd>
+        <dt className="text-mw-text-muted">
+          <Trans>Last success</Trans>
+        </dt>
+        <dd>{formatWhen(connection.last_ok_at ?? null)}</dd>
+        <dt className="text-mw-text-muted">
+          <Trans>Last error</Trans>
+        </dt>
+        <dd>
+          {lastError ? (
+            <span className="text-mw-danger">
+              <Trans>
+                {lastError} ({lastErrorAt})
+              </Trans>
+            </span>
+          ) : (
+            t`None`
+          )}
+        </dd>
+        <dt className="text-mw-text-muted">
+          <Trans>Last sync</Trans>
+        </dt>
         <dd>{formatWhen(state.last_sync_at)}</dd>
-        <dt className="text-mw-text-muted">Accounts synced</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Accounts synced</Trans>
+        </dt>
         <dd>
           {state.sync_scope === "all"
-            ? "Every organisation"
+            ? t`Every organisation`
             : state.sync_scope === "linked"
-              ? "Linked organisations only"
-              : "Paid, trialing or linked organisations"}
+              ? t`Linked organisations only`
+              : t`Paid, trialing or linked organisations`}
         </dd>
       </dl>
       <div className="mt-3 flex flex-wrap gap-2">
@@ -148,13 +186,14 @@ function Connection({ state, onChanged }: { state: SalesforceState; onChanged: (
           onClick={() =>
             void run(async () => {
               const answer = await testSalesforce();
+              const user = answer.user;
               return answer.ok
-                ? { ok: true, text: `Connected${answer.user ? ` as ${answer.user}` : ""}.` }
-                : { ok: false, text: answer.error ?? "The connection failed." };
+                ? { ok: true, text: user ? t`Connected as ${user}.` : t`Connected.` }
+                : { ok: false, text: answer.error ?? t`The connection failed.` };
             })
           }
         >
-          Test connection
+          <Trans>Test connection</Trans>
         </Button>
         <Button
           size="sm"
@@ -164,11 +203,14 @@ function Connection({ state, onChanged }: { state: SalesforceState; onChanged: (
             void run(async () => {
               const answer = await syncSalesforce();
               const sent = Number(answer.report.sent ?? 0);
-              return { ok: true, text: `Sync ran: ${sent} message${sent === 1 ? "" : "s"} sent.` };
+              return {
+                ok: true,
+                text: plural(sent, { one: "Sync ran: # message sent.", other: "Sync ran: # messages sent." }),
+              };
             })
           }
         >
-          Sync now
+          <Trans>Sync now</Trans>
         </Button>
       </div>
       {result && (
@@ -180,15 +222,31 @@ function Connection({ state, onChanged }: { state: SalesforceState; onChanged: (
   );
 }
 
-const FILTERS: { id: OutboxStatus | null; title: string }[] = [
-  { id: null, title: "All" },
-  { id: "pending", title: "Waiting" },
-  { id: "dead", title: "Dead letters" },
-  { id: "skipped", title: "Skipped" },
-  { id: "sent", title: "Sent" },
+const FILTERS: { id: OutboxStatus | null; title: MessageDescriptor }[] = [
+  { id: null, title: msg`All` },
+  { id: "pending", title: msg`Waiting` },
+  { id: "dead", title: msg`Dead letters` },
+  { id: "skipped", title: msg`Skipped` },
+  { id: "sent", title: msg`Sent` },
 ];
 
+const OUTBOX_STATUS_LABEL: Record<OutboxStatus, MessageDescriptor> = {
+  pending: msg`pending`,
+  sending: msg`sending`,
+  sent: msg`sent`,
+  dead: msg`dead`,
+  skipped: msg`skipped`,
+};
+
+const INBOUND_STATUS_LABEL: Record<InboundRow["status"], MessageDescriptor> = {
+  received: msg`received`,
+  applied: msg`applied`,
+  failed: msg`failed`,
+  awaiting_link: msg`waiting for a link`,
+};
+
 function Outbox({ state, onChanged }: { state: SalesforceState; onChanged: () => void }) {
+  const { t, i18n } = useLingui();
   const [filter, setFilter] = useState<OutboxStatus | null>(state.outbox.dead > 0 ? "dead" : null);
   const [rows, reload] = useLoad(() => fetchOutbox(filter), filter);
   const [busy, setBusy] = useState(false);
@@ -209,31 +267,36 @@ function Outbox({ state, onChanged }: { state: SalesforceState; onChanged: () =>
   }
 
   const counts = state.outbox;
+  const waiting = counts.pending + counts.sending;
+  const sent = counts.sent;
+  const dead = counts.dead;
+  const skipped = counts.skipped;
   return (
     <section aria-labelledby="sf-outbox">
       <h3 id="sf-outbox" className="text-sm font-medium text-mw-text">
-        Outbox
+        <Trans>Outbox</Trans>
       </h3>
       <p className="mt-1 text-sm text-mw-text-muted">
-        {counts.pending + counts.sending} waiting, {counts.sent} sent, {counts.dead} dead, {counts.skipped} skipped.
-        A failed message is retried after 1 minute, 5 minutes, 30 minutes, 2 hours and 12 hours, then kept here as a
-        dead letter.
+        <Trans>
+          {waiting} waiting, {sent} sent, {dead} dead, {skipped} skipped. A failed message is retried after 1 minute, 5
+          minutes, 30 minutes, 2 hours and 12 hours, then kept here as a dead letter.
+        </Trans>
       </p>
-      <div className="mt-2 flex flex-wrap items-center gap-1" role="group" aria-label="Outbox filter">
+      <div className="mt-2 flex flex-wrap items-center gap-1" role="group" aria-label={t`Outbox filter`}>
         {FILTERS.map((f) => (
           <button
-            key={f.title}
+            key={f.id ?? "all"}
             type="button"
             aria-pressed={filter === f.id}
             onClick={() => setFilter(f.id)}
             className={`rounded-lg px-3 py-1 text-sm ${filter === f.id ? "bg-mw-surface-raised font-medium" : "text-mw-text-muted"}`}
           >
-            {f.title}
+            {i18n._(f.title)}
           </button>
         ))}
         {counts.dead > 0 && (
           <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(retryDeadOutbox)}>
-            Retry all dead letters
+            <Trans>Retry all dead letters</Trans>
           </Button>
         )}
       </div>
@@ -246,20 +309,35 @@ function Outbox({ state, onChanged }: { state: SalesforceState; onChanged: () =>
         {rows.phase === "loading" ? (
           <LoadingSkeleton rows={3} />
         ) : rows.phase === "error" ? (
-          <ErrorState title="Could not load the outbox" message={rows.message} onRetry={reload} />
+          <ErrorState title={t`Could not load the outbox`} message={rows.message} onRetry={reload} />
         ) : rows.data.length === 0 ? (
-          <EmptyState title="Nothing here" description="Messages for the CRM appear here as the app records them." />
+          <EmptyState
+            title={t`Nothing here`}
+            description={t`Messages for the CRM appear here as the app records them.`}
+          />
         ) : (
-          <Table className="bg-card" aria-label="Outbox">
+          <Table className="bg-card" aria-label={t`Outbox`}>
             <TableHeader>
               <TableRow>
-                <TableHead>Message</TableHead>
-                <TableHead>Organisation</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Attempts</TableHead>
-                <TableHead>Updated</TableHead>
                 <TableHead>
-                  <span className="sr-only">Actions</span>
+                  <Trans>Message</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Organisation</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>State</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Attempts</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Updated</Trans>
+                </TableHead>
+                <TableHead>
+                  <span className="sr-only">
+                    <Trans>Actions</Trans>
+                  </span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -276,7 +354,9 @@ function Outbox({ state, onChanged }: { state: SalesforceState; onChanged: () =>
 }
 
 function OutboxLine({ row, busy, onRetry }: { row: OutboxRow; busy: boolean; onRetry: () => void }) {
-  const label = OUTBOX_KIND_LABEL[row.kind] ?? row.kind;
+  const { i18n } = useLingui();
+  const kindLabel = OUTBOX_KIND_LABEL[row.kind];
+  const label = kindLabel ? i18n._(kindLabel) : row.kind;
   return (
     <TableRow>
       <TableCell>
@@ -293,7 +373,7 @@ function OutboxLine({ row, busy, onRetry }: { row: OutboxRow; busy: boolean; onR
       <TableCell className="text-right">
         {(row.status === "dead" || row.status === "skipped") && (
           <Button size="sm" variant="outline" disabled={busy} onClick={onRetry}>
-            Retry {label}
+            <Trans>Retry {label}</Trans>
           </Button>
         )}
       </TableCell>
@@ -302,12 +382,13 @@ function OutboxLine({ row, busy, onRetry }: { row: OutboxRow; busy: boolean; onR
 }
 
 function OutboxBadge({ status }: { status: OutboxStatus }) {
-  if (status === "dead") return <Badge variant="destructive">dead</Badge>;
-  if (status === "sent") return <Badge variant="positive">sent</Badge>;
-  return <Badge variant="info">{status}</Badge>;
+  const { i18n } = useLingui();
+  const variant = status === "dead" ? "destructive" : status === "sent" ? "positive" : "info";
+  return <Badge variant={variant}>{i18n._(OUTBOX_STATUS_LABEL[status])}</Badge>;
 }
 
 function Inbound({ onChanged }: { onChanged: () => void }) {
+  const { t } = useLingui();
   const [rows, reload] = useLoad(fetchInbound, "inbound");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -329,11 +410,13 @@ function Inbound({ onChanged }: { onChanged: () => void }) {
   return (
     <section aria-labelledby="sf-inbound">
       <h3 id="sf-inbound" className="text-sm font-medium text-mw-text">
-        Contract events
+        <Trans>Contract events</Trans>
       </h3>
       <p className="mt-1 text-sm text-mw-text-muted">
-        What Salesforce sent when a deal closed, and what it provisioned. One waiting for a link names an Account no
-        organisation is linked to yet: link it below, then apply it.
+        <Trans>
+          What Salesforce sent when a deal closed, and what it provisioned. One waiting for a link names an Account no
+          organisation is linked to yet: link it below, then apply it.
+        </Trans>
       </p>
       {error && (
         <Alert role="alert" variant="danger" className="mt-2">
@@ -344,25 +427,42 @@ function Inbound({ onChanged }: { onChanged: () => void }) {
         {rows.phase === "loading" ? (
           <LoadingSkeleton rows={2} />
         ) : rows.phase === "error" ? (
-          <ErrorState title="Could not load contract events" message={rows.message} onRetry={reload} />
+          <ErrorState title={t`Could not load contract events`} message={rows.message} onRetry={reload} />
         ) : rows.data.length === 0 ? (
-          <EmptyState title="No contract events yet" description="A won opportunity in Salesforce appears here." />
+          <EmptyState
+            title={t`No contract events yet`}
+            description={t`A won opportunity in Salesforce appears here.`}
+          />
         ) : (
-          <Table className="bg-card" aria-label="Contract events">
+          <Table className="bg-card" aria-label={t`Contract events`}>
             <TableHeader>
               <TableRow>
-                <TableHead>Contract</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Organisation</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Received</TableHead>
                 <TableHead>
-                  <span className="sr-only">Actions</span>
+                  <Trans>Contract</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Account</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Organisation</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>State</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Received</Trans>
+                </TableHead>
+                <TableHead>
+                  <span className="sr-only">
+                    <Trans>Actions</Trans>
+                  </span>
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.data.map((row) => (
+              {rows.data.map((row) => {
+                const contractRef = row.contract_ref;
+                return (
                 <TableRow key={row.event_id} className="border-b border-mw-border">
                   <TableCell>
                     {row.contract_ref}
@@ -378,12 +478,13 @@ function Inbound({ onChanged }: { onChanged: () => void }) {
                   <TableCell className="text-right">
                     {(row.status === "failed" || row.status === "awaiting_link") && (
                       <Button size="sm" variant="outline" disabled={busy} onClick={() => void apply(row)}>
-                        Apply {row.contract_ref}
+                        <Trans>Apply {contractRef}</Trans>
                       </Button>
                     )}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -393,13 +494,15 @@ function Inbound({ onChanged }: { onChanged: () => void }) {
 }
 
 function InboundBadge({ status }: { status: InboundRow["status"] }) {
-  if (status === "applied") return <Badge variant="positive">applied</Badge>;
-  if (status === "failed") return <Badge variant="destructive">failed</Badge>;
-  if (status === "awaiting_link") return <Badge variant="warning">waiting for a link</Badge>;
-  return <Badge variant="info">{status}</Badge>;
+  const { i18n } = useLingui();
+  const variant =
+    status === "applied" ? "positive" : status === "failed" ? "destructive" : status === "awaiting_link" ? "warning" : "info";
+  const label = INBOUND_STATUS_LABEL[status];
+  return <Badge variant={variant}>{label ? i18n._(label) : status}</Badge>;
 }
 
 function LinkAccount({ onChanged }: { onChanged: () => void }) {
+  const { t } = useLingui();
   const orgId = useId();
   const accountId = useId();
   const [busy, setBusy] = useState(false);
@@ -411,18 +514,21 @@ function LinkAccount({ onChanged }: { onChanged: () => void }) {
     const org = String(form.get("org_id") ?? "").trim();
     const account = String(form.get("account_id") ?? "").trim();
     if (!org) {
-      setResult({ ok: false, text: "The organisation id is needed." });
+      setResult({ ok: false, text: t`The organisation id is needed.` });
       return;
     }
     setBusy(true);
     setResult(null);
     try {
       const answer = await linkOrgAccount(org, account || null);
+      const linkedAccount = answer.account_id;
       setResult({
         ok: true,
-        text: answer.account_id
-          ? `Linked to Account ${answer.account_id}${answer.changed ? "" : " (it already was)"}.`
-          : "Unlinked.",
+        text: linkedAccount
+          ? answer.changed
+            ? t`Linked to Account ${linkedAccount}.`
+            : t`Linked to Account ${linkedAccount} (it already was).`
+          : t`Unlinked.`,
       });
       onChanged();
     } catch (err) {
@@ -435,23 +541,25 @@ function LinkAccount({ onChanged }: { onChanged: () => void }) {
   return (
     <section aria-labelledby="sf-link">
       <h3 id="sf-link" className="text-sm font-medium text-mw-text">
-        Link an organisation to its Account
+        <Trans>Link an organisation to its Account</Trans>
       </h3>
       <p className="mt-1 text-sm text-mw-text-muted">
-        The Account then shows the organisation's plan, seats, invoices and late-payment stage, and its Stripe customer
-        carries the Account id. Leave the Account empty to unlink.
+        <Trans>
+          The Account then shows the organisation&apos;s plan, seats, invoices and late-payment stage, and its Stripe
+          customer carries the Account id. Leave the Account empty to unlink.
+        </Trans>
       </p>
       <form onSubmit={(event) => void handleSubmit(event)} className="mt-2 flex flex-wrap items-end gap-2">
         <label htmlFor={orgId} className="flex flex-col gap-1 text-sm">
-          Organisation id
+          <Trans>Organisation id</Trans>
           <Input id={orgId} name="org_id" className="w-80 font-mono text-xs" />
         </label>
         <label htmlFor={accountId} className="flex flex-col gap-1 text-sm">
-          Salesforce Account id
+          <Trans>Salesforce Account id</Trans>
           <Input id={accountId} name="account_id" maxLength={18} className="w-52 font-mono text-xs" />
         </label>
         <Button type="submit" variant="outline" disabled={busy}>
-          Save link
+          <Trans>Save link</Trans>
         </Button>
       </form>
       {result && (

@@ -1,0 +1,21 @@
+diff --git a/src/shell/Shell.tsx b/src/shell/Shell.tsx
+index 1e12039..236f384 100644
+--- a/src/shell/Shell.tsx
++++ b/src/shell/Shell.tsx
+@@ -22,6 +22,7 @@ import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
+ import { ShortcutsHelp } from "./ShortcutsHelp";
+ import { CommandPalette } from "./CommandPalette";
+ import { NotificationsMenu } from "./NotificationsMenu";
++import { UpdateBanner } from "./UpdateBanner";
+ import { ConversationSidebar, type SearchRequest } from "./conversationSidebar";
+ import { CONVERSATION_SEARCH_ID } from "./shortcuts";
+ import type { PaletteAction } from "./palette";
+@@ -299,6 +300,8 @@ export function Shell(props: { authConfig: AuthConfig; principal: Principal }) {
+           <BillingBanner />
+           {/* A minor terms revision since the one accepted: a notice, not the gate. */}
+           <TermsNoticeBanner />
++          {/* "Update available — install": nothing in a browser, where there is no updater. */}
++          <UpdateBanner />
+           <main className="min-h-0 flex-1">
+             <Outlet />
+           </main>

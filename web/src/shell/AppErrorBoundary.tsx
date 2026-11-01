@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { t } from "@lingui/core/macro";
 import { ErrorState } from "../patterns";
 
 /**
@@ -32,15 +33,16 @@ export class AppErrorBoundary extends Component<
 
   render() {
     if (!this.state.error) return this.props.children;
+    const appName = this.props.appName;
     return (
       <ErrorState
-        title={`${this.props.appName} stopped working`}
-        message="The app hit an error it could not recover from."
+        title={t`${appName} stopped working`}
+        message={t`The app hit an error it could not recover from.`}
         onRetry={() => {
           this.setState({ error: null });
           this.props.onReset?.();
         }}
-        retryLabel="Reload the app"
+        retryLabel={t`Reload the app`}
       />
     );
   }

@@ -1,7 +1,9 @@
 import { useContext, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
+import { t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { AuthPage, Alert, DonePanel } from "./AuthForm";
-import { NETWORK_MESSAGE, PRIMARY_BUTTON_CLASS, queryParam } from "./authForms";
+import { PRIMARY_BUTTON_CLASS, networkMessage, queryParam } from "./authForms";
 import { TAP_LINK_CLASS } from "./frontDoorLinks";
 import { SessionContext } from "./sessionContext";
 import { ShellContext } from "./shellContext";
@@ -34,9 +36,12 @@ type State =
   /** A refusal that may pass later: the limiter, the network, a 5xx. */
   | { phase: "error"; message: string };
 
-const INVALID_MESSAGE = "This unsubscribe link is not valid.";
+function invalidMessage(): string {
+  return t`This unsubscribe link is not valid.`;
+}
 
 export function UnsubscribePage() {
+  const { t, i18n } = useLingui();
   const searchStr = useLocation({ select: (location) => location.searchStr });
   const token = queryParam(searchStr, "t") ?? "";
   const category = tokenCategory(token);
@@ -60,57 +65,65 @@ export function UnsubscribePage() {
         const body = (await res.json()) as { category: string };
         setState({ phase: "done", category: body.category });
       } else if (res.status === 429) {
-        setState({ phase: "error", message: "Too many attempts. Try again in a few minutes." });
+        setState({ phase: "error", message: t`Too many attempts. Try again in a few minutes.` });
       } else if (res.status === 400) {
-        setState({ phase: "invalid", message: INVALID_MESSAGE });
+        setState({ phase: "invalid", message: invalidMessage() });
       } else {
-        setState({ phase: "error", message: "Something went wrong. Try again in a moment." });
+        setState({ phase: "error", message: t`Something went wrong. Try again in a moment.` });
       }
     } catch {
-      setState({ phase: "error", message: NETWORK_MESSAGE });
+      setState({ phase: "error", message: networkMessage() });
     }
   }
 
   const preferences = signedIn ? (
     <a href={PREFERENCES_PATH} className={TAP_LINK_CLASS}>
-      Open notification preferences
+      <Trans>Open notification preferences</Trans>
     </a>
   ) : (
     <p className="text-sm text-mw-text-muted">
-      Each kind of email can also be turned on or off from Settings, Preferences, once you are
-      signed in.
+      <Trans>
+        Each kind of email can also be turned on or off from Settings, Preferences, once you are
+        signed in.
+      </Trans>
     </p>
   );
 
   if (category === null || state.phase === "invalid") {
     return (
-      <AuthPage title="This link cannot be used">
+      <AuthPage title={t`This link cannot be used`}>
         <Alert focus={false}>
-          <p>{state.phase === "invalid" ? state.message : INVALID_MESSAGE}</p>
+          <p>{state.phase === "invalid" ? state.message : invalidMessage()}</p>
         </Alert>
         <p className="text-sm text-mw-text-muted">
-          It may have been cut short by the mail client, or it belongs to a different MatterWave.
-          Nothing has changed. To stop these emails, use the preferences in your account instead.
+          <Trans>
+            It may have been cut short by the mail client, or it belongs to a different MatterWave.
+            Nothing has changed. To stop these emails, use the preferences in your account instead.
+          </Trans>
         </p>
         {preferences}
       </AuthPage>
     );
   }
 
-  const { label, what } = CATEGORIES[category];
+  const label = i18n._(CATEGORIES[category].label);
+  const what = i18n._(CATEGORIES[category].what);
 
   if (state.phase === "done") {
-    const done = CATEGORIES[state.category]?.label ?? label;
+    const doneCategory = CATEGORIES[state.category];
+    const done = doneCategory ? i18n._(doneCategory.label) : label;
     return (
-      <AuthPage title="You are unsubscribed">
+      <AuthPage title={t`You are unsubscribed`}>
         <div aria-live="polite">
-          <DonePanel id="unsubscribed" title={`You will no longer get ${done} by email.`}>
+          <DonePanel id="unsubscribed" title={t`You will no longer get ${done} by email.`}>
             <p className="text-sm text-mw-text-muted">
-              Receipts and security mail still reach you. Turn {done} back on any time under
-              Settings, Preferences.
+              <Trans>
+                Receipts and security mail still reach you. Turn {done} back on any time under
+                Settings, Preferences.
+              </Trans>
             </p>
             <a href={PREFERENCES_PATH} className={TAP_LINK_CLASS}>
-              Open preferences
+              <Trans>Open preferences</Trans>
             </a>
           </DonePanel>
         </div>
@@ -120,8 +133,8 @@ export function UnsubscribePage() {
 
   return (
     <AuthPage
-      title={`Unsubscribe from ${label}?`}
-      intro={`This stops ${label}: ${what}. Receipts and security mail still reach you. No sign-in needed.`}
+      title={t`Unsubscribe from ${label}?`}
+      intro={t`This stops ${label}: ${what}. Receipts and security mail still reach you. No sign-in needed.`}
     >
       {state.phase === "error" && (
         <Alert>
@@ -135,7 +148,8 @@ export function UnsubscribePage() {
           disabled={state.phase === "sending"}
           onClick={() => void unsubscribe()}
         >
-          {state.phase === "sending" ? "Unsubscribing…" : "Unsubscribe"}
+          {state.phase === "sending" ? t`Unsubscribing…` : t`Unsubscribe`}
+
         </button>
       </div>
       {preferences}

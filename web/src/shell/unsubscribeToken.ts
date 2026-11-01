@@ -6,17 +6,21 @@
  * shape without a request. Only the API's answer decides whether a token is
  * valid -- the payload is trusted for wording and nothing else.
  */
+import { msg } from "@lingui/core/macro";
+import type { MessageDescriptor } from "@lingui/core";
 
-export const UNSUBSCRIBE_CATEGORIES: Record<string, { label: string; what: string }> = {
+/** Descriptors: rendered with `i18n._` where shown, once a catalogue is active. */
+export const UNSUBSCRIBE_CATEGORIES: Record<string, { label: MessageDescriptor; what: MessageDescriptor }> = {
   usage_alerts: {
-    label: "usage alerts",
-    what: "the mail sent when your organisation nears its budget or plan allowance",
+    label: msg`usage alerts`,
+    what: msg`the mail sent when your organisation nears its budget or plan allowance`,
   },
   product_updates: {
-    label: "product updates",
-    what: "the occasional mail about new models and features",
+    label: msg`product updates`,
+    what: msg`the occasional mail about new models and features`,
   },
 };
+
 
 /** The category the token names, when it is shaped like one of ours. */
 export function tokenCategory(token: string): string | null {

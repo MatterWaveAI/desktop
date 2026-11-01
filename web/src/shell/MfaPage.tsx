@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { ApiError, apiFetch } from "../lib/api";
 import { completeLogin } from "../lib/auth";
 import { Alert, AuthPage, ErrorSummary, Field, SubmitButton } from "./AuthForm";
@@ -49,6 +50,7 @@ interface EnrolConfirmResponse {
  * ways people actually keep them: the clipboard and a text file.
  */
 export function RecoveryCodes(props: { codes: string[]; email?: string }) {
+  const { t } = useLingui();
   const [copied, setCopied] = useState(false);
   const text = props.codes.join("\n");
 
@@ -64,9 +66,9 @@ export function RecoveryCodes(props: { codes: string[]; email?: string }) {
   }
 
   function download() {
-    const header = props.email
-      ? `MatterWave recovery codes for ${props.email}\nEach code works once.\n\n`
-      : "MatterWave recovery codes\nEach code works once.\n\n";
+    const email = props.email;
+    const title = email ? t`MatterWave recovery codes for ${email}` : t`MatterWave recovery codes`;
+    const header = `${title}\n${t`Each code works once.`}\n\n`;
     const blob = new Blob([header + text + "\n"], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -81,11 +83,13 @@ export function RecoveryCodes(props: { codes: string[]; email?: string }) {
   return (
     <div className="flex flex-col gap-3" data-testid="recovery-codes">
       <p className="text-sm">
-        <span className="font-medium">Save these recovery codes.</span> Each one signs you in
-        once if you lose your authenticator. They are shown only now.
+        <Trans>
+          <span className="font-medium">Save these recovery codes.</span> Each one signs you in
+          once if you lose your authenticator. They are shown only now.
+        </Trans>
       </p>
       <ol
-        aria-label="Recovery codes"
+        aria-label={t`Recovery codes`}
         className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-mw-border bg-mw-surface-raised p-3 font-mono text-sm"
       >
         {props.codes.map((code) => (
@@ -94,10 +98,10 @@ export function RecoveryCodes(props: { codes: string[]; email?: string }) {
       </ol>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => void copy()} className={SECONDARY_BUTTON_CLASS}>
-          {copied ? "Copied" : "Copy codes"}
+          {copied ? t`Copied` : t`Copy codes`}
         </button>
         <button type="button" onClick={download} className={SECONDARY_BUTTON_CLASS}>
-          Download codes
+          <Trans>Download codes</Trans>
         </button>
       </div>
     </div>
@@ -126,6 +130,7 @@ export function EnrolWizard(props: {
   onDone: () => void;
   onCancel?: () => void;
 }) {
+  const { t } = useLingui();
   const { start } = props;
   const [state, setState] = useState<WizardState>({ phase: "starting" });
   const [fieldError, setFieldError] = useState<string | undefined>();
@@ -165,7 +170,7 @@ export function EnrolWizard(props: {
   if (state.phase === "starting") {
     return (
       <p aria-live="polite" className="animate-pulse text-sm text-mw-text-muted">
-        Preparing your authenticator…
+        <Trans>Preparing your authenticator…</Trans>
       </p>
     );
   }
@@ -176,7 +181,7 @@ export function EnrolWizard(props: {
         {props.onCancel && (
           <div>
             <button type="button" onClick={props.onCancel} className={SECONDARY_BUTTON_CLASS}>
-              Back
+              <Trans>Back</Trans>
             </button>
           </div>
         )}
@@ -186,7 +191,9 @@ export function EnrolWizard(props: {
   if (state.phase === "codes") {
     return (
       <div className="flex flex-col gap-4" aria-live="polite">
-        <p className="text-sm">Your authenticator is set up.</p>
+        <p className="text-sm">
+          <Trans>Your authenticator is set up.</Trans>
+        </p>
         <RecoveryCodes codes={state.codes} email={props.email} />
         <div>
           <button type="button" onClick={props.onDone} className={PRIMARY_BUTTON_CLASS}>
@@ -214,20 +221,22 @@ export function EnrolWizard(props: {
       <ol className="flex flex-col gap-3 text-sm">
         <li className="flex flex-col gap-2">
           <span>
-            <span className="font-medium">1.</span> Scan this with your authenticator app (Google
-            Authenticator, 1Password, Authy or any app that takes a QR code).
+            <Trans>
+              <span className="font-medium">1.</span> Scan this with your authenticator app (Google
+              Authenticator, 1Password, Authy or any app that takes a QR code).
+            </Trans>
           </span>
           <img
             src={enrolment.qr_svg}
-            alt="QR code for your authenticator app"
+            alt={t`QR code for your authenticator app`}
             width={176}
             height={176}
             className="rounded-lg border border-mw-border bg-white p-1"
           />
           <details className="text-xs text-mw-text-muted">
-            <summary className="cursor-pointer">Can&apos;t scan it? Enter the key by hand</summary>
+            <summary className="cursor-pointer">{t`Can't scan it? Enter the key by hand`}</summary>
             <p className="mt-1">
-              Add an account with this key, time-based, six digits:
+              <Trans>Add an account with this key, time-based, six digits:</Trans>
             </p>
             <code id={secretId} className="mt-1 block break-all font-mono text-sm text-mw-text">
               {enrolment.secret}
@@ -236,12 +245,14 @@ export function EnrolWizard(props: {
         </li>
         <li className="flex flex-col gap-2">
           <span>
-            <span className="font-medium">2.</span> Enter the six-digit code the app shows.
+            <Trans>
+              <span className="font-medium">2.</span> Enter the six-digit code the app shows.
+            </Trans>
           </span>
           <Field
             id={codeId}
             name="code"
-            label="Code from the app"
+            label={t`Code from the app`}
             inputMode="numeric"
             autoComplete="one-time-code"
             required
@@ -250,12 +261,12 @@ export function EnrolWizard(props: {
         </li>
       </ol>
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton busy={submitting} busyLabel="Checking…">
-          Turn on
+        <SubmitButton busy={submitting} busyLabel={t`Checking…`}>
+          <Trans>Turn on</Trans>
         </SubmitButton>
         {props.onCancel && (
           <button type="button" onClick={props.onCancel} className={LINK_CLASS}>
-            Cancel
+            <Trans>Cancel</Trans>
           </button>
         )}
       </div>
@@ -271,6 +282,8 @@ type ChallengeState = { phase: "form" } | { phase: "submitting" } | { phase: "er
  * start over from the password, which is what Start again does.
  */
 function MfaChallengeStep(props: { challenge: string; email: string; onRestart: () => void }) {
+  const { t } = useLingui();
+  const email = props.email;
   const [state, setState] = useState<ChallengeState>({ phase: "form" });
   const [useRecovery, setUseRecovery] = useState(false);
   const [fieldError, setFieldError] = useState<string | undefined>();
@@ -307,11 +320,11 @@ function MfaChallengeStep(props: { challenge: string; email: string; onRestart: 
 
   return (
     <AuthPage
-      title="Enter your code"
+      title={t`Enter your code`}
       intro={
         useRecovery
-          ? `Signing in as ${props.email} with a recovery code. Each code works once.`
-          : `Signing in as ${props.email}. Open your authenticator app and enter the code it shows.`
+          ? t`Signing in as ${email} with a recovery code. Each code works once.`
+          : t`Signing in as ${email}. Open your authenticator app and enter the code it shows.`
       }
     >
       <form
@@ -327,7 +340,7 @@ function MfaChallengeStep(props: { challenge: string; email: string; onRestart: 
             {state.expired && (
               <div>
                 <button type="button" onClick={props.onRestart} className={SECONDARY_BUTTON_CLASS}>
-                  Start again
+                  <Trans>Start again</Trans>
                 </button>
               </div>
             )}
@@ -336,15 +349,15 @@ function MfaChallengeStep(props: { challenge: string; email: string; onRestart: 
         <Field
           id={codeId}
           name="code"
-          label={useRecovery ? "Recovery code" : "Authenticator code"}
+          label={useRecovery ? t`Recovery code` : t`Authenticator code`}
           inputMode={useRecovery ? "text" : "numeric"}
           autoComplete={useRecovery ? "off" : "one-time-code"}
           required
           error={fieldError}
         />
         <div className="flex flex-wrap items-center gap-3">
-          <SubmitButton busy={submitting} busyLabel="Signing in…">
-            Sign in
+          <SubmitButton busy={submitting} busyLabel={t`Signing in…`}>
+            <Trans>Sign in</Trans>
           </SubmitButton>
           <button
             type="button"
@@ -354,7 +367,7 @@ function MfaChallengeStep(props: { challenge: string; email: string; onRestart: 
               setFieldError(undefined);
             }}
           >
-            {useRecovery ? "Use the authenticator app instead" : "Use a recovery code instead"}
+            {useRecovery ? t`Use the authenticator app instead` : t`Use a recovery code instead`}
           </button>
         </div>
       </form>
@@ -367,6 +380,8 @@ function MfaChallengeStep(props: { challenge: string; email: string; onRestart: 
  * then the code step against the fresh challenge the confirm answered.
  */
 function MfaEnrolStep(props: { challenge: string; email: string; onRestart: () => void }) {
+  const { t } = useLingui();
+  const email = props.email;
   const [proven, setProven] = useState<string | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const { challenge } = props;
@@ -399,24 +414,27 @@ function MfaEnrolStep(props: { challenge: string; email: string; onRestart: () =
   }
   return (
     <AuthPage
-      title="Set up two-factor authentication"
-      intro="Your organisation requires an authenticator app on every account. Set yours up to finish signing in; it takes about a minute."
+      title={t`Set up two-factor authentication`}
+      intro={t`Your organisation requires an authenticator app on every account. Set yours up to finish signing in; it takes about a minute.`}
     >
       <EnrolWizard
         start={start}
         confirm={confirm}
         email={props.email}
-        doneLabel="Continue to sign in"
+        doneLabel={t`Continue to sign in`}
         onDone={() => setNext(proven)}
         // Not ready to set it up now, or the wrong account: back to the
         // password step on the same auth request.
         onCancel={props.onRestart}
       />
       <p className="text-sm text-mw-text-muted">
-        Not {props.email}?{" "}
-        <a href={LOGIN_PATH} className={LINK_CLASS}>
-          Sign in as someone else
-        </a>
+        <Trans>
+          Not {email}?{" "}
+          <a href={LOGIN_PATH} className={LINK_CLASS}>
+            Sign in as someone else
+          </a>
+        </Trans>
+
       </p>
     </AuthPage>
   );

@@ -10,6 +10,19 @@ on:
   pull_request:
 
 jobs:
+  spa-sync:
+    name: SPA matches the pinned platform commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # web/ must be spa/upstream.json's platform commit plus spa/patches,
+      # exactly: an edit to web/ that skipped `pnpm spa:refresh` fails here.
+      - run: node scripts/spa-sync.mjs check
+      - run: node --test "scripts/*.test.mjs"
+
   web:
     name: Web (lint, typecheck, tests, build)
     runs-on: ubuntu-latest

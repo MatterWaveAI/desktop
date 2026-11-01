@@ -7,6 +7,9 @@
  * appears in both without anyone remembering to document it.
  */
 
+import type { MessageDescriptor } from "@lingui/core";
+import { msg } from "@lingui/core/macro";
+
 export type ShortcutId =
   | "send"
   | "stop"
@@ -41,9 +44,10 @@ export interface Chord {
 
 export interface Shortcut {
   readonly id: ShortcutId;
-  readonly label: string;
+  /** A descriptor: the list is module data, read before any catalogue is active. */
+  readonly label: MessageDescriptor;
   /** One line under the label in the overlay, where a reader needs it. */
-  readonly hint?: string;
+  readonly hint?: MessageDescriptor;
   readonly chords: readonly Chord[];
   /**
    * Handled by the control that owns it (the composer's Enter), so the
@@ -56,75 +60,75 @@ export interface Shortcut {
 export const SHORTCUTS: readonly Shortcut[] = [
   {
     id: "send",
-    label: "Send the message",
-    hint: "Shift+Enter adds a line instead.",
+    label: msg`Send the message`,
+    hint: msg`Shift+Enter adds a line instead.`,
     chords: [{ key: "Enter" }],
     local: true,
   },
   {
     id: "stop",
-    label: "Stop the answer",
-    hint: "While one is being written. A dialog that is open keeps Esc for itself.",
+    label: msg`Stop the answer`,
+    hint: msg`While one is being written. A dialog that is open keeps Esc for itself.`,
     chords: [{ key: "Escape" }],
   },
   {
     id: "new-chat",
-    label: "Start a new chat",
+    label: msg`Start a new chat`,
     chords: [{ key: "o", mod: true, shift: true }],
   },
   {
     id: "focus-composer",
-    label: "Jump to the message box",
+    label: msg`Jump to the message box`,
     chords: [{ key: "Escape", shift: true }],
   },
   {
     id: "toggle-sidebar",
-    label: "Show or hide the sidebar",
+    label: msg`Show or hide the sidebar`,
     chords: [{ key: "s", mod: true, shift: true }],
   },
   {
     id: "help",
-    label: "Keyboard shortcuts and help",
+    label: msg`Keyboard shortcuts and help`,
     chords: [{ key: "/", mod: true }, { key: "?" }],
   },
   {
     id: "command-palette",
-    label: "Open the command palette",
-    hint: "New chat, switch conversation, settings, help, search.",
+    label: msg`Open the command palette`,
+    hint: msg`New chat, switch conversation, settings, help, search.`,
     chords: [{ key: "k", mod: true }],
   },
   {
     id: "copy-last-reply",
-    label: "Copy the last reply",
+    label: msg`Copy the last reply`,
     chords: [{ key: "c", mod: true, shift: true }],
   },
   {
     id: "copy-last-code",
-    label: "Copy the last code block",
+    label: msg`Copy the last code block`,
     chords: [{ key: ";", code: "Semicolon", mod: true, shift: true }],
   },
   {
     id: "edit-last",
-    label: "Edit your last message",
-    hint: "From an empty message box.",
+    label: msg`Edit your last message`,
+    hint: msg`From an empty message box.`,
     chords: [{ key: "ArrowUp" }],
     local: true,
   },
   {
     id: "delete-chat",
-    label: "Delete this conversation",
-    hint: "Asks first.",
+    label: msg`Delete this conversation`,
+    hint: msg`Asks first.`,
     chords: [{ key: "Backspace", mod: true, shift: true }],
   },
   {
     id: "search-chats",
-    label: "Search conversations",
+    label: msg`Search conversations`,
     chords: [{ key: "f", mod: true, shift: true }],
   },
   {
     id: "dictate",
-    label: "Start or stop dictating",
-    hint: "Where the browser can hear you. Esc also stops it.",
+    label: msg`Start or stop dictating`,
+    hint: msg`Where the browser can hear you. Esc also stops it.`,
     chords: [{ key: "m", mod: true, shift: true }],
   },
 ];

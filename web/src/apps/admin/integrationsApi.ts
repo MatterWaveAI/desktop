@@ -1,3 +1,6 @@
+import type { MessageDescriptor } from "@lingui/core";
+import { msg, t } from "@lingui/core/macro";
+import { formatDateTime } from "../../i18n/format";
 import { apiFetch } from "../../lib/api";
 
 /**
@@ -151,18 +154,18 @@ export function linkOrgAccount(
 
 /** Date and time, for the sync columns: "Never" for nothing yet. */
 export function formatWhen(iso: string | null): string {
-  if (!iso) return "Never";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+  if (!iso) return t`Never`;
+  return formatDateTime(iso) || iso;
 }
 
-export const OUTBOX_KIND_LABEL: Record<string, string> = {
-  "org.created": "Organisation created",
-  "org.updated": "Plan or link changed",
-  "seats.changed": "Members changed",
-  "invoice.updated": "Invoice",
-  "dunning.stage": "Late-payment stage",
-  "contract.applied": "Contract outcome",
-  "org.summary": "Nightly summary",
-  "lead.created": "Enterprise lead",
+/** Descriptors: rendered with `i18n._` where they are shown. */
+export const OUTBOX_KIND_LABEL: Record<string, MessageDescriptor> = {
+  "org.created": msg`Organisation created`,
+  "org.updated": msg`Plan or link changed`,
+  "seats.changed": msg`Members changed`,
+  "invoice.updated": msg`Invoice`,
+  "dunning.stage": msg`Late-payment stage`,
+  "contract.applied": msg`Contract outcome`,
+  "org.summary": msg`Nightly summary`,
+  "lead.created": msg`Enterprise lead`,
 };

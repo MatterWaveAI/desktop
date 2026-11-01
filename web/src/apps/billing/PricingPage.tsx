@@ -17,10 +17,10 @@ import {
   fetchPlans,
   formatPrice,
   formatTokenAllowance,
-  ANNUAL_OVERAGE_NOTE,
+  ANNUAL_OVERAGE_NOTE_MSG,
   overageSummary,
-  PARTNER_MODELS_HEADING,
-  PARTNER_MODELS_NOTE,
+  PARTNER_MODELS_HEADING_MSG,
+  PARTNER_MODELS_NOTE_MSG,
   planAllowance,
   planModelLabels,
   splitPartners,
@@ -87,7 +87,7 @@ function limitLine(plan: PlanSummary, catalog: PlanCatalog, annual: boolean): st
 }
 
 export function PricingPage() {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   // Null outside the shell: no session, or a session held at a gate.
   const shell = useContext(ShellContext);
   // Non-null wherever there is a principal, gated or not.
@@ -374,7 +374,7 @@ export function PricingPage() {
                     <h2 className="font-display text-display-sm">{plan.name}</h2>
                     {isRecommended && (
                       <p data-plan-reason className="mt-0.5 text-xs text-mw-text-muted">
-                        {RECOMMENDED_REASON}
+                        {i18n._(RECOMMENDED_REASON)}
                       </p>
                     )}
                     <p className="mt-2 text-3xl font-semibold tabular-nums">
@@ -408,7 +408,7 @@ export function PricingPage() {
                         <li key={line}>{line}</li>
                       ))}
                     </ul>
-                    <div className="mt-5">{action(plan, free, current, busy)}</div>
+                    <div data-plan-action className="mt-5">{action(plan, free, current, busy)}</div>
                   </li>
                 );
               })}
@@ -428,7 +428,7 @@ export function PricingPage() {
                   list price, up to an overage cap that starts at the plan's monthly price and that
                   an administrator can raise or lower.
                 </Trans>{" "}
-                {ANNUAL_OVERAGE_NOTE}
+                {i18n._(ANNUAL_OVERAGE_NOTE_MSG)}
               </p>
             </section>
           )}
@@ -494,9 +494,9 @@ export function PricingPage() {
           {catalog && splitPartners(catalog.models).partners.length > 0 && (
             <section aria-labelledby="partner-prices" className="mt-12 flex flex-col gap-3">
               <h2 id="partner-prices" className="font-display text-display-sm">
-                {PARTNER_MODELS_HEADING}
+                {i18n._(PARTNER_MODELS_HEADING_MSG)}
               </h2>
-              <p className="text-sm text-mw-text-muted">{PARTNER_MODELS_NOTE}</p>
+              <p className="text-sm text-mw-text-muted">{i18n._(PARTNER_MODELS_NOTE_MSG)}</p>
               <ModelPriceTable
                 name={t`Partner model prices`}
                 models={splitPartners(catalog.models).partners}

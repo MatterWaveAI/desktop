@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../lib/api";
-import { NETWORK_MESSAGE, failureMessage, splitValidationDetail } from "./authForms";
+import { failureMessage, splitValidationDetail } from "./authForms";
 
 function unprocessable(detail: unknown): ApiError {
   return new ApiError(422, "Unprocessable", { detail });
@@ -8,7 +8,9 @@ function unprocessable(detail: unknown): ApiError {
 
 describe("failureMessage", () => {
   it("says the network failed when the request never got an answer", () => {
-    expect(failureMessage(new TypeError("fetch failed"))).toBe(NETWORK_MESSAGE);
+    expect(failureMessage(new TypeError("fetch failed"))).toBe(
+      "Could not reach MatterWave. Check your connection and try again.",
+    );
   });
 
   it("uses a string detail as it is", () => {

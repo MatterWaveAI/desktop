@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPasskey, passkeysSupported } from "../../../lib/webauthn";
 import type { MfaState } from "../../../shell/mfaForms";
 import type { SessionInfo } from "../../../types";
+import { formatDateTime } from "../../../i18n/format";
 import { AccountPane } from "./AccountPane";
 import {
   buttonLabelled,
@@ -348,7 +349,7 @@ describe("sessions", () => {
     expect(rows()[1].textContent).toContain("198.51.100.4");
     // The row carries the newest sighting of the three, not the first row's.
     expect(rows()[1].querySelector("time, div.text-xs")?.textContent).toContain(
-      new Date("2026-10-03T07:00:00Z").toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }),
+      formatDateTime("2026-10-03T07:00:00Z", { dateStyle: "medium", timeStyle: "short" }),
     );
     expect(rows()[1].querySelector("button")?.textContent).toBe("Sign out all 3");
     expect(rows()[2].textContent).toContain("192.0.2.9");

@@ -149,16 +149,50 @@ export async function setLocalePreference(preference: LocalePreference): Promise
 }
 
 /**
+ * Explicit choices made on this page, counted. The account's saved locale
+ * arrives a request after the session does; a language picked in Settings in
+ * the meantime is newer than that answer and must not be overwritten by it.
+ */
+let choices = 0;
+
+/** What a person picks in Settings > Preferences: stored, applied, and counted. */
+export function chooseLocalePreference(preference: LocalePreference): Promise<SupportedLocale> {
+  choices += 1;
+  return setLocalePreference(preference);
+}
+
+/**
  * The account's saved preference, as the API answers it: a tag, or null for
  * "match device". Applied when it differs from what this device remembers,
  * so a language picked on one device is spoken on the next. A tag this
- * build does not ship is left alone.
+ * build does not ship is left alone. `since` is `localeChoiceCount()` taken
+ * when the request went out: a choice made after it wins over the answer.
  */
-export async function adoptServerLocale(saved: string | null | undefined): Promise<void> {
+export async function adoptServerLocale(saved: string | null | undefined, since?: number): Promise<void> {
+  if (since !== undefined && since !== choices) return;
   if (saved && !isSupportedLocale(saved)) return;
   const preference: LocalePreference = isSupportedLocale(saved) ? saved : DEVICE_LOCALE;
   if (preference === getLocalePreference()) return;
   await setLocalePreference(preference);
+}
+
+export function localeChoiceCount(): number {
+  return choices;
+}
+
+/**
+ * Ask the account for its saved locale and adopt it, unless the person picks
+ * a language while the request is out. Best effort: a failed request leaves
+ * the device's own setting standing.
+ */
+export async function followAccountLocale(load: () => Promise<{ locale?: string | null }>): Promise<void> {
+  const since = localeChoiceCount();
+  try {
+    const { locale } = await load();
+    await adoptServerLocale(locale, since);
+  } catch {
+    // the device's setting stands
+  }
 }
 
 const listeners = new Set<() => void>();
@@ -187,6 +221,6 @@ export function useLocalePreference(): {
     (): LocalePreference => DEVICE_LOCALE,
   );
   const locale = useSyncExternalStore(subscribe, currentLocale, (): SupportedLocale => SOURCE_LOCALE);
-  const setPreference = useCallback((next: LocalePreference) => setLocalePreference(next), []);
+  const setPreference = useCallback((next: LocalePreference) => chooseLocalePreference(next), []);
   return useMemo(() => ({ preference, locale, setPreference }), [preference, locale, setPreference]);
 }

@@ -1,4 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
+import { plural } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import { formatNumber } from "../../i18n/format";
 import { Alert } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -43,8 +46,10 @@ import { useLoad } from "./useLoad";
  * choosing "inherit" undoes any of them.
  */
 export function OrgDetails({ org, onBudgetSaved }: { org: AdminOrg; onBudgetSaved: () => void }) {
+  const { t } = useLingui();
+  const orgName = org.name;
   return (
-    <div className="space-y-6 rounded-xl border border-border bg-card p-5" aria-label={`${org.name} details`}>
+    <div className="space-y-6 rounded-xl border border-border bg-card p-5" aria-label={t`${orgName} details`}>
       <OrgPlanHeader org={org} />
       <BudgetEditor org={org} onSaved={onBudgetSaved} />
       <FeatureOverrides org={org} />
@@ -71,6 +76,8 @@ function RetentionEditor({ org }: { org: AdminOrg }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const { t } = useLingui();
+  const orgName = org.name;
 
   const current = state.phase === "ready" ? state.data : null;
   const draft = days ?? (current === null ? "" : String(current));
@@ -88,8 +95,11 @@ function RetentionEditor({ org }: { org: AdminOrg }) {
       const result = await setOrgRetention(org.id, parsed);
       setSaved(
         result === null
-          ? "Retention cleared: conversations are kept until their owner deletes them."
-          : `Retention saved: conversations untouched for ${result} days are deleted nightly.`,
+          ? t`Retention cleared: conversations are kept until their owner deletes them.`
+          : plural(result, {
+              one: "Retention saved: conversations untouched for # day are deleted nightly.",
+              other: "Retention saved: conversations untouched for # days are deleted nightly.",
+            }),
       );
       setDays(null);
       reload();
@@ -103,24 +113,26 @@ function RetentionEditor({ org }: { org: AdminOrg }) {
   return (
     <section aria-labelledby={`${inputId}-heading`}>
       <h4 id={`${inputId}-heading`} className="text-sm font-medium text-mw-text">
-        Conversation retention
+        <Trans>Conversation retention</Trans>
       </h4>
       <p className="mt-1 text-sm text-mw-text-muted">
-        Days a conversation may go untouched before the nightly job deletes it for this organisation. Blank keeps
-        everything. Deleted conversations are purged for good 30 days later; a legal hold exempts a conversation
-        from both.
+        <Trans>
+          Days a conversation may go untouched before the nightly job deletes it for this organisation. Blank keeps
+          everything. Deleted conversations are purged for good 30 days later; a legal hold exempts a conversation
+          from both.
+        </Trans>
       </p>
       {state.phase === "error" ? (
-        <ErrorState title="Could not load retention" message={state.message} onRetry={reload} />
+        <ErrorState title={t`Could not load retention`} message={state.message} onRetry={reload} />
       ) : (
         <form onSubmit={save} className="mt-2 flex flex-wrap items-end gap-2">
           <label htmlFor={inputId} className="sr-only">
-            Retention days for {org.name}
+            <Trans>Retention days for {orgName}</Trans>
           </label>
           <Input
             id={inputId}
             inputMode="numeric"
-            placeholder="keep"
+            placeholder={t`keep`}
             value={draft}
             disabled={saving || state.phase !== "ready"}
             onChange={(event) => {
@@ -130,13 +142,13 @@ function RetentionEditor({ org }: { org: AdminOrg }) {
             className="max-w-40"
           />
           <Button type="submit" size="sm" variant="outline" disabled={saving || !dirty}>
-            Save retention for {org.name}
+            <Trans>Save retention for {orgName}</Trans>
           </Button>
         </form>
       )}
       {!valid && (
         <p role="alert" className="mt-1 text-sm text-mw-danger">
-          Between 1 and 3650 days, or blank to keep.
+          <Trans>Between 1 and 3650 days, or blank to keep.</Trans>
         </p>
       )}
       {saved && (
@@ -175,8 +187,14 @@ function FeatureOverrides({ org }: { org: AdminOrg }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const { t } = useLingui();
+  const orgName = org.name;
+  const on = t`on`;
+  const off = t`off`;
 
   const data = latest ?? (state.phase === "ready" ? state.data : null);
+  const planName = data?.plan_name ?? "";
+  const overrideLabel = (featureName: string) => t`${featureName} override for ${orgName}`;
 
   async function choose(feature: OrgFeature, choice: OverrideChoice) {
     setBusy(true);
@@ -186,10 +204,15 @@ function FeatureOverrides({ org }: { org: AdminOrg }) {
       const after = await setOrgFeature(org.id, feature.name, OVERRIDE_VALUE[choice]);
       setLatest(after);
       const now = after.features.find((f) => f.name === feature.name);
+      const featureName = feature.label;
       setSaved(
         choice === "inherit"
-          ? `${feature.label} follows the plan again: ${now?.effective ? "on" : "off"}.`
-          : `${feature.label} is ${choice} for ${org.name}, whatever the plan says.`,
+          ? now?.effective
+            ? t`${featureName} follows the plan again: on.`
+            : t`${featureName} follows the plan again: off.`
+          : choice === "on"
+            ? t`${featureName} is on for ${orgName}, whatever the plan says.`
+            : t`${featureName} is off for ${orgName}, whatever the plan says.`,
       );
     } catch (err: unknown) {
       setError(failureMessage(err));
@@ -201,25 +224,42 @@ function FeatureOverrides({ org }: { org: AdminOrg }) {
   return (
     <section aria-labelledby={headingId}>
       <h4 id={headingId} className="text-sm font-medium text-mw-text">
-        Features
+        <Trans>Features</Trans>
       </h4>
       <p className="mt-1 text-sm text-mw-text-muted">
-        {data ? `On the ${data.plan_name} plan. ` : ""}An override wins over the plan until it is set back to
-        inherit; each change is recorded in the audit trail under your name.
+        {data ? (
+          <Trans>
+            On the {planName} plan. An override wins over the plan until it is set back to inherit; each change is
+            recorded in the audit trail under your name.
+          </Trans>
+        ) : (
+          <Trans>
+            An override wins over the plan until it is set back to inherit; each change is recorded in the audit
+            trail under your name.
+          </Trans>
+        )}
       </p>
       <div className="mt-2">
         {data === null && state.phase === "error" ? (
-          <ErrorState title="Could not load features" message={state.message} onRetry={reload} />
+          <ErrorState title={t`Could not load features`} message={state.message} onRetry={reload} />
         ) : data === null ? (
           <LoadingSkeleton rows={2} />
         ) : (
-          <Table className="bg-card" aria-label={`${org.name} features`}>
+          <Table className="bg-card" aria-label={t`${orgName} features`}>
             <TableHeader>
               <TableRow>
-                <TableHead>Feature</TableHead>
-                <TableHead>Plan</TableHead>
-                <TableHead>Override</TableHead>
-                <TableHead>In force</TableHead>
+                <TableHead>
+                  <Trans>Feature</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Plan</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Override</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>In force</Trans>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -229,24 +269,24 @@ function FeatureOverrides({ org }: { org: AdminOrg }) {
                     <span className="font-medium">{feature.label}</span>
                     <p className="text-xs text-mw-text-muted">{feature.description}</p>
                   </TableCell>
-                  <TableCell>{feature.plan ? "on" : "off"}</TableCell>
+                  <TableCell>{feature.plan ? on : off}</TableCell>
                   <TableCell>
                     <SimpleSelect<OverrideChoice>
-                      aria-label={`${feature.label} override for ${org.name}`}
+                      aria-label={overrideLabel(feature.label)}
                       size="sm"
                       value={choiceOf(feature)}
                       disabled={busy}
                       onValueChange={(choice) => void choose(feature, choice)}
                       options={[
-                        { value: "inherit", label: `Inherit (${feature.plan ? "on" : "off"})` },
-                        { value: "on", label: "On" },
-                        { value: "off", label: "Off" },
+                        { value: "inherit", label: feature.plan ? t`Inherit (on)` : t`Inherit (off)` },
+                        { value: "on", label: t`On` },
+                        { value: "off", label: t`Off` },
                       ]}
                     />
                   </TableCell>
                   <TableCell>
                     <Badge variant={feature.effective ? "positive" : "secondary"}>
-                      {feature.effective ? "on" : "off"}
+                      {feature.effective ? on : off}
                     </Badge>
                   </TableCell>
                 </TableRow>
@@ -277,6 +317,10 @@ function BudgetEditor({ org, onSaved }: { org: AdminOrg; onSaved: () => void }) 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const { t } = useLingui();
+  const orgName = org.name;
+  const tokensUsed = formatNumber(org.tokens_used);
+  const overageSpent = formatMicros(org.overage_micros);
 
   // Whole cents, as the org's own admin enters it in Settings > Budget.
   const micros = Math.round(Number(dollars) * 100) * MICROS_PER_CENT;
@@ -292,10 +336,9 @@ function BudgetEditor({ org, onSaved }: { org: AdminOrg; onSaved: () => void }) 
     try {
       const budget = await setOrgBudget(org.id, micros);
       // The answer is the cap in force, so a reset reads back as the default's amount.
+      const cap = formatMicros(budget.overage_cap_micros);
       setSaved(
-        micros === 0
-          ? `Overage cap reset to the plan default: ${formatMicros(budget.overage_cap_micros)} a month.`
-          : `Overage cap saved: ${formatMicros(budget.overage_cap_micros)} a month.`,
+        micros === 0 ? t`Overage cap reset to the plan default: ${cap} a month.` : t`Overage cap saved: ${cap} a month.`,
       );
       onSaved();
     } catch (err: unknown) {
@@ -308,17 +351,18 @@ function BudgetEditor({ org, onSaved }: { org: AdminOrg; onSaved: () => void }) 
   return (
     <section aria-labelledby={`${inputId}-heading`}>
       <h4 id={`${inputId}-heading`} className="text-sm font-medium text-mw-text">
-        Overage cap
+        <Trans>Overage cap</Trans>
       </h4>
       <p className="mt-1 text-sm text-mw-text-muted">
-        {org.tokens_used.toLocaleString()} weighted tokens and {formatMicros(org.overage_micros)} of overage
-        this month. The cap is the most usage past the plan's included tokens may cost; 0 uses the plan's
-        default, its monthly price. It applies only on a plan with overage. The gateway's copy follows
-        when upstream enforcement is on.
+        <Trans>
+          {tokensUsed} weighted tokens and {overageSpent} of overage this month. The cap is the most usage past the
+          plan's included tokens may cost; 0 uses the plan's default, its monthly price. It applies only on a plan
+          with overage. The gateway's copy follows when upstream enforcement is on.
+        </Trans>
       </p>
       <form onSubmit={save} className="mt-2 flex flex-wrap items-end gap-2">
         <label htmlFor={inputId} className="sr-only">
-          Overage cap for {org.name} in US dollars
+          <Trans>Overage cap for {orgName} in US dollars</Trans>
         </label>
         <Input
           id={inputId}
@@ -332,7 +376,7 @@ function BudgetEditor({ org, onSaved }: { org: AdminOrg; onSaved: () => void }) 
           className="max-w-40"
         />
         <Button type="submit" size="sm" variant="outline" disabled={saving || !dirty}>
-          Save overage cap for {org.name}
+          <Trans>Save overage cap for {orgName}</Trans>
         </Button>
       </form>
       {saved && (
@@ -356,6 +400,9 @@ function KeysList({ org }: { org: AdminOrg }) {
   const [error, setError] = useState<string | null>(null);
   // Read once per mount: "expired" is a coarse label, not a ticking clock.
   const [now] = useState(() => Date.now());
+  const { t } = useLingui();
+  const orgName = org.name;
+  const pendingName = pending?.name ?? "";
 
   async function revoke() {
     if (!pending) return;
@@ -375,7 +422,7 @@ function KeysList({ org }: { org: AdminOrg }) {
   return (
     <section aria-labelledby={`keys-${org.id}`}>
       <h4 id={`keys-${org.id}`} className="text-sm font-medium text-mw-text">
-        API keys
+        <Trans>API keys</Trans>
       </h4>
       {error && (
         <Alert role="alert" variant="danger" className="mt-1">
@@ -386,19 +433,31 @@ function KeysList({ org }: { org: AdminOrg }) {
         {state.phase === "loading" ? (
           <LoadingSkeleton rows={2} />
         ) : state.phase === "error" ? (
-          <ErrorState title="Could not load keys" message={state.message} onRetry={reload} />
+          <ErrorState title={t`Could not load keys`} message={state.message} onRetry={reload} />
         ) : state.data.length === 0 ? (
-          <p className="text-sm text-mw-text-muted">No API keys.</p>
+          <p className="text-sm text-mw-text-muted">
+            <Trans>No API keys.</Trans>
+          </p>
         ) : (
-          <Table className="bg-card" aria-label={`${org.name} API keys`}>
+          <Table className="bg-card" aria-label={t`${orgName} API keys`}>
             <TableHeader>
               <TableRow>
-                <TableHead>Key</TableHead>
-                <TableHead>Scopes</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Last used</TableHead>
                 <TableHead>
-                  <span className="sr-only">Actions</span>
+                  <Trans>Key</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Scopes</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Created</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Last used</Trans>
+                </TableHead>
+                <TableHead>
+                  <span className="sr-only">
+                    <Trans>Actions</Trans>
+                  </span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -406,6 +465,9 @@ function KeysList({ org }: { org: AdminOrg }) {
               {state.data.map((key: AdminKey) => {
                 // An expired key is already refused: nothing left to revoke.
                 const expired = !key.revoked_at && key.expires_at !== null && Date.parse(key.expires_at) <= now;
+                const keyName = key.name;
+                const revokedOn = formatDate(key.revoked_at);
+                const expiredOn = formatDate(key.expires_at);
                 return (
                   <TableRow key={key.id} className="border-b border-mw-border">
                     <TableCell>
@@ -413,12 +475,12 @@ function KeysList({ org }: { org: AdminOrg }) {
                       <code className="ml-2 font-mono text-xs text-mw-text-muted">{key.prefix}…</code>
                       {key.revoked_at && (
                         <Badge variant="destructive" className="ml-2">
-                          Revoked {formatDate(key.revoked_at)}
+                          <Trans>Revoked {revokedOn}</Trans>
                         </Badge>
                       )}
                       {expired && (
                         <Badge variant="outline" className="ml-2">
-                          Expired {formatDate(key.expires_at)}
+                          <Trans>Expired {expiredOn}</Trans>
                         </Badge>
                       )}
                     </TableCell>
@@ -436,7 +498,7 @@ function KeysList({ org }: { org: AdminOrg }) {
                             setPending(key);
                           }}
                         >
-                          Revoke {key.name}
+                          <Trans>Revoke {keyName}</Trans>
                         </Button>
                       )}
                     </TableCell>
@@ -452,9 +514,9 @@ function KeysList({ org }: { org: AdminOrg }) {
         onOpenChange={(open) => {
           if (!open && !busy) setPending(null);
         }}
-        title={pending ? `Revoke ${pending.name}?` : "Revoke this key?"}
-        description={`The key's next request is refused. ${org.name}'s admins were not asked; the revocation is recorded in the audit trail under your name.`}
-        confirmLabel="Revoke"
+        title={pending ? t`Revoke ${pendingName}?` : t`Revoke this key?`}
+        description={t`The key's next request is refused. ${orgName}'s admins were not asked; the revocation is recorded in the audit trail under your name.`}
+        confirmLabel={t`Revoke`}
         inFlight={busy}
         onConfirm={() => void revoke()}
       />
@@ -464,27 +526,41 @@ function KeysList({ org }: { org: AdminOrg }) {
 
 function InvitesList({ org }: { org: AdminOrg }) {
   const [state, reload] = useLoad(() => fetchOrgInvites(org.id), org.id);
+  const { t } = useLingui();
+  const orgName = org.name;
   return (
     <section aria-labelledby={`invites-${org.id}`}>
       <h4 id={`invites-${org.id}`} className="text-sm font-medium text-mw-text">
-        Open invites
+        <Trans>Open invites</Trans>
       </h4>
       <div className="mt-2">
         {state.phase === "loading" ? (
           <LoadingSkeleton rows={2} />
         ) : state.phase === "error" ? (
-          <ErrorState title="Could not load invites" message={state.message} onRetry={reload} />
+          <ErrorState title={t`Could not load invites`} message={state.message} onRetry={reload} />
         ) : state.data.length === 0 ? (
-          <p className="text-sm text-mw-text-muted">No open invites.</p>
+          <p className="text-sm text-mw-text-muted">
+            <Trans>No open invites.</Trans>
+          </p>
         ) : (
-          <Table className="bg-card" aria-label={`${org.name} invites`}>
+          <Table className="bg-card" aria-label={t`${orgName} invites`}>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Invited by</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>
+                  <Trans>Email</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Role</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Invited by</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Expires</Trans>
+                </TableHead>
+                <TableHead>
+                  <Trans>Status</Trans>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -495,7 +571,15 @@ function InvitesList({ org }: { org: AdminOrg }) {
                   <TableCell className="font-mono text-xs">{invite.invited_by}</TableCell>
                   <TableCell>{formatDate(invite.expires_at)}</TableCell>
                   <TableCell>
-                    <Badge variant={invite.status === "pending" ? "info" : "secondary"}>{invite.status}</Badge>
+                    <Badge variant={invite.status === "pending" ? "info" : "secondary"}>
+                      {invite.status === "pending" ? (
+                        <Trans>pending</Trans>
+                      ) : invite.status === "expired" ? (
+                        <Trans>expired</Trans>
+                      ) : (
+                        invite.status
+                      )}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}

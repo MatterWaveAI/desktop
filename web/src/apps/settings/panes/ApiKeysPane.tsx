@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { DEVELOPERS_PATH } from "../../../shell/frontDoor";
 import { KeyRoundIcon } from "lucide-react";
+import { msg, plural, t } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
+import type { MessageDescriptor } from "@lingui/core";
 import { Alert } from "../../../components/ui/alert";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -16,6 +19,7 @@ import {
 import { Input } from "../../../components/ui/input";
 import { SimpleSelect } from "../../../components/ui/select";
 import { Textarea } from "../../../components/ui/textarea";
+import { formatDate as formatLocaleDate, formatDateTime as formatLocaleDateTime } from "../../../i18n/format";
 import { ApiError, apiFetch } from "../../../lib/api";
 import {
   DestructiveConfirm,
@@ -26,7 +30,7 @@ import {
 } from "../../../patterns";
 import { LearnMore, PaneSection } from "../PaneSection";
 import { PaneActions } from "../paneActions";
-import { Row, RowList, activityLabel } from "../rows";
+import { Row, RowList } from "../rows";
 
 /** The hosted guide to the MCP endpoint: docs/mcp.md, as the public site renders it. */
 const MCP_GUIDE_URL = "https://matterwave.dev/docs/reference/mcp";
@@ -50,19 +54,19 @@ const MCP_GUIDE_URL = "https://matterwave.dev/docs/reference/mcp";
  */
 
 /** The closed scope set the API validates against (matterwave/keys.py). */
-const SCOPES: readonly { id: string; label: string; hint: string }[] = [
-  { id: "chat:read", label: "chat:read", hint: "List conversations and read messages." },
-  { id: "chat:write", label: "chat:write", hint: "Create conversations and send messages." },
-  { id: "keys:manage", label: "keys:manage", hint: "Create and revoke API keys. Off by default." },
+const SCOPES: readonly { id: string; label: string; hint: MessageDescriptor }[] = [
+  { id: "chat:read", label: "chat:read", hint: msg`List conversations and read messages.` },
+  { id: "chat:write", label: "chat:write", hint: msg`Create conversations and send messages.` },
+  { id: "keys:manage", label: "keys:manage", hint: msg`Create and revoke API keys. Off by default.` },
   {
     id: "webhooks:manage",
     label: "webhooks:manage",
-    hint: "Manage the org's webhook endpoints. Works only while you are an owner or admin. Off by default.",
+    hint: msg`Manage the org's webhook endpoints. Works only while you are an owner or admin. Off by default.`,
   },
   {
     id: "usage:read",
     label: "usage:read",
-    hint: "Read the org usage report: everyone's for an owner or admin, your own otherwise. Off by default.",
+    hint: msg`Read the org usage report: everyone's for an owner or admin, your own otherwise. Off by default.`,
   },
 ];
 const DEFAULT_SCOPES: readonly string[] = ["chat:read", "chat:write"];
@@ -72,12 +76,12 @@ const DEFAULT_SCOPES: readonly string[] = ["chat:read", "chat:write"];
  * absolute date sent as `expires_at`. "never" is the default because it is
  * the one a script's owner expects; the week-ahead mail covers the others.
  */
-const EXPIRY_PRESETS: readonly { id: string; label: string; days: number | null }[] = [
-  { id: "never", label: "Never", days: null },
-  { id: "30", label: "30 days", days: 30 },
-  { id: "90", label: "90 days", days: 90 },
-  { id: "365", label: "1 year", days: 365 },
-  { id: "date", label: "On a date…", days: null },
+const EXPIRY_PRESETS: readonly { id: string; label: MessageDescriptor; days: number | null }[] = [
+  { id: "never", label: msg`Never`, days: null },
+  { id: "30", label: msg`30 days`, days: 30 },
+  { id: "90", label: msg`90 days`, days: 90 },
+  { id: "365", label: msg`1 year`, days: 365 },
+  { id: "date", label: msg`On a date…`, days: null },
 ];
 
 /** Inside this many days the expiry badge turns red: the same window the
@@ -111,9 +115,8 @@ type ShownKey = ApiKeyRecord & { key: string };
 
 /** "23 Oct 2026" in the reader's locale -- the same shape Members and Billing use. */
 function formatDate(iso: string | null): string {
-  if (!iso) return "Never";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString(undefined, { dateStyle: "medium" });
+  if (!iso) return t`Never`;
+  return formatLocaleDate(iso, { dateStyle: "medium" }) || iso;
 }
 
 /**
@@ -152,16 +155,21 @@ export function keyLabel(name: string): KeyLabel {
  * activity: "Used today" (in the positive green), "Used yesterday",
  * "Last used <date>", and "Never used".
  */
-function usedLabel(iso: string | null): { text: string; fresh: boolean } {
-  if (!iso) return { text: "Never used", fresh: false };
-  const { text, fresh } = activityLabel(iso);
-  if (text === "Active today" || text === "Active yesterday") return { text: text.replace("Active", "Used"), fresh };
-  return { text: text.replace(/^Active /, "Last used "), fresh };
+function usedLabel(iso: string | null, now: Date = new Date()): { text: string; fresh: boolean } {
+  if (!iso) return { text: t`Never used`, fresh: false };
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return { text: iso, fresh: false };
+  // Calendar days, as the other lists count activity: "today" is since local midnight.
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(now) - day(at)) / DAY_MS);
+  if (days <= 0) return { text: t`Used today`, fresh: true };
+  if (days === 1) return { text: t`Used yesterday`, fresh: false };
+  const date = formatDate(iso);
+  return { text: t`Last used ${date}`, fresh: false };
 }
 
 function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+  return formatLocaleDateTime(iso, { dateStyle: "medium", timeStyle: "medium" }) || iso;
 }
 
 function messageOf(err: unknown, fallback: string): string {
@@ -211,6 +219,7 @@ function cidrEntries(text: string): string[] {
 }
 
 export function ApiKeysPane() {
+  const { t } = useLingui();
   const [keys, setKeys] = useState<ApiKeyRecord[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   // The raw error beside its message: a 402 carries which plan has API keys
@@ -241,12 +250,12 @@ export function ApiKeysPane() {
         if (cancelled) return;
         setKeys(null);
         setLoadRefusal(err);
-        setLoadError(messageOf(err, "Could not load the API keys."));
+        setLoadError(messageOf(err, t`Could not load the API keys.`));
       });
     return () => {
       cancelled = true;
     };
-  }, [version]);
+  }, [version, t]);
 
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<ShownKey | null>(null);
@@ -257,6 +266,7 @@ export function ApiKeysPane() {
   const live = keys?.filter((k) => k.revoked_at === null) ?? [];
   const revoked = keys?.filter((k) => k.revoked_at !== null) ?? [];
   const listed = showRevoked ? keys ?? [] : live;
+  const revokedCount = revoked.length;
 
   return (
     <div className="flex flex-col gap-7">
@@ -265,23 +275,23 @@ export function ApiKeysPane() {
       {!loadError && (
         <PaneActions>
           <Button type="button" size="lg" onClick={() => setCreating(true)}>
-            Create key
+            <Trans>Create key</Trans>
           </Button>
         </PaneActions>
       )}
       {created && (
         <ShownOnceKey
           value={created.key}
-          lead="Copy your new key now. It will not be shown again."
-          note="This is the only time the full key is visible. If you lose it, revoke it and create another."
+          lead={t`Copy your new key now. It will not be shown again.`}
+          note={t`This is the only time the full key is visible. If you lose it, revoke it and create another.`}
           testId="new-key"
           onDone={() => setCreated(null)}
         />
       )}
       <PaneSection
-        title="Your keys"
+        title={t`Your keys`}
         flush
-        description="Bearer tokens for scripts and other clients. Only the prefix is shown again."
+        description={t`Bearer tokens for scripts and other clients. Only the prefix is shown again.`}
         actions={
           revoked.length > 0 && (
             <Button
@@ -291,7 +301,7 @@ export function ApiKeysPane() {
               aria-pressed={showRevoked}
               onClick={() => setShowRevoked((on) => !on)}
             >
-              {showRevoked ? "Hide revoked" : `Show ${revoked.length} revoked`}
+              {showRevoked ? t`Hide revoked` : plural(revokedCount, { one: "Show # revoked", other: "Show # revoked" })}
             </Button>
           )
         }
@@ -299,7 +309,7 @@ export function ApiKeysPane() {
         {loadError ? (
           <div className="flex flex-col gap-3 px-5 py-4">
             <UpgradePrompt error={loadRefusal} />
-            <ErrorState title="Could not load the keys" message={loadError} onRetry={reload} />
+            <ErrorState title={t`Could not load the keys`} message={loadError} onRetry={reload} />
           </div>
         ) : keys === null ? (
           <div className="px-5 py-4">
@@ -307,11 +317,11 @@ export function ApiKeysPane() {
           </div>
         ) : listed.length === 0 ? (
           <EmptyState
-            title={revoked.length === 0 ? "No API keys yet" : "No active API keys"}
+            title={revoked.length === 0 ? t`No API keys yet` : t`No active API keys`}
             description={
               revoked.length === 0
-                ? "Create one to call the API from a script or another client."
-                : "Every key here has been revoked. Create one to call the API again."
+                ? t`Create one to call the API from a script or another client.`
+                : t`Every key here has been revoked. Create one to call the API again.`
             }
           />
         ) : (
@@ -319,20 +329,22 @@ export function ApiKeysPane() {
         )}
         <LearnMore className="border-t border-border px-5 py-3">
           <p>
-            Send a key as Authorization: Bearer. A key can be weaker than you, never stronger. Only the
-            prefix is ever shown again, and a revoked key stays on record. How to call the API, and what it
-            answers, is in the{" "}
-            <a href={DEVELOPERS_PATH} className="text-mw-text underline underline-offset-2">
-              developer portal
-            </a>
-            .
+            <Trans>
+              Send a key as Authorization: Bearer. A key can be weaker than you, never stronger. Only the
+              prefix is ever shown again, and a revoked key stays on record. How to call the API, and what it
+              answers, is in the{" "}
+              <a href={DEVELOPERS_PATH} className="text-mw-text underline underline-offset-2">
+                developer portal
+              </a>
+              .
+            </Trans>
           </p>
         </LearnMore>
       </PaneSection>
       <PaneSection
-        title="Connect to MCP clients"
+        title={t`Connect to MCP clients`}
         description={
-          <>
+          <Trans>
             Use a key as the bearer for Claude, Cursor and other MCP clients. Setup is in the{" "}
             <a
               href={MCP_GUIDE_URL}
@@ -343,15 +355,17 @@ export function ApiKeysPane() {
               MCP guide
             </a>
             .
-          </>
+          </Trans>
         }
       >
         <LearnMore>
           <p>
-            Claude Desktop, Claude Code, Cursor and other Model Context Protocol clients can search and
-            continue your conversations with one of these keys as their bearer. A key with only chat:read
-            lets a client read and never send. The endpoint, the tools and the copy-paste setup for each
-            client are in the guide.
+            <Trans>
+              Claude Desktop, Claude Code, Cursor and other Model Context Protocol clients can search and
+              continue your conversations with one of these keys as their bearer. A key with only chat:read
+              lets a client read and never send. The endpoint, the tools and the copy-paste setup for each
+              client are in the guide.
+            </Trans>
           </p>
         </LearnMore>
       </PaneSection>
@@ -392,7 +406,7 @@ function ShownOnceKey(props: {
           </code>
           <CopyButton text={props.value} size="default" />
           <Button variant="outline" onClick={props.onDone}>
-            Done
+            <Trans>Done</Trans>
           </Button>
         </div>
       </div>
@@ -498,6 +512,7 @@ function rpmOf(text: string): number | null {
  * at the field rather than as a 422 after submit.
  */
 function useKeyForm(initial: KeyFormValues) {
+  const { t } = useLingui();
   const [values, setValues] = useState<KeyFormValues>(initial);
   // Read once: a render must not consult the clock, and the API refuses a
   // date that has slipped into the past while the form sat open.
@@ -534,12 +549,13 @@ function useKeyForm(initial: KeyFormValues) {
       expiresAt === null ||
       Number.isNaN(expiresAt.getTime()) ||
       (dateTouched && expiresAt.getTime() <= mountedAt));
+  const badCidr = badCidrs[0];
   const fieldProblem = badCidrs.length
-    ? `Not an IP address or CIDR range: ${badCidrs[0]}`
+    ? t`Not an IP address or CIDR range: ${badCidr}`
     : badRpm
-      ? "The rate limit must be a whole number of requests per minute, at least 1."
+      ? t`The rate limit must be a whole number of requests per minute, at least 1.`
       : values.expiry === "date" && values.expiryDate !== "" && badDate
-        ? "The expiry date must be after today."
+        ? t`The expiry date must be after today.`
         : null;
   const valid =
     values.name.trim().length > 0 && values.scopes.size > 0 && fieldProblem === null && !badDate;
@@ -562,6 +578,7 @@ type KeyForm = ReturnType<typeof useKeyForm>;
 
 /** The five fields, the same on the create form and in the edit dialog. */
 function KeyFormFields(props: { form: KeyForm }) {
+  const { t, i18n } = useLingui();
   const { values, update, toggleScope, badCidrs, badRpm, badDate } = props.form;
   const expiryId = useId();
   const cidrId = useId();
@@ -569,17 +586,21 @@ function KeyFormFields(props: { form: KeyForm }) {
   return (
     <>
       <label className="flex flex-col gap-1">
-        <span className={LABEL_CLASS}>Name</span>
+        <span className={LABEL_CLASS}>
+          <Trans>Name</Trans>
+        </span>
         <Input
-          aria-label="Key name"
+          aria-label={t`Key name`}
           value={values.name}
           maxLength={100}
-          placeholder="e.g. laptop script"
+          placeholder={t`e.g. laptop script`}
           onChange={(event) => update({ name: event.target.value })}
         />
       </label>
       <fieldset className="flex flex-col gap-1.5">
-        <legend className={`pb-1 ${LABEL_CLASS}`}>Scopes</legend>
+        <legend className={`pb-1 ${LABEL_CLASS}`}>
+          <Trans>Scopes</Trans>
+        </legend>
         {SCOPES.map((scope) => (
           <label key={scope.id} className="flex items-start gap-2 text-sm">
             <input
@@ -590,7 +611,7 @@ function KeyFormFields(props: { form: KeyForm }) {
             />
             <span>
               <code className="font-mono">{scope.label}</code>
-              <span className="ml-2 text-mw-text-muted">{scope.hint}</span>
+              <span className="ml-2 text-mw-text-muted">{i18n._(scope.hint)}</span>
             </span>
           </label>
         ))}
@@ -601,20 +622,22 @@ function KeyFormFields(props: { form: KeyForm }) {
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-1">
             <label htmlFor={expiryId}>
-              <span className={LABEL_CLASS}>Expires</span>
+              <span className={LABEL_CLASS}>
+                <Trans>Expires</Trans>
+              </span>
             </label>
             <SimpleSelect
               id={expiryId}
               value={values.expiry}
               className="w-full"
               onValueChange={(expiry) => update({ expiry })}
-              options={EXPIRY_PRESETS.map((preset) => ({ value: preset.id, label: preset.label }))}
+              options={EXPIRY_PRESETS.map((preset) => ({ value: preset.id, label: i18n._(preset.label) }))}
             />
           </div>
           {values.expiry === "date" && (
             <Input
               type="date"
-              aria-label="Expiry date"
+              aria-label={t`Expiry date`}
               value={values.expiryDate}
               aria-invalid={values.expiryDate !== "" && badDate ? true : undefined}
               className="h-9"
@@ -623,7 +646,9 @@ function KeyFormFields(props: { form: KeyForm }) {
           )}
         </div>
         <label htmlFor={rpmId} className="flex flex-col gap-1">
-          <span className={LABEL_CLASS}>Requests per minute</span>
+          <span className={LABEL_CLASS}>
+            <Trans>Requests per minute</Trans>
+          </span>
           <Input
             id={rpmId}
             type="number"
@@ -631,7 +656,7 @@ function KeyFormFields(props: { form: KeyForm }) {
             min={1}
             step={1}
             value={values.rpmText}
-            placeholder="Platform limit"
+            placeholder={t`Platform limit`}
             aria-invalid={badRpm ? true : undefined}
             className="h-9"
             onChange={(event) => update({ rpmText: event.target.value })}
@@ -639,19 +664,25 @@ function KeyFormFields(props: { form: KeyForm }) {
         </label>
       </div>
       <label htmlFor={cidrId} className="flex flex-col gap-1">
-        <span className={LABEL_CLASS}>Allowed IP ranges</span>
+        <span className={LABEL_CLASS}>
+          <Trans>Allowed IP ranges</Trans>
+        </span>
         <Textarea
           id={cidrId}
           value={values.cidrText}
           rows={3}
-          placeholder={"Anywhere. One address or CIDR range per line, e.g.\n203.0.113.0/24\n2001:db8::/32"}
+          placeholder={t`Anywhere. One address or CIDR range per line, e.g.
+203.0.113.0/24
+2001:db8::/32`}
           aria-invalid={badCidrs.length ? true : undefined}
           className="font-mono"
           onChange={(event) => update({ cidrText: event.target.value })}
         />
         <span className="text-xs text-mw-text-muted">
-          Requests from any other address are refused. Leave empty to allow the key from
-          anywhere.
+          <Trans>
+            Requests from any other address are refused. Leave empty to allow the key from
+            anywhere.
+          </Trans>
         </span>
       </label>
     </>
@@ -684,6 +715,7 @@ function CreateKeyDialog(props: {
 }
 
 function CreateKeyForm(props: { onClose: () => void; onCreated: (key: ShownKey) => void }) {
+  const { t } = useLingui();
   const form = useKeyForm(formValuesOf(null));
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -700,7 +732,7 @@ function CreateKeyForm(props: { onClose: () => void; onCreated: (key: ShownKey) 
       props.onCreated(body);
     } catch (err) {
       setCreateRefusal(err);
-      setCreateError(messageOf(err, "Could not create the key."));
+      setCreateError(messageOf(err, t`Could not create the key.`));
       setCreating(false);
     }
   };
@@ -710,16 +742,18 @@ function CreateKeyForm(props: { onClose: () => void; onCreated: (key: ShownKey) 
   return (
     <form
       className="flex flex-col gap-3"
-      aria-label="Create key"
+      aria-label={t`Create key`}
       onSubmit={(event) => {
         event.preventDefault();
         if (canCreate) void create();
       }}
     >
       <DialogHeader>
-        <DialogTitle>Create a key</DialogTitle>
+        <DialogTitle>
+          <Trans>Create a key</Trans>
+        </DialogTitle>
         <DialogDescription>
-          The full key is shown once, right after it is made. Copy it then.
+          <Trans>The full key is shown once, right after it is made. Copy it then.</Trans>
         </DialogDescription>
       </DialogHeader>
       <KeyFormFields form={form} />
@@ -731,10 +765,10 @@ function CreateKeyForm(props: { onClose: () => void; onCreated: (key: ShownKey) 
       )}
       <DialogFooter>
         <Button type="button" variant="outline" disabled={creating} onClick={props.onClose}>
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         <Button type="submit" disabled={!canCreate}>
-          {creating ? "Creating…" : "Create key"}
+          {creating ? t`Creating…` : t`Create key`}
         </Button>
       </DialogFooter>
     </form>
@@ -778,6 +812,7 @@ function EditKeyForm(props: {
   onClose: () => void;
   onSaved: (record: ApiKeyRecord) => void;
 }) {
+  const { t } = useLingui();
   const [initial] = useState(() => formValuesOf(props.target));
   const form = useKeyForm(initial);
   const [saving, setSaving] = useState(false);
@@ -796,27 +831,31 @@ function EditKeyForm(props: {
       props.onSaved(record);
       props.onClose();
     } catch (err) {
-      setError(messageOf(err, "Could not save the key."));
+      setError(messageOf(err, t`Could not save the key.`));
     } finally {
       setSaving(false);
     }
   };
 
+  const keyName = props.target.name;
+  const keyPrefix = props.target.prefix;
   return (
     <form
       className="flex flex-col gap-3"
-      aria-label="Edit key"
+      aria-label={t`Edit key`}
       onSubmit={(event) => {
         event.preventDefault();
         if (canSave) void save();
       }}
     >
       <DialogHeader>
-        <DialogTitle>{`Edit "${props.target.name}"`}</DialogTitle>
+        <DialogTitle>{t`Edit "${keyName}"`}</DialogTitle>
         <DialogDescription>
-          The key itself does not change: whatever uses{" "}
-          <code className="font-mono">{props.target.prefix}…</code> keeps working with the new
-          settings from the next request.
+          <Trans>
+            The key itself does not change: whatever uses{" "}
+            <code className="font-mono">{keyPrefix}…</code> keeps working with the new
+            settings from the next request.
+          </Trans>
         </DialogDescription>
       </DialogHeader>
       <KeyFormFields form={form} />
@@ -827,10 +866,10 @@ function EditKeyForm(props: {
       )}
       <DialogFooter>
         <Button type="button" variant="outline" disabled={saving} onClick={props.onClose}>
-          Cancel
+          <Trans>Cancel</Trans>
         </Button>
         <Button type="submit" disabled={!canSave}>
-          {saving ? "Saving…" : "Save changes"}
+          {saving ? t`Saving…` : t`Save changes`}
         </Button>
       </DialogFooter>
     </form>
@@ -845,10 +884,11 @@ function ExpiryBadge(props: { expiresAt: string | null; now: number }) {
   if (!props.expiresAt) return null;
   const at = new Date(props.expiresAt).getTime();
   if (Number.isNaN(at)) return null;
+  const date = formatDate(props.expiresAt);
   if (at <= props.now) {
     return (
       <Badge variant="destructive" data-testid="expiry-badge">
-        Expired {formatDate(props.expiresAt)}
+        <Trans>Expired {date}</Trans>
       </Badge>
     );
   }
@@ -856,13 +896,13 @@ function ExpiryBadge(props: { expiresAt: string | null; now: number }) {
   if (days <= EXPIRY_WARNING_DAYS) {
     return (
       <Badge variant="destructive" data-testid="expiry-badge">
-        Expires in {days} {days === 1 ? "day" : "days"}
+        {plural(days, { one: "Expires in # day", other: "Expires in # days" })}
       </Badge>
     );
   }
   return (
     <Badge variant="outline" data-testid="expiry-badge">
-      Expires {formatDate(props.expiresAt)}
+      <Trans>Expires {date}</Trans>
     </Badge>
   );
 }
@@ -872,6 +912,7 @@ function KeyList(props: {
   onChanged: () => void;
   onUpdated: (record: ApiKeyRecord) => void;
 }) {
+  const { t } = useLingui();
   const [pending, setPending] = useState<ApiKeyRecord | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
@@ -890,20 +931,28 @@ function KeyList(props: {
       setPending(null);
       props.onChanged();
     } catch (err) {
-      setRevokeError(messageOf(err, "Could not revoke the key."));
+      setRevokeError(messageOf(err, t`Could not revoke the key.`));
     } finally {
       setRevoking(false);
     }
   };
 
+  const pendingName = pending?.name ?? "";
   return (
     <>
-      <RowList aria-label="API keys">
+      <RowList aria-label={t`API keys`}>
         {props.keys.map((key) => {
           const revoked = key.revoked_at !== null;
           const expired = key.expires_at !== null && new Date(key.expires_at).getTime() <= now;
           const label = keyLabel(key.name);
           const used = usedLabel(key.last_used_at);
+          const revokedOn = formatDate(key.revoked_at);
+          const createdOn = formatDate(key.created_at);
+          const rpmLimit = key.rpm_limit;
+          const rotatedOn = formatDate(key.rotated_at);
+          const previousPrefix = key.previous_prefix;
+          const allowedCidrs = key.allowed_cidrs?.join(", ");
+          const previousUntil = key.previous_valid_until ? formatDateTime(key.previous_valid_until) : "";
           return (
             <Row
               key={key.id}
@@ -925,9 +974,15 @@ function KeyList(props: {
                   >
                     {label.text}
                   </span>
-                  {label.device && <Badge variant="outline">Device sign-in</Badge>}
+                  {label.device && (
+                    <Badge variant="outline">
+                      <Trans>Device sign-in</Trans>
+                    </Badge>
+                  )}
                   {revoked ? (
-                    <Badge variant="destructive">Revoked {formatDate(key.revoked_at)}</Badge>
+                    <Badge variant="destructive">
+                      <Trans>Revoked {revokedOn}</Trans>
+                    </Badge>
                   ) : (
                     <ExpiryBadge expiresAt={key.expires_at} now={now} />
                   )}
@@ -936,7 +991,8 @@ function KeyList(props: {
               meta={
                 <>
                   <code className="font-mono text-xs">{key.prefix}…</code>
-                  {" · "}Created {formatDate(key.created_at)}
+                  {" · "}
+                  <Trans>Created {createdOn}</Trans>
                   {" · "}
                   <span className={used.fresh ? "text-mw-positive" : undefined}>{used.text}</span>
                 </>
@@ -950,19 +1006,24 @@ function KeyList(props: {
                       </Badge>
                     ))}
                     {key.rpm_limit !== null && (
-                      <Badge variant="outline">{key.rpm_limit} req/min</Badge>
+                      <Badge variant="outline">
+                        <Trans>{rpmLimit} req/min</Trans>
+                      </Badge>
                     )}
                   </div>
                   {key.allowed_cidrs && (
                     <p className="text-xs text-mw-text-muted">
-                      Only from <code className="font-mono">{key.allowed_cidrs.join(", ")}</code>
+                      <Trans>
+                        Only from <code className="font-mono">{allowedCidrs}</code>
+                      </Trans>
                     </p>
                   )}
                   {key.previous_prefix && key.previous_valid_until && (
                     <p className="text-xs text-mw-text-muted">
-                      Rotated {formatDate(key.rotated_at)} · the old key{" "}
-                      <code className="font-mono">{key.previous_prefix}…</code> works until{" "}
-                      {formatDateTime(key.previous_valid_until)}
+                      <Trans>
+                        Rotated {rotatedOn} · the old key <code className="font-mono">{previousPrefix}…</code>{" "}
+                        works until {previousUntil}
+                      </Trans>
                     </p>
                   )}
                 </div>
@@ -971,11 +1032,11 @@ function KeyList(props: {
                 !revoked && (
                   <>
                     <Button variant="outline" size="sm" onClick={() => setEditing(key)}>
-                      Edit…
+                      <Trans>Edit…</Trans>
                     </Button>
                     {!expired && (
                       <Button variant="outline" size="sm" onClick={() => setRotating(key)}>
-                        Rotate…
+                        <Trans>Rotate…</Trans>
                       </Button>
                     )}
                     <Button
@@ -986,7 +1047,7 @@ function KeyList(props: {
                         setPending(key);
                       }}
                     >
-                      Revoke…
+                      <Trans>Revoke…</Trans>
                     </Button>
                   </>
                 )
@@ -1005,9 +1066,9 @@ function KeyList(props: {
         onOpenChange={(open) => {
           if (!open) setPending(null);
         }}
-        title={pending ? `Revoke "${pending.name}"?` : "Revoke this key?"}
-        description="Every request using this key fails from now on. The key stays listed as revoked; it cannot be restored, only replaced."
-        confirmLabel="Revoke key"
+        title={pending ? t`Revoke "${pendingName}"?` : t`Revoke this key?`}
+        description={t`Every request using this key fails from now on. The key stays listed as revoked; it cannot be restored, only replaced.`}
+        confirmLabel={t`Revoke key`}
         onConfirm={() => void revoke()}
         inFlight={revoking}
       />
@@ -1030,6 +1091,7 @@ function KeyList(props: {
  * Done, so nobody loses the value to a stray click.
  */
 function RotateDialog(props: { target: ApiKeyRecord | null; onClose: (changed: boolean) => void }) {
+  const { t } = useLingui();
   const [inFlight, setInFlight] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rotated, setRotated] = useState<ShownKey | null>(null);
@@ -1041,7 +1103,7 @@ function RotateDialog(props: { target: ApiKeyRecord | null; onClose: (changed: b
     try {
       setRotated(await apiFetch<ShownKey>(`/api/keys/${props.target.id}/rotate`, { method: "POST" }));
     } catch (err) {
-      setError(messageOf(err, "Could not rotate the key."));
+      setError(messageOf(err, t`Could not rotate the key.`));
     } finally {
       setInFlight(false);
     }
@@ -1054,6 +1116,7 @@ function RotateDialog(props: { target: ApiKeyRecord | null; onClose: (changed: b
   };
 
   const name = props.target?.name ?? "";
+  const oldValidUntil = rotated?.previous_valid_until ? formatDateTime(rotated.previous_valid_until) : null;
   return (
     <Dialog
       open={props.target !== null}
@@ -1063,18 +1126,20 @@ function RotateDialog(props: { target: ApiKeyRecord | null; onClose: (changed: b
     >
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{rotated ? `"${name}" has a new key` : `Rotate "${name}"?`}</DialogTitle>
+          <DialogTitle>{rotated ? t`"${name}" has a new key` : t`Rotate "${name}"?`}</DialogTitle>
           <DialogDescription>
             {rotated
-              ? `The old key keeps working until ${rotated.previous_valid_until ? formatDateTime(rotated.previous_valid_until) : "now"}, so you can swap it in everywhere first. Revoke the key if the old value may have leaked.`
-              : "A new secret for the same key: the name, scopes, expiry and limits stay. The current value keeps working for a grace period so a deploy can swap it; after that only the new one does."}
+              ? oldValidUntil
+                ? t`The old key keeps working until ${oldValidUntil}, so you can swap it in everywhere first. Revoke the key if the old value may have leaked.`
+                : t`The old key keeps working until now, so you can swap it in everywhere first. Revoke the key if the old value may have leaked.`
+              : t`A new secret for the same key: the name, scopes, expiry and limits stay. The current value keeps working for a grace period so a deploy can swap it; after that only the new one does.`}
           </DialogDescription>
         </DialogHeader>
         {rotated ? (
           <ShownOnceKey
             value={rotated.key}
-            lead="Copy the new key now. It will not be shown again."
-            note="This is the only time the full key is visible. If you lose it, rotate again."
+            lead={t`Copy the new key now. It will not be shown again.`}
+            note={t`This is the only time the full key is visible. If you lose it, rotate again.`}
             testId="rotated-key"
             onDone={() => close(true)}
           />
@@ -1087,10 +1152,10 @@ function RotateDialog(props: { target: ApiKeyRecord | null; onClose: (changed: b
             )}
             <DialogFooter>
               <Button variant="outline" disabled={inFlight} onClick={() => close(false)}>
-                Cancel
+                <Trans>Cancel</Trans>
               </Button>
               <Button variant="default" disabled={inFlight} onClick={() => void rotate()}>
-                {inFlight ? "Rotating…" : "Rotate key"}
+                {inFlight ? t`Rotating…` : t`Rotate key`}
               </Button>
             </DialogFooter>
           </>

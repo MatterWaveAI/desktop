@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { PASSWORD_MIN_LENGTH } from "./authForms";
 
 /**
@@ -13,12 +14,26 @@ import { PASSWORD_MIN_LENGTH } from "./authForms";
 export interface PasswordStrength {
   /** 0 for empty, 1 weak, 2 fair, 3 good, 4 strong. */
   score: 0 | 1 | 2 | 3 | 4;
-  label: "" | "Weak" | "Fair" | "Good" | "Strong";
+  /** "Weak" â€¦ "Strong" in the active language; "" for empty. */
+  label: string;
   /** What would make it stronger, in the order worth doing. */
   hints: string[];
 }
 
-const LABELS = ["", "Weak", "Fair", "Good", "Strong"] as const;
+// Translated when called (at render), not at module load: no catalogue is
+// active yet when this module is imported.
+function strengthLabel(score: 1 | 2 | 3 | 4): string {
+  switch (score) {
+    case 1:
+      return t`Weak`;
+    case 2:
+      return t`Fair`;
+    case 3:
+      return t`Good`;
+    case 4:
+      return t`Strong`;
+  }
+}
 
 export function passwordStrength(password: string): PasswordStrength {
   if (password === "") return { score: 0, label: "", hints: [] };
@@ -29,9 +44,9 @@ export function passwordStrength(password: string): PasswordStrength {
     Number(/[^A-Za-z0-9]/.test(password));
   const hints: string[] = [];
   if (password.length >= PASSWORD_MIN_LENGTH && password.length < 16) {
-    hints.push("Longer is stronger: 16 characters or more.");
+    hints.push(t`Longer is stronger: 16 characters or more.`);
   }
-  if (kinds < 2) hints.push("Mix letters with numbers or symbols.");
+  if (kinds < 2) hints.push(t`Mix letters with numbers or symbols.`);
   // One character repeated, or digits alone: long, but not for long.
   const samey = /^(.)\1+$/.test(password) || /^\d+$/.test(password);
 
@@ -46,5 +61,6 @@ export function passwordStrength(password: string): PasswordStrength {
   if (password.length < PASSWORD_MIN_LENGTH) points = Math.min(points, 1);
 
   const score: 1 | 2 | 3 | 4 = points <= 1 ? 1 : points === 2 ? 2 : points === 3 ? 3 : 4;
-  return { score, label: LABELS[score], hints };
+  return { score, label: strengthLabel(score), hints };
+
 }

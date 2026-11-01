@@ -91,7 +91,7 @@ describe("withAppBoundary", () => {
   it("contains a throwing app: the shell chrome survives, no white screen", async () => {
     const Mounted = withAppBoundary({
       id: "broken",
-      title: "Broken app",
+      title: { id: "Broken app", message: "Broken app" },
       path: "/apps/broken",
       component: BrokenApp,
     });
@@ -124,9 +124,10 @@ describe("withAppBoundary", () => {
     expect(alert).not.toBeNull();
     expect(alert.textContent).toContain("Broken app stopped working");
 
-    // And the shell is still there: header, nav, and the way out.
+    // And the shell is still there: header, the account menu (where the
+    // other apps are), and the way out.
     expect(container!.querySelector("header")).not.toBeNull();
-    expect(container!.querySelector("nav[aria-label='Apps']")).not.toBeNull();
+    expect(container!.querySelector("[aria-label='Account and organisation']")).not.toBeNull();
     expect(container!.textContent).toContain("MatterWave");
   });
 });

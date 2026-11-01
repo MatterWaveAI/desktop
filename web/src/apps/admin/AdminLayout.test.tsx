@@ -128,7 +128,7 @@ describe("the tab strip", () => {
     expect(scroller.className).toContain("overflow-x-auto");
     expect(scroller.className).toContain("flex-nowrap");
     const links = [...mounted.container.querySelectorAll<HTMLAnchorElement>(`${STRIP} a`)];
-    expect(links.length).toBe(14);
+    expect(links.length).toBe(15);
     for (const link of links) {
       expect(link.className).toContain("shrink-0");
       expect(link.className).toContain("whitespace-nowrap");
@@ -170,7 +170,7 @@ describe("the tab strip", () => {
 });
 
 describe("the side column", () => {
-  it("groups the same fourteen sections under four headings, each a link to its tab", async () => {
+  it("groups the same fifteen sections under four headings, each a link to its tab", async () => {
     stub();
     mounted = await mount(<AdminPage />, principalWith(["admin"]));
     const side = mounted.container.querySelector(SIDE)!;
@@ -183,7 +183,7 @@ describe("the side column", () => {
     }));
     expect(groups).toEqual([
       { name: "People", tabs: ["Organisations", "Users"] },
-      { name: "Billing", tabs: ["Spend", "Billing", "Overdue", "Plans"] },
+      { name: "Billing", tabs: ["Spend", "Billing", "Overdue", "Disputes", "Plans"] },
       { name: "Platform", tabs: ["Flags", "Announcements", "Integrations", "Health"] },
       { name: "Operations", tabs: ["Retention", "Moderation", "Enforcement", "Deletions"] },
     ]);

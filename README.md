@@ -75,6 +75,27 @@ takes `web/dist`. Output: `src-tauri/target/{release,debug}/bundle/` (MSI and NS
 `.app`/DMG on macOS, AppImage and `.deb` on Linux). Signing and notarisation belong to the
 release job.
 
+### The bundled SPA
+
+`web/` is the platform's SPA at one named commit plus this app's own changes to it, and nothing
+else. `spa/upstream.json` names the commit (and a digest of its SPA as copied: the platform's
+`web/` without its Playwright suites and build cache); `spa/patches/` holds one patch per file
+the desktop changes or adds, at the file's own path. `pnpm spa:check` proves the two agree --
+`web/` minus the patches is exactly that commit, and the patches give `web/` back -- and CI runs
+it, so an edit to `web/` that skipped the patches fails the build.
+
+```
+pnpm spa:pull --source ../matterwave-app --ref origin/develop   # re-sync to the platform
+pnpm spa:refresh                                                 # after editing web/ here
+```
+
+`spa:pull` copies the platform's `web/` at the ref, replays the desktop's changes onto it with a
+three-way merge, and rewrites the pin and the patches. A change that collides with the
+platform's stays in `web/` with conflict markers and the command fails, naming the files:
+resolve them, then `pnpm spa:refresh --source ../matterwave-app`. Strings the desktop adds stay
+plain English rather than `msg`/`Trans` macros, so the platform's catalogues need no desktop
+entries and `lingui extract` stays clean.
+
 In the bundled app the page's origin is the webview's (`tauri://localhost`, or
 `http://tauri.localhost` on Windows), so API calls are sent to `MW_DESKTOP_BASE_URL` with a
 bearer and no cookie. The API allows both origins for CORS exactly when its

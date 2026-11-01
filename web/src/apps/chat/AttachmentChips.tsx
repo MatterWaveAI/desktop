@@ -10,7 +10,8 @@
  */
 
 import type { PendingAttachment } from "./attachments";
-import { humanSize, isImageType } from "./attachments";
+import { humanSize, isImageType, SCAN_CLEAN } from "./attachments";
+import { StatusDot } from "../../components/ui/badge";
 
 export function AttachmentChips(props: {
   pending: readonly PendingAttachment[];
@@ -82,11 +83,22 @@ function Chip(props: {
         ) : failed || blocked ? (
           <p className="text-xs text-mw-danger-strong">{entry.reason}</p>
         ) : (
-          <p className="text-xs text-mw-text-muted">
-            {humanSize(size)}
-            {entry.status === "ready" && entry.attachment.extract_truncated
-              ? " · only part will be read"
-              : ""}
+          <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-mw-text-muted">
+            <span>
+              {humanSize(size)}
+              {entry.status === "ready" && entry.attachment.extract_truncated
+                ? " · only part will be read"
+                : ""}
+            </span>
+            {entry.status === "ready" && entry.attachment.scan_status === SCAN_CLEAN && (
+              <span
+                data-mw-scan-status="clean"
+                className="inline-flex items-center gap-1 font-medium text-mw-positive"
+              >
+                <StatusDot tone="positive" className="size-1.5" />
+                Clean
+              </span>
+            )}
           </p>
         )}
       </div>

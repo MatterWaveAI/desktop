@@ -1,4 +1,6 @@
 import { useId, useState } from "react";
+import { Meter } from "../../components/ui/alert";
+import { Button } from "../../components/ui/button";
 import { meterReading, type ContextReading, type SummaryPart } from "./compaction";
 
 /**
@@ -73,20 +75,25 @@ const LEVEL_CLASS = {
   full: "text-mw-danger",
 } as const;
 
+const LEVEL_TONE = { ok: "positive", warn: "warning", full: "danger" } as const;
+
 /** What the button beside a full meter does, in one sentence. */
 export const COMPACT_HINT =
   "Compacting summarises the earlier messages so there is room for the next answer.";
 
 /**
  * How much of the model's window the next prompt fills: the last counted
- * turn plus the draft's estimate. Nothing at all for a model with no known
- * window. Amber from three quarters, red from nine tenths -- about where the
- * server starts folding, since it reserves a quarter for the answer.
+ * turn plus the draft's estimate, as a small bar and a percentage in the
+ * composer's own row (the exact count is the meter's value text and its
+ * tooltip). Nothing at all for a model with no known window. Emerald while
+ * there is room, amber from three quarters, red from nine tenths -- about
+ * where the server starts folding, since it reserves a quarter for the
+ * answer.
  *
  * Once it is red, and the page can fold (`onCompact`), the way out sits
- * beside the number with a sentence on what it does: "1,024 / 1,024" on
- * its own is a problem stated with no action offered, and the menu item
- * that solves it is two clicks away under an icon.
+ * beside the number with a sentence on what it does: a full meter on its
+ * own is a problem stated with no action offered, and the menu item that
+ * solves it is two clicks away under an icon.
  */
 export function ContextMeter(props: {
   context: ContextReading;
@@ -98,42 +105,57 @@ export function ContextMeter(props: {
   const reading = meterReading(props.context, props.draft);
   if (reading === null) return null;
   const offerCompact = reading.level === "full" && props.onCompact !== undefined;
+  const percent = Math.min(999, Math.round(reading.ratio * 100));
+  const exact = `${reading.estimated ? "about " : ""}${reading.used.toLocaleString()} of ${reading.window.toLocaleString()} tokens`;
   const meter = (
-    <span
-      role="meter"
-      aria-label="Context used"
-      aria-valuemin={0}
-      aria-valuemax={reading.window}
-      aria-valuenow={Math.min(reading.used, reading.window)}
-      aria-valuetext={`${reading.estimated ? "about " : ""}${reading.used.toLocaleString()} of ${reading.window.toLocaleString()} tokens`}
-      data-mw-context-meter={reading.level}
-      data-mw-context-estimated={reading.estimated ? "" : undefined}
-      title={
-        reading.estimated
-          ? "Tokens the next message will send, of the model's context window. Estimated from the last summary until the next answer is counted."
-          : "Tokens the next message will send, of the model's context window. The draft is estimated."
-      }
-      className={`text-xs tabular-nums ${LEVEL_CLASS[reading.level]}`}
-    >
-      {reading.estimated ? "~" : ""}
-      {reading.used.toLocaleString()} / {reading.window.toLocaleString()}
+    <span className="inline-flex shrink-0 items-center gap-2 text-xs text-mw-text-muted">
+      <span aria-hidden className="hidden sm:inline">
+        Context
+      </span>
+      <span
+        role="meter"
+        aria-label="Context used"
+        aria-valuemin={0}
+        aria-valuemax={reading.window}
+        aria-valuenow={Math.min(reading.used, reading.window)}
+        aria-valuetext={exact}
+        data-mw-context-meter={reading.level}
+        data-mw-context-estimated={reading.estimated ? "" : undefined}
+        title={
+          reading.estimated
+            ? `${exact}: what the next message will send, of the model's context window. Estimated from the last summary until the next answer is counted.`
+            : `${exact}: what the next message will send, of the model's context window. The draft is estimated.`
+        }
+        className={`inline-flex items-center gap-2 tabular-nums ${LEVEL_CLASS[reading.level]}`}
+      >
+        <Meter value={percent} tone={LEVEL_TONE[reading.level]} className="h-1 w-10 sm:w-14" />
+        <span>
+          {reading.estimated ? "~" : ""}
+          {percent}%
+        </span>
+      </span>
     </span>
   );
   if (!offerCompact) return meter;
   return (
-    <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
-      <span className="text-xs text-mw-text-muted" data-mw-compact-hint="">
+    <span className="flex min-w-0 items-center justify-end gap-x-2">
+      <span
+        className="min-w-0 truncate text-xs text-mw-text-muted sr-only lg:not-sr-only"
+        data-mw-compact-hint=""
+      >
         {COMPACT_HINT}
       </span>
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="sm"
         onClick={props.onCompact}
         disabled={props.compactDisabled}
         title={props.compactDisabled ? "Wait for the answer to finish" : COMPACT_HINT}
-        className="h-7 rounded-md border border-mw-border px-2 text-xs font-medium hover:bg-mw-surface-hover disabled:opacity-40 pointer-coarse:h-11"
+        className="shrink-0 disabled:border-mw-border-strong"
       >
         Compact
-      </button>
+      </Button>
       {meter}
     </span>
   );

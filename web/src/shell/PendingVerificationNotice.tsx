@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MailIcon } from "lucide-react";
+import { Trans, useLingui } from "@lingui/react/macro";
 import type { AuthConfig, Principal } from "../types";
 import { apiFetch } from "../lib/api";
 import { EXAMPLE_PROMPTS } from "../apps/chat/examplePrompts";
@@ -32,6 +33,7 @@ export function PendingVerificationNotice(props: {
   config: AuthConfig;
   principal: Principal;
 }) {
+  const { t } = useLingui();
   const email = props.principal.email;
   const [resend, setResend] = useState<"idle" | "sending" | "sent" | "failed">("idle");
 
@@ -61,20 +63,20 @@ export function PendingVerificationNotice(props: {
             <MailIcon className="size-6" aria-hidden />
           </span>
           <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            Check your email
+            <Trans>Check your email</Trans>
           </h1>
           <p className="max-w-md text-sm text-mw-text-muted">
             {email === null ? (
-              <>
+              <Trans>
                 Your account is almost ready — it just needs its email address confirmed. Enter the
                 code we sent you to finish.
-              </>
+              </Trans>
             ) : (
-              <>
+              <Trans>
                 We sent a confirmation code to{" "}
                 <span className="font-medium text-mw-text">{email}</span>. Enter it to finish
                 setting up your account — everything below is waiting for you.
-              </>
+              </Trans>
             )}
           </p>
           <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
@@ -86,7 +88,7 @@ export function PendingVerificationNotice(props: {
               }
               className="rounded-lg bg-mw-accent px-4 py-2 text-sm font-medium text-mw-accent-foreground hover:opacity-90"
             >
-              Enter the code
+              <Trans>Enter the code</Trans>
             </a>
             {email !== null && (
               <button
@@ -96,19 +98,19 @@ export function PendingVerificationNotice(props: {
                 className="rounded-lg border border-mw-border px-4 py-2 text-sm hover:bg-mw-surface-hover disabled:opacity-60"
               >
                 {resend === "sending"
-                  ? "Sending…"
+                  ? t`Sending…`
                   : resend === "sent"
-                    ? "Code sent"
-                    : "Send a new code"}
+                    ? t`Code sent`
+                    : t`Send a new code`}
               </button>
             )}
           </div>
           {/* aria-live, so the outcome of pressing resend is announced rather
               than only changing a button's label. */}
           <p aria-live="polite" className="min-h-5 text-xs text-mw-text-muted">
-            {resend === "sent" && "A new code is on its way. It can take a minute to arrive."}
+            {resend === "sent" && t`A new code is on its way. It can take a minute to arrive.`}
             {resend === "failed" &&
-              "That did not go through — wait a moment and try again, or reload the page."}
+              t`That did not go through — wait a moment and try again, or reload the page.`}
           </p>
         </div>
 
@@ -119,7 +121,7 @@ export function PendingVerificationNotice(props: {
             id="mw-pending-preview"
             className="text-center text-xs font-semibold uppercase tracking-wide text-mw-text-muted"
           >
-            Once you are verified, you can ask things like
+            <Trans>Once you are verified, you can ask things like</Trans>
           </h2>
           <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {EXAMPLE_PROMPTS.map((example) => (
@@ -141,7 +143,7 @@ export function PendingVerificationNotice(props: {
           className="text-xs text-mw-text-muted underline hover:text-mw-text"
           onClick={() => void shellSignOut(props.config)}
         >
-          Sign out
+          <Trans>Sign out</Trans>
         </button>
       </div>
     </main>

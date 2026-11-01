@@ -42,6 +42,11 @@ export const SEMANTIC_TOKENS = [
   "inverse",
   "inverse-foreground",
   "inverse-border",
+  "code-text",
+  "code-keyword",
+  "code-string",
+  "code-constant",
+  "code-comment",
   "scrim",
   "scrim-subtle",
 ];

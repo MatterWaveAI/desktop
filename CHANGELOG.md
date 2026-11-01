@@ -7,6 +7,19 @@ the API's `MW_RELEASE` all report it).
 
 ## [Unreleased]
 
+### Changed
+
+- **The bundled SPA is the platform's develop again** (platform commit
+  `518e2a8`): the localised interface (en-GB, en-US, es-ES), the
+  compaction fixes, Get help, the answer-ready signals, the terms notice,
+  webhooks and the admin disputes view, with the desktop's own changes
+  re-applied on top.
+- **Re-syncing the SPA is one command** (`pnpm spa:pull`,
+  `scripts/spa-sync.mjs`): `spa/upstream.json` names the platform commit
+  `web/` is synced to, `spa/patches/` holds the desktop's changes one file
+  at a time, and CI fails when `web/` is anything other than that commit
+  plus those patches (`pnpm spa:check`).
+
 ## [0.3.0] - 2026-10-31
 
 ### Added

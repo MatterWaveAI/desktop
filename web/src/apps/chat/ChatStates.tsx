@@ -1,10 +1,14 @@
 import { RefreshCwIcon, WifiOffIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Skeleton } from "../../components/ui/skeleton";
+import { Alert } from "../../components/ui/alert";
+import { Button, buttonVariants } from "../../components/ui/button";
+import { AssistantMark } from "../../components/brand";
 import { STREAM_ERROR_COPY, type StreamErrorKind } from "./streamErrors";
 import { AiDisclosure } from "./AiDisclosure";
 import { EXAMPLE_PROMPTS } from "./examplePrompts";
 import { HELP_PATH } from "../../shell/help";
+import { GetHelp } from "../../components/GetHelp";
 
 /**
  * The chat surface's empty, loading and error states.
@@ -37,9 +41,10 @@ export function NewConversationState(props: {
        a centred column taller than a phone screen overflows both ways and
        its top -- the heading -- was cut off where it could not be scrolled
        to. It grows with its content and centres only when there is room. */
-    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col items-center justify-center-safe gap-6 px-4 py-6 md:py-10">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <h2 className="font-heading text-2xl font-semibold tracking-tight">
+    <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col items-center justify-center-safe gap-7 px-4 py-6 md:px-7 md:py-10">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <AssistantMark className="size-11 rounded-xl" />
+        <h2 className="font-display text-display-sm font-normal tracking-tight md:text-display-md">
           What can I help you with?
         </h2>
         {/* One sentence on what this is, for a stranger arriving from a shared
@@ -50,7 +55,7 @@ export function NewConversationState(props: {
         </p>
         <AiDisclosure />
       </div>
-      <ul className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+      <ul className="grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2">
         {EXAMPLE_PROMPTS.map((example) => (
           <li key={example.title}>
             {/*
@@ -69,7 +74,7 @@ export function NewConversationState(props: {
             */}
             <div
               className={`flex h-full flex-col rounded-xl border border-mw-border bg-mw-surface-raised transition-colors ${
-                props.disabled ? "opacity-60" : "hover:bg-mw-surface-hover"
+                props.disabled ? "" : "hover:border-mw-border-emphasis hover:bg-mw-surface-hover"
               }`}
             >
               <button
@@ -80,9 +85,13 @@ export function NewConversationState(props: {
                     ? props.onSendPrompt(example.prompt)
                     : props.onPickPrompt(example.prompt)
                 }
-                className="flex-1 p-3 text-left disabled:cursor-not-allowed"
+                className="flex-1 rounded-xl px-4 pt-3.5 pb-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-mw-focus disabled:cursor-not-allowed"
               >
-                <span className="block text-sm font-medium">{example.title}</span>
+                <span
+                  className={`block text-sm font-medium ${props.disabled ? "text-mw-text-muted" : "text-mw-text"}`}
+                >
+                  {example.title}
+                </span>
                 <span className="mt-1 block text-xs text-mw-text-muted">{example.prompt}</span>
               </button>
               {props.onSendPrompt && (
@@ -90,7 +99,7 @@ export function NewConversationState(props: {
                   type="button"
                   disabled={props.disabled}
                   onClick={() => props.onPickPrompt(example.prompt)}
-                  className="self-start px-3 pb-2 text-xs text-mw-text-muted underline hover:text-mw-text disabled:cursor-not-allowed pointer-coarse:min-h-11 pointer-coarse:pb-0"
+                  className="mb-2 ml-2 self-start rounded-md px-2 py-1 text-xs text-mw-link underline-offset-2 outline-none hover:text-mw-link-hover hover:underline focus-visible:ring-2 focus-visible:ring-mw-focus disabled:cursor-not-allowed disabled:text-mw-text-muted pointer-coarse:min-h-11"
                 >
                   Edit first
                 </button>
@@ -104,7 +113,7 @@ export function NewConversationState(props: {
           anchor, like the budget link below: this renders without a router. */}
       <a
         href={HELP_PATH}
-        className="inline-flex items-center text-xs text-mw-text-muted underline hover:text-mw-text pointer-coarse:min-h-11"
+        className="inline-flex items-center text-xs text-mw-text-muted underline underline-offset-2 hover:text-mw-text pointer-coarse:min-h-11"
       >
         Help and keyboard shortcuts
       </a>
@@ -178,7 +187,11 @@ const STALL_GIVE_UP_MS = 60_000;
  * stopping the turn and offering Retry -- a spinner that never ends is the
  * hang this exists to rule out.
  */
-export function AwaitingFirstToken(props: { onGiveUp?: () => void }) {
+export function AwaitingFirstToken(props: {
+  onGiveUp?: () => void;
+  /** The server is summarising older turns first, which is not a stall. */
+  folding?: boolean;
+}) {
   const [slow, setSlow] = useState(false);
   const giveUp = useRef(props.onGiveUp);
   useEffect(() => {
@@ -204,9 +217,11 @@ export function AwaitingFirstToken(props: { onGiveUp?: () => void }) {
         <span className="size-1.5 animate-pulse rounded-full bg-mw-text-muted" />
         <span className="size-1.5 animate-pulse rounded-full bg-mw-text-muted" />
       </span>
-      {slow
-        ? "Still waiting — the model is taking longer than usual. Keep waiting, or Stop and try another model."
-        : "Waiting for the model… a cold model can take a few seconds."}
+      {props.folding
+        ? "Summarising the earlier messages so this turn fits the model's context window…"
+        : slow
+          ? "Still waiting — the model is taking longer than usual. Keep waiting, or Stop and try another model."
+          : "Waiting for the model… a cold model can take a few seconds."}
     </p>
   );
 }
@@ -324,6 +339,8 @@ export function TranscriptError(props: {
    * slot was reserved for.
    */
   reference?: ReactNode;
+  /** The failure's correlation id, carried into "Get help". */
+  requestId?: string | null;
   onRetry?: () => void;
   /**
    * The answer stopped at the model's token limit rather than on a dropped
@@ -331,6 +348,11 @@ export function TranscriptError(props: {
    * ask again.
    */
   onContinue?: () => void;
+  /**
+   * Fold the conversation now: offered on `context`, the one failure a
+   * summary of the older messages fixes.
+   */
+  onCompact?: () => void;
   onDismiss?: () => void;
 }) {
   const copy = STREAM_ERROR_COPY[props.kind];
@@ -340,78 +362,71 @@ export function TranscriptError(props: {
   // A refusal is a deliberate outcome, not a failure: it is drawn as a
   // notice, not in the danger colour the faults use, because a red card
   // reads as "something broke" and as an accusation, and it is neither.
+  // An answer cut off at the token limit lost nothing that arrived, so it
+  // is the amber warning; everything else is the red fault.
   const notice = props.kind === "refusal";
+  const variant = notice ? "info" : props.kind === "truncated" ? "warning" : "danger";
+  const actions = (
+    <>
+      {copy.retryable && props.onRetry && (
+        <Button variant="outline" size="sm" onClick={props.onRetry}>
+          <RefreshCwIcon aria-hidden />
+          Retry
+        </Button>
+      )}
+      {props.onContinue && (
+        <Button variant="outline" size="sm" onClick={props.onContinue}>
+          Continue
+        </Button>
+      )}
+      {props.kind === "budget" && (
+        // The way out of the one refusal a retry can never fix: the balance,
+        // the reset date, and the upgrade are all on the Usage pane, so that
+        // is the link -- not "contact an admin".
+        // A plain anchor, not the router's <Link>: this is a leaf rendered
+        // by ChatStates.test.tsx and StatesPage.test.tsx without a
+        // RouterProvider, and <Link> throws outside one. UserMenu.tsx
+        // links /settings/account the same way.
+        <a href="/settings/usage" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          See usage and plans
+        </a>
+      )}
+      {props.kind === "context" && props.onCompact && (
+        <Button variant="outline" size="sm" onClick={props.onCompact}>
+          Compact conversation
+        </Button>
+      )}
+      {props.kind === "context" && (
+        // The guidance names the ways out; this is the one that needs no
+        // decision about models. Same plain anchor as the budget link.
+        <a href="/apps/chat" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          Start a new chat
+        </a>
+      )}
+      {/* A cut-off answer lost nothing and has its own way on; every other
+          failure gets a route to a person, carrying the id. */}
+      {!props.onContinue && <GetHelp size="sm" requestId={props.requestId} />}
+      {props.onDismiss && (
+        <Button variant="ghost" size="sm" onClick={props.onDismiss}>
+          Dismiss
+        </Button>
+      )}
+    </>
+  );
   return (
-    <div
+    <Alert
+      variant={variant}
       role={notice ? "status" : "alert"}
       data-error-kind={props.kind}
-      className={
-        notice
-          ? "my-4 rounded-xl border border-mw-border bg-mw-surface-raised p-4 text-sm text-mw-text"
-          : "my-4 rounded-xl border border-mw-danger bg-mw-danger-subtle p-4 text-sm text-mw-text"
-      }
+      title={copy.title}
+      className="my-4 px-4 py-3.5"
     >
-      <p className={notice ? "font-medium text-mw-text" : "font-medium text-mw-danger"}>{copy.title}</p>
-      <p className="mt-1 text-mw-text-muted">{guidance}</p>
+      <p className="text-mw-text-secondary">{guidance}</p>
       {props.reference && (
         <p className="mt-2 font-mono text-xs text-mw-text-muted">{props.reference}</p>
       )}
-      <div className="mt-3 flex items-center gap-2">
-        {copy.retryable && props.onRetry && (
-          <button
-            type="button"
-            onClick={props.onRetry}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-mw-border bg-mw-surface-raised px-3 py-1.5 text-sm font-medium hover:bg-mw-surface-hover"
-          >
-            <RefreshCwIcon className="size-3.5" aria-hidden />
-            Retry
-          </button>
-        )}
-        {props.onContinue && (
-          <button
-            type="button"
-            onClick={props.onContinue}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-mw-border bg-mw-surface-raised px-3 py-1.5 text-sm font-medium hover:bg-mw-surface-hover"
-          >
-            Continue
-          </button>
-        )}
-        {props.kind === "budget" && (
-          // The way out of the one refusal a retry can never fix: the balance,
-          // the reset date, and the upgrade are all on the Usage pane, so that
-          // is the link -- not "contact an admin".
-          // A plain anchor, not the router's <Link>: this is a leaf rendered
-          // by ChatStates.test.tsx and StatesPage.test.tsx without a
-          // RouterProvider, and <Link> throws outside one. UserMenu.tsx
-          // links /settings/account the same way.
-          <a
-            href="/settings/usage"
-            className="inline-flex items-center rounded-lg border border-mw-border bg-mw-surface-raised px-3 py-1.5 text-sm font-medium hover:bg-mw-surface-hover"
-          >
-            See usage and plans
-          </a>
-        )}
-        {props.kind === "context" && (
-          // The guidance names two ways out; this is the one that needs no
-          // decision about models. Same plain anchor as the budget link.
-          <a
-            href="/apps/chat"
-            className="inline-flex items-center rounded-lg border border-mw-border bg-mw-surface-raised px-3 py-1.5 text-sm font-medium hover:bg-mw-surface-hover"
-          >
-            Start a new chat
-          </a>
-        )}
-        {props.onDismiss && (
-          <button
-            type="button"
-            onClick={props.onDismiss}
-            className="rounded-lg px-2 py-1.5 text-sm text-mw-text-muted underline hover:text-mw-text"
-          >
-            Dismiss
-          </button>
-        )}
-      </div>
-    </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">{actions}</div>
+    </Alert>
   );
 }
 
@@ -422,24 +437,22 @@ export function TranscriptError(props: {
  */
 export function ConversationMissing() {
   return (
-    <div
+    <Alert
+      variant="info"
       role="alert"
       data-error-kind="missing"
-      className="my-4 rounded-xl border border-mw-border bg-mw-surface-raised p-4 text-sm text-mw-text"
+      title="This conversation is not available"
+      className="my-4 px-4 py-3.5"
     >
-      <p className="font-medium">This conversation is not available</p>
-      <p className="mt-1 text-mw-text-muted">
+      <p className="text-mw-text-secondary">
         It was deleted, or the link is not one of your conversations.
       </p>
       <div className="mt-3">
-        <a
-          href="/apps/chat"
-          className="inline-flex items-center rounded-lg border border-mw-border bg-mw-surface-raised px-3 py-1.5 text-sm font-medium hover:bg-mw-surface-hover"
-        >
+        <a href="/apps/chat" className={buttonVariants({ variant: "outline", size: "sm" })}>
           Start a new chat
         </a>
       </div>
-    </div>
+    </Alert>
   );
 }
 
@@ -455,9 +468,9 @@ export function OfflineBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="flex shrink-0 items-center gap-2 border-b border-mw-warning bg-mw-warning-subtle px-4 py-2 text-sm text-mw-warning-foreground"
+      className="flex shrink-0 items-center gap-2 border-b border-mw-warning-border bg-mw-warning-subtle px-4 py-2 text-sm text-mw-warning-body"
     >
-      <WifiOffIcon className="size-4 shrink-0" aria-hidden />
+      <WifiOffIcon className="size-4 shrink-0 text-mw-warning-foreground" aria-hidden />
       <span>
         You are offline. Sending is paused and your draft is kept — this clears itself the moment
         the connection is back.

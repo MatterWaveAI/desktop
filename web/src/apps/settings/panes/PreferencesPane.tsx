@@ -15,6 +15,12 @@ import {
 } from "../../../lib/desktopAuth";
 import { useThemePreference, type ThemePreference } from "../../../shell/theme";
 import type { Preferences } from "../../../types";
+import {
+  notificationPermission,
+  requestNotificationPermission,
+  useAnswerReadyPrefs,
+  writeAnswerReadyPrefs,
+} from "../../../shell/answerReady";
 import { PaneSection } from "../PaneSection";
 import {
   canSpeak,
@@ -189,6 +195,7 @@ function Toggle(props: {
  */
 function EmailPreferences() {
   const { i18n } = useLingui();
+  const { preference } = useLocalePreference();
   const [saved, setSaved] = useState<Preferences | null>(null);
   const [draft, setDraft] = useState<Preferences | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -220,9 +227,11 @@ function EmailPreferences() {
     setState("saving");
     setSaveError(null);
     try {
+      // The locale is the one this device speaks now, not the one loaded with
+      // the draft: a language picked since then must not be put back.
       const body = await apiFetch<Preferences>("/api/me/preferences", {
         method: "PUT",
-        json: draft,
+        json: { ...draft, locale: preference === DEVICE_LOCALE ? null : preference },
       });
       setSaved(body);
       setDraft(body);
@@ -231,7 +240,7 @@ function EmailPreferences() {
       setSaveError(err instanceof ApiError ? err.message : i18n._(msg`Could not save your preferences.`));
       setState("idle");
     }
-  }, [draft, i18n]);
+  }, [draft, i18n, preference]);
 
   if (loadError) {
     return (
@@ -322,6 +331,69 @@ function EmailPreferences() {
 }
 
 /**
+ * What happens when a reply finishes while this tab is hidden
+ * (shell/answerReady.ts): the title marker and icon dot unless quiet, and a
+ * system notification only once switched on here. The permission prompt is
+ * asked from this click and nowhere else; a browser that refuses leaves the
+ * toggle off and says how to undo it.
+ */
+function AnswerReadyChoice() {
+  const prefs = useAnswerReadyPrefs();
+  const [permission, setPermission] = useState(notificationPermission);
+  const [asking, setAsking] = useState(false);
+
+  async function setNotify(on: boolean) {
+    if (!on) {
+      writeAnswerReadyPrefs({ ...prefs, notify: false });
+      return;
+    }
+    setAsking(true);
+    const answer = await requestNotificationPermission();
+    setAsking(false);
+    setPermission(answer);
+    writeAnswerReadyPrefs({ ...prefs, notify: answer === "granted" });
+  }
+
+  return (
+    <div className="flex flex-col">
+      <Toggle
+        label={<Trans>Quiet</Trans>}
+        hint={
+          <Trans>
+            Do not mark the tab or send a notification when an answer finishes while you are
+            elsewhere.
+          </Trans>
+        }
+        checked={prefs.quiet}
+        onChange={(quiet) => writeAnswerReadyPrefs({ ...prefs, quiet })}
+      />
+      <Toggle
+        label={<Trans>System notification</Trans>}
+        hint={
+          <Trans>
+            Also show a notification from your browser. It names the conversation, never the
+            answer. Clicking it opens that conversation.
+          </Trans>
+        }
+        checked={prefs.notify && permission === "granted"}
+        disabled={prefs.quiet || asking || permission === "unsupported" || permission === "denied"}
+        onChange={(on) => void setNotify(on)}
+      />
+      <p aria-live="polite" className="text-sm text-mw-text-muted">
+        {permission === "unsupported" ? (
+          <Trans>This browser cannot show notifications.</Trans>
+        ) : permission === "denied" ? (
+          <Trans>
+            Notifications are blocked for this site. Allow them in your browser's site settings to
+            turn this on.
+          </Trans>
+        ) : null}
+      </p>
+    </div>
+  );
+}
+
+/**
  * Preferences: theme (this device), language (this device and the
  * account), email (this account) and -- where this browser can speak --
  * the voice and pace the read-aloud speaker button uses.
@@ -349,6 +421,13 @@ export function PreferencesPane() {
         description={t`Which mail this account receives, and what the app warns you about. Receipts and security mail are always sent.`}
       >
         <EmailPreferences />
+      </PaneSection>
+
+      <PaneSection
+        title={t`When an answer is ready`}
+        description={t`On this device, when a reply finishes while MatterWave is in a background tab: a count in the tab title and a dot on its icon, and a system notification if you turn it on.`}
+      >
+        <AnswerReadyChoice />
       </PaneSection>
 
       {canSpeak() && <ReadAloudChoice />}

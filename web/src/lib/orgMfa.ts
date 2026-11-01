@@ -1,3 +1,5 @@
+import { i18n } from "@lingui/core";
+import { msg, t } from "@lingui/core/macro";
 import { apiFetch } from "./api";
 
 /**
@@ -20,8 +22,8 @@ export interface MfaSettings {
 /** The policy as it stands, one sentence. */
 export function mfaStatusLine(required: boolean): string {
   return required
-    ? "Two-factor authentication is required. Every member must sign in with an authenticator app as well as their password."
-    : "Two-factor authentication is optional. Members may set up an authenticator app, but none has to.";
+    ? t`Two-factor authentication is required. Every member must sign in with an authenticator app as well as their password.`
+    : t`Two-factor authentication is optional. Members may set up an authenticator app, but none has to.`;
 }
 
 /**
@@ -29,11 +31,19 @@ export function mfaStatusLine(required: boolean): string {
  * password sign-in, no grace period, no refusal, existing sessions and SSO
  * sign-ins untouched.
  */
-export const MFA_REQUIRED_EXPLANATION = [
-  "A member who already has an authenticator carries on entering its code at sign-in.",
-  "A member who has none is not locked out: their next password sign-in pauses on a page that asks them to set one up, and finishes once they have. They are also given recovery codes for the day their phone is lost.",
-  "It takes effect at the next sign-in, with no grace period; sessions that are already open stay open. It applies to password sign-in only: a member who arrives through your identity provider has that provider's factors.",
-] as const;
+const EXPLANATION = [
+  msg`A member who already has an authenticator carries on entering its code at sign-in.`,
+  msg`A member who has none is not locked out: their next password sign-in pauses on a page that asks them to set one up, and finishes once they have. They are also given recovery codes for the day their phone is lost.`,
+  msg`It takes effect at the next sign-in, with no grace period; sessions that are already open stay open. It applies to password sign-in only: a member who arrives through your identity provider has that provider's factors.`,
+];
+
+// Each line is a getter, so it is read in the active language whenever the
+// pane maps over the list, rather than once when this module loads.
+export const MFA_REQUIRED_EXPLANATION: readonly string[] = EXPLANATION.reduce<string[]>(
+  (lines, line, index) =>
+    Object.defineProperty(lines, index, { get: () => i18n._(line), enumerable: true }),
+  [],
+);
 
 export function fetchMfaSettings(): Promise<MfaSettings> {
   return apiFetch<MfaSettings>("/api/org/mfa");

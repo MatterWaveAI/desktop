@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
+import { useLingui } from "@lingui/react/macro";
 import { managesOrg } from "../lib/auth";
 import { fetchBillingStatus, fetchUsage, type BillingStatus, type UsageSummary } from "../lib/billing";
 import { noticeFor } from "./billingNotice";
@@ -31,6 +32,7 @@ const BILLING_PANE_PATH = "/settings/billing";
 const REFRESH_MS = 60_000;
 
 export function BillingBanner() {
+  const { t } = useLingui();
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -85,7 +87,7 @@ export function BillingBanner() {
       {notice.tone === "warning" && (
         <button
           type="button"
-          aria-label="Dismiss"
+          aria-label={t`Dismiss`}
           onClick={() => setDismissed(notice.text)}
           className="shrink-0 text-mw-text-muted hover:text-mw-text"
         >

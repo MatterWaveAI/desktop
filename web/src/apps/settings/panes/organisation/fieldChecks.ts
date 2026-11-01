@@ -1,3 +1,4 @@
+import { t } from "@lingui/core/macro";
 import { failureMessage, splitValidationDetail } from "../../../../shell/authForms";
 
 /**
@@ -10,9 +11,9 @@ import { failureMessage, splitValidationDetail } from "../../../../shell/authFor
 const DOMAIN_SHAPE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$/i;
 
 export function validateDomain(domain: string): string | undefined {
-  if (domain === "") return "Enter a domain.";
+  if (domain === "") return t`Enter a domain.`;
   if (!DOMAIN_SHAPE.test(domain)) {
-    return "Enter just the domain, like example.com, without https://, a path or an @.";
+    return t`Enter just the domain, like example.com, without https://, a path or an @.`;
   }
   return undefined;
 }
@@ -22,13 +23,13 @@ export type IdpField = (typeof IDP_FIELD_NAMES)[number];
 
 export function validateIdp(values: Record<IdpField, string>): Partial<Record<IdpField, string>> {
   const errors: Partial<Record<IdpField, string>> = {};
-  if (values.name === "") errors.name = "Enter a name for the sign-in button.";
-  if (values.issuer === "") errors.issuer = "Enter the issuer URL.";
+  if (values.name === "") errors.name = t`Enter a name for the sign-in button.`;
+  if (values.issuer === "") errors.issuer = t`Enter the issuer URL.`;
   else if (!isHttpsUrl(values.issuer)) {
-    errors.issuer = "The issuer is a full URL starting with https://.";
+    errors.issuer = t`The issuer is a full URL starting with https://.`;
   }
-  if (values.client_id === "") errors.client_id = "Enter the client ID.";
-  if (values.client_secret === "") errors.client_secret = "Enter the client secret.";
+  if (values.client_id === "") errors.client_id = t`Enter the client ID.`;
+  if (values.client_secret === "") errors.client_secret = t`Enter the client secret.`;
   return errors;
 }
 

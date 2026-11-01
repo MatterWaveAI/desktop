@@ -1,3 +1,4 @@
+import { formatDate } from "../../../i18n/format";
 import { MICROS_PER_USD } from "../../../lib/billing";
 
 /**
@@ -36,22 +37,22 @@ export function capFieldText(micros: number): string {
   return (micros / MICROS_PER_USD).toFixed(2);
 }
 
-const MONTH_FORMAT = new Intl.DateTimeFormat(undefined, {
+const MONTH_FORMAT: Intl.DateTimeFormatOptions = {
   month: "long",
   year: "numeric",
   // The API's months are calendar months, not instants: read them in UTC so
   // the first of the month never slips back into the one before.
   timeZone: "UTC",
-});
+};
 
 /**
  * A billing month as a person says it: "2026-10" or a period start
- * "2026-10-01" becomes "October 2026" in the reader's locale. Anything
+ * "2026-10-01" becomes "October 2026" in the active locale. Anything
  * else is returned as given rather than shown as "Invalid Date".
  */
 export function formatMonth(value: string): string {
   const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value);
   if (!match) return value;
   const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));
-  return Number.isNaN(date.getTime()) ? value : MONTH_FORMAT.format(date);
+  return Number.isNaN(date.getTime()) ? value : formatDate(date, MONTH_FORMAT);
 }

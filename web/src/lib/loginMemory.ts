@@ -47,7 +47,8 @@ export function lastLoginMethod(): LoginMethod | null {
           kind: "sso",
           email: sso.email,
           provider: sso.provider,
-          providerName: sso.providerName ?? "your organisation",
+          providerName: sso.providerName ?? t`your organisation`,
+
         };
       }
     }

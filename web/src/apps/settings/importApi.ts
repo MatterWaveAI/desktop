@@ -1,3 +1,5 @@
+import { plural, t } from "@lingui/core/macro";
+import { formatNumber } from "../../i18n/format";
 import { ApiError, apiFetch } from "../../lib/api";
 
 /**
@@ -66,22 +68,25 @@ export function percentDone(record: ImportRecord): number {
   return Math.min(100, Math.round((record.conversations_done / record.conversations_total) * 100));
 }
 
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
-
-/** One line of what the import did, for the result card. */
+/** One line of what the import did, for the result card, in the active language. */
 export function summarize(record: ImportRecord): string {
   const source = SOURCE_NAMES[record.source] ?? record.source;
+  const created = record.conversations_created;
+  const existing = record.conversations_existing;
+  const skipped = record.conversations_skipped;
+  const messages = record.messages_created;
   const parts = [
-    `${plural(record.conversations_created, "conversation", "conversations")} imported from ${source}`,
-    plural(record.messages_created, "message", "messages"),
+    plural(created, {
+      one: `# conversation imported from ${source}`,
+      other: `# conversations imported from ${source}`,
+    }),
+    plural(messages, { one: "# message", other: "# messages" }),
   ];
-  if (record.conversations_existing > 0) {
-    parts.push(`${record.conversations_existing} already here`);
+  if (existing > 0) {
+    parts.push(t`${existing} already here`);
   }
-  if (record.conversations_skipped > 0) {
-    parts.push(`${record.conversations_skipped} skipped`);
+  if (skipped > 0) {
+    parts.push(t`${skipped} skipped`);
   }
   return parts.join(" · ");
 }
@@ -89,14 +94,23 @@ export function summarize(record: ImportRecord): string {
 /** What was left behind, as a sentence; empty when nothing was. */
 export function leftBehind(record: ImportRecord): string {
   const notes: string[] = [];
+  const branches = record.branches_dropped;
+  const attachments = record.attachments_skipped;
   if (record.branches_dropped > 0) {
     notes.push(
-      `${plural(record.branches_dropped, "message", "messages")} on other branches of the original conversations ${record.branches_dropped === 1 ? "was" : "were"} not imported; each conversation is the thread as it was last shown.`,
+      plural(branches, {
+        one: "# message on other branches of the original conversations was not imported; each conversation is the thread as it was last shown.",
+        other:
+          "# messages on other branches of the original conversations were not imported; each conversation is the thread as it was last shown.",
+      }),
     );
   }
   if (record.attachments_skipped > 0) {
     notes.push(
-      `${plural(record.attachments_skipped, "attachment", "attachments")} ${record.attachments_skipped === 1 ? "was" : "were"} not imported: exports do not carry the files.`,
+      plural(attachments, {
+        one: "# attachment was not imported: exports do not carry the files.",
+        other: "# attachments were not imported: exports do not carry the files.",
+      }),
     );
   }
   return notes.join(" ");
@@ -105,16 +119,17 @@ export function leftBehind(record: ImportRecord): string {
 /** The line to show when the upload was refused; the API's own wording where it has one. */
 export function importFailureMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    if (err.status === 413) return "That file is larger than the 100 MB limit.";
+    if (err.status === 413) return t`That file is larger than the 100 MB limit.`;
     if (err.status === 402 || err.status === 403 || err.status === 409) return err.message;
     if (err.status === 422 || err.status === 429) return err.message;
     if (err.status === 503) return err.message;
   }
-  return "The file could not be uploaded. Try again in a moment.";
+  return t`The file could not be uploaded. Try again in a moment.`;
 }
 
 export function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n < 1024) return `${formatNumber(n)} B`;
+  if (n < 1024 * 1024) return `${formatNumber(Math.round(n / 1024))} KB`;
+  const mb = n / (1024 * 1024);
+  return `${formatNumber(mb, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB`;
 }

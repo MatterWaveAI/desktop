@@ -298,6 +298,30 @@ describe("the inline transcript error", () => {
       false,
     );
   });
+
+  it("offers Compact inline on a context overflow when the thread can fold", () => {
+    const onCompact = vi.fn();
+    render(<TranscriptError kind="context" onCompact={onCompact} />);
+    const button = [...container!.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Compact conversation"),
+    );
+    expect(button).toBeDefined();
+    act(() => button!.click());
+    expect(onCompact).toHaveBeenCalledOnce();
+    expect(STREAM_ERROR_COPY.context.guidance).toMatch(/Compact it/);
+  });
+
+  it("says a fold is being written while the turn waits for it", () => {
+    render(<AwaitingFirstToken folding />);
+    expect(container!.textContent).toMatch(/Summarising the earlier messages/);
+  });
+
+  it("does not offer Compact on any other failure", () => {
+    render(<TranscriptError kind="gateway" onCompact={() => undefined} />);
+    expect(
+      [...container!.querySelectorAll("button")].some((b) => b.textContent?.includes("Compact")),
+    ).toBe(false);
+  });
 });
 
 describe("the two streaming phases", () => {
@@ -332,6 +356,9 @@ describe("classifyStreamError", () => {
     ).toBe("budget");
     expect(STREAM_ERROR_COPY.budget.retryable).toBe(false);
     expect(classifyStreamError("context length exceeded for this model")).toBe("context");
+    // The API's own frame for a full window carries a code; its sentence is
+    // never matched.
+    expect(classifyStreamError("anything at all", undefined, "context")).toBe("context");
     expect(classifyStreamError("token limit: context window is 8192")).toBe("context");
     expect(classifyStreamError("", 401)).toBe("session");
     expect(classifyStreamError("session expired")).toBe("session");

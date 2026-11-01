@@ -1,3 +1,5 @@
+import { t } from "@lingui/core/macro";
+
 /**
  * The browser half of a passkey ceremony, and nothing else.
  *
@@ -163,8 +165,9 @@ export function credentialToJSON(credential: PublicKeyCredential): JsonObject {
 
 /** A person closing the prompt, a timeout, or no matching passkey on this device. */
 export class PasskeyCancelled extends Error {
-  constructor(message = "The passkey prompt was closed.") {
-    super(message);
+  constructor(message?: string) {
+    super(message ?? t`The passkey prompt was closed.`);
+
   }
 }
 

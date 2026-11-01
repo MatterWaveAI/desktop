@@ -1,3 +1,5 @@
+import { plural } from "@lingui/core/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Badge, StatusDot } from "../../components/ui/badge";
 import { ErrorState, LoadingSkeleton } from "../../patterns";
 import { fetchAttachmentScans, fetchHealth, type AdminHealth } from "./adminApi";
@@ -14,10 +16,11 @@ import { useLoad } from "./useLoad";
  * on its own sends the operator to the config to find out which variable.
  */
 export function HealthTab() {
+  const { t } = useLingui();
   const [state, reload] = useLoad(fetchHealth, "health");
   if (state.phase === "loading") return <LoadingSkeleton rows={6} />;
   if (state.phase === "error") {
-    return <ErrorState title="Could not load system health" message={state.message} onRetry={reload} />;
+    return <ErrorState title={t`Could not load system health`} message={state.message} onRetry={reload} />;
   }
   const health = state.data;
   return (
@@ -36,36 +39,41 @@ export function HealthTab() {
  * not have, and that must not take the rest of the page down with it.
  */
 function AttachmentScanning() {
+  const { t } = useLingui();
   const [state] = useLoad(fetchAttachmentScans, "attachment-scans");
   if (state.phase !== "ready") return null;
   const { scanner, counts } = state.data;
   const on = scanner !== "none";
+  const scanning = counts.scanning;
+  const failed = counts.scan_failed;
+  const clean = counts.clean;
+  const quarantined = counts.infected;
   return (
     <section aria-labelledby="health-scanning">
       <h3 id="health-scanning" className="text-sm font-medium text-mw-text">
-        Attachment scanning
+        <Trans>Attachment scanning</Trans>
       </h3>
-      <ul className="mt-3 space-y-2" aria-label="Attachment scanning">
+      <ul className="mt-3 space-y-2" aria-label={t`Attachment scanning`}>
         <Check
           ok={on}
-          label="Malware scanner"
+          label={t`Malware scanner`}
           detail={
             on
-              ? `Uploads are scanned by ${scanner} before they can be read.`
-              : "MW_ATTACHMENT_SCANNER is none: uploads are served without being scanned."
+              ? t`Uploads are scanned by ${scanner} before they can be read.`
+              : t`MW_ATTACHMENT_SCANNER is none: uploads are served without being scanned.`
           }
-          offLabel="off"
+          offLabel={t`off`}
         />
         <Check
           ok={counts.scan_failed === 0}
-          label="Scans waiting on a verdict"
-          detail={`${counts.scanning} scanning, ${counts.scan_failed} could not be scanned and will be retried.`}
-          offLabel="retrying"
+          label={t`Scans waiting on a verdict`}
+          detail={t`${scanning} scanning, ${failed} could not be scanned and will be retried.`}
+          offLabel={t`retrying`}
         />
         <Check
           ok={true}
-          label="Decided"
-          detail={`${counts.clean} clean, ${counts.infected} quarantined (never served).`}
+          label={t`Decided`}
+          detail={t`${clean} clean, ${quarantined} quarantined (never served).`}
         />
       </ul>
     </section>
@@ -73,17 +81,24 @@ function AttachmentScanning() {
 }
 
 function Build({ health }: { health: AdminHealth }) {
+  const { t } = useLingui();
   return (
     <section aria-labelledby="health-build">
       <h3 id="health-build" className="text-sm font-medium text-mw-text">
-        Build
+        <Trans>Build</Trans>
       </h3>
-      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" aria-label="Build">
-        <dt className="text-mw-text-muted">Version</dt>
+      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" aria-label={t`Build`}>
+        <dt className="text-mw-text-muted">
+          <Trans>Version</Trans>
+        </dt>
         <dd>{health.version}</dd>
-        <dt className="text-mw-text-muted">Revision</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Revision</Trans>
+        </dt>
         <dd className="font-mono text-xs">{health.revision}</dd>
-        <dt className="text-mw-text-muted">Release</dt>
+        <dt className="text-mw-text-muted">
+          <Trans>Release</Trans>
+        </dt>
         <dd className="font-mono text-xs">{health.release}</dd>
       </dl>
     </section>
@@ -91,40 +106,46 @@ function Build({ health }: { health: AdminHealth }) {
 }
 
 function Dependencies({ health }: { health: AdminHealth }) {
+  const { t } = useLingui();
   const { database, upstream } = health;
   const migrated = database.configured && database.pending_migrations.length === 0;
+  const modelCount = upstream.models ?? 0;
+  const migration = database.migration ?? t`none`;
+  const latestMigration = database.latest_migration;
+  // Migration file names are identifiers, listed as they are.
+  const pending = database.pending_migrations.join(", ");
   return (
     <section aria-labelledby="health-dependencies">
       <h3 id="health-dependencies" className="text-sm font-medium text-mw-text">
-        Dependencies
+        <Trans>Dependencies</Trans>
       </h3>
-      <ul className="mt-3 space-y-2" aria-label="Dependencies">
+      <ul className="mt-3 space-y-2" aria-label={t`Dependencies`}>
         <Check
           ok={upstream.status === "ok"}
-          label="Model gateway"
+          label={t`Model gateway`}
           detail={
             upstream.status === "ok"
-              ? `Reachable, ${upstream.models ?? 0} models listed.`
-              : (upstream.detail ?? "Not reachable. History and settings still work; chat does not.")
+              ? plural(modelCount, { one: "Reachable, # model listed.", other: "Reachable, # models listed." })
+              : (upstream.detail ?? t`Not reachable. History and settings still work; chat does not.`)
           }
         />
         <Check
           ok={database.configured}
-          label="Database"
+          label={t`Database`}
           detail={
             database.configured
-              ? `Postgres is configured; migration ${database.migration ?? "none"} applied.`
-              : "MW_DATABASE_URL is not set. Keys, budgets, members and moderation all answer 503."
+              ? t`Postgres is configured; migration ${migration} applied.`
+              : t`MW_DATABASE_URL is not set. Keys, budgets, members and moderation all answer 503.`
           }
         />
         {database.configured && (
           <Check
             ok={migrated}
-            label="Migrations"
+            label={t`Migrations`}
             detail={
               migrated
-                ? `Up to date at ${database.latest_migration}.`
-                : `Pending: ${database.pending_migrations.join(", ")}. The image carries ${database.latest_migration}; run the migrate step.`
+                ? t`Up to date at ${latestMigration}.`
+                : t`Pending: ${pending}. The image carries ${latestMigration}; run the migrate step.`
             }
           />
         )}
@@ -134,66 +155,68 @@ function Dependencies({ health }: { health: AdminHealth }) {
 }
 
 function Capabilities({ health }: { health: AdminHealth }) {
+  const { t } = useLingui();
   return (
     <section aria-labelledby="health-capabilities">
       <h3 id="health-capabilities" className="text-sm font-medium text-mw-text">
-        Capabilities
+        <Trans>Capabilities</Trans>
       </h3>
       <p className="mt-1 text-sm text-mw-text-muted">
-        Off is the shipped state for each of these. On means a credential exists, not that it works.
+        <Trans>Off is the shipped state for each of these. On means a credential exists, not that it works.</Trans>
       </p>
-      <ul className="mt-3 space-y-2" aria-label="Capabilities">
+      <ul className="mt-3 space-y-2" aria-label={t`Capabilities`}>
         <Check
           ok={health.billing_enabled}
-          label="Billing"
+          label={t`Billing`}
           detail={
             health.billing_enabled
-              ? "Stripe is configured; Checkout and the webhook are live."
-              : "Off until both MW_STRIPE_API_KEY and MW_STRIPE_WEBHOOK_SECRET are set. The Billing tab has the detail."
+              ? t`Stripe is configured; Checkout and the webhook are live.`
+              : t`Off until both MW_STRIPE_API_KEY and MW_STRIPE_WEBHOOK_SECRET are set. The Billing tab has the detail.`
           }
-          offLabel="off"
+          offLabel={t`off`}
         />
         <Check
           ok={health.moderation}
-          label="Content moderation"
+          label={t`Content moderation`}
           detail={
             health.moderation
-              ? "Prompts are screened before they are sent."
-              : "No MW_MODERATION_API_KEY: nothing is screened, and the Moderation tab's flags stay empty."
+              ? t`Prompts are screened before they are sent.`
+              : t`No MW_MODERATION_API_KEY: nothing is screened, and the Moderation tab's flags stay empty.`
           }
-          offLabel="off"
+          offLabel={t`off`}
         />
         <Check
           ok={health.web_search}
-          label="Web search"
+          label={t`Web search`}
           detail={
             health.web_search
-              ? "The web_search tool can reach its provider."
-              : "No MW_SEARCH_API_KEY: the tool is registered but every search reports unavailable."
+              ? t`The web_search tool can reach its provider.`
+              : t`No MW_SEARCH_API_KEY: the tool is registered but every search reports unavailable.`
           }
-          offLabel="off"
+          offLabel={t`off`}
         />
         <Check
           ok={health.upstream_enforcement}
-          label="Upstream limit enforcement"
+          label={t`Upstream limit enforcement`}
           detail={
             health.upstream_enforcement
-              ? "Virtual keys are on; the gateway enforces each org's limit as a backstop."
-              : "MW_LITELLM_VIRTUAL_KEYS is off, so the app's own gate is the only enforcement."
+              ? t`Virtual keys are on; the gateway enforces each org's limit as a backstop.`
+              : t`MW_LITELLM_VIRTUAL_KEYS is off, so the app's own gate is the only enforcement.`
           }
-          offLabel="off"
+          offLabel={t`off`}
         />
       </ul>
     </section>
   );
 }
 
-function Check({ ok, label, detail, offLabel = "down" }: { ok: boolean; label: string; detail: string; offLabel?: string }) {
+function Check({ ok, label, detail, offLabel }: { ok: boolean; label: string; detail: string; offLabel?: string }) {
+  const { t } = useLingui();
   return (
     <li className="flex items-start gap-2 text-sm">
       <Badge variant={ok ? "positive" : "destructive"} className="mt-0.5 shrink-0">
         <StatusDot tone={ok ? "positive" : "danger"} />
-        {ok ? "ok" : offLabel}
+        {ok ? t`ok` : (offLabel ?? t`down`)}
       </Badge>
       <span>
         <span className={ok ? "text-mw-text" : "font-medium text-mw-text"}>{label}</span>
