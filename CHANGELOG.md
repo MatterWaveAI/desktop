@@ -43,6 +43,11 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   `web/` is synced to, `spa/patches/` holds the desktop's changes one file
   at a time, and CI fails when `web/` is anything other than that commit
   plus those patches (`pnpm spa:check`).
+- **The desktop's changes to the SPA are a list CI holds it to**
+  (`pnpm spa:drift`, `scripts/web-drift.mjs`): every file in `web/` that
+  differs from the platform is either in `spa/adapted.json`, with the
+  reason, or fails the build. Pointed at a platform checkout and a commit,
+  the same script measures how far `web/` is behind.
 
 - **Releases cover every desktop target and sign what the secrets
   allow**: Windows arm64 (NSIS), macOS universal (Apple silicon and Intel

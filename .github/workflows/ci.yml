@@ -44,6 +44,12 @@ jobs:
       # web/ must be spa/upstream.json's platform commit plus spa/patches,
       # exactly: an edit to web/ that skipped `pnpm spa:refresh` fails here.
       - run: pnpm spa:check
+      # ...and the files that differ from that commit are only the ones
+      # spa/adapted.json lists: a platform change ported by hand, or an
+      # edit to a file the desktop copies unchanged, fails here even when
+      # `spa:refresh` wrote it a patch. Against the pin, so no platform
+      # checkout is needed.
+      - run: pnpm spa:drift
       - run: pnpm test:scripts
 
   web:
