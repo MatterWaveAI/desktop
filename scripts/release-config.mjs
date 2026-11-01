@@ -1,8 +1,12 @@
 // Writes src-tauri/tauri.release.json, merged over tauri.conf.json by
 // `tauri build --config`. The committed config carries placeholders only: the
-// updater public key and the per-channel endpoint belong to the release job,
-// which has them in its secrets and environment, not to the repository.
+// updater public key, the per-channel endpoint and the API's origin belong to
+// the release job, which has them in its secrets and environment, not to the
+// repository.
 //
+//   MW_DESKTOP_BASE_URL      the API the build talks to (the Rust side reads
+//                            it at build time too); the page's CSP may connect
+//                            to its origin and to no other host
 //   MW_UPDATER_PUBKEY        the minisign public key (`tauri signer generate`)
 //   MW_DESKTOP_CHANNEL       the channel, one per MW_ENV (e.g. dev, staging, prod)
 //   MW_DESKTOP_UPDATES_URL   where the release job publishes manifests
@@ -11,10 +15,70 @@
 //                            signing secrets are absent (the workflow's
 //                            graceful path); plain installers, no manifests
 //
+// `--out <file>` writes somewhere else (the tests do).
+//
 // The private key never passes through here: the Tauri bundler reads it from
 // TAURI_SIGNING_PRIVATE_KEY when it signs the updater artifacts.
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+const outArg = process.argv.indexOf("--out");
+const out =
+  outArg >= 0
+    ? process.argv[outArg + 1]
+    : fileURLToPath(new URL("../src-tauri/tauri.release.json", import.meta.url));
+
+/**
+ * The committed CSP with `connect-src` narrowed to the page itself, the IPC
+ * bridge and the API's origin. The committed config allows any https host
+ * because it cannot know the API; a release can, and script injected into
+ * the page must not reach anywhere else. The webview never talks to the
+ * identity provider -- sign-in and refresh are native -- so the issuer is
+ * not on the list.
+ */
+function pinnedCsp(csp, origin) {
+  return csp
+    .split(";")
+    .map((directive) => directive.trim())
+    .filter(Boolean)
+    .map((directive) =>
+      directive.split(/\s+/)[0] === "connect-src"
+        ? `connect-src 'self' ipc: http://ipc.localhost ${origin}`
+        : directive,
+    )
+    .join("; ");
+}
+
+/** The API's origin: https, or http on loopback only. */
+function apiOrigin(raw) {
+  let url;
+  try {
+    url = new URL(raw ?? "");
+  } catch {
+    console.error("release-config: missing or malformed MW_DESKTOP_BASE_URL");
+    process.exit(1);
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    console.error(`release-config: MW_DESKTOP_BASE_URL must be https, not ${url.origin}`);
+    process.exit(1);
+  }
+  return url.origin;
+}
+
+const committed = JSON.parse(
+  readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+);
+const security = {
+  csp: pinnedCsp(committed.app.security.csp, apiOrigin(process.env.MW_DESKTOP_BASE_URL)),
+};
+
+// Tauri versions must be semver; MW_RELEASE is used when it is one so the
+// app and the API report the same string.
+const version =
+  process.env.MW_RELEASE && /^\d+\.\d+\.\d+/.test(process.env.MW_RELEASE)
+    ? process.env.MW_RELEASE
+    : undefined;
 
 const unsignedOk = process.env.MW_DESKTOP_UNSIGNED === "1";
 const updaterEnv = ["MW_UPDATER_PUBKEY", "MW_DESKTOP_UPDATES_URL"];
@@ -36,13 +100,9 @@ if (missingUpdater.length) {
     "release-config: MW_DESKTOP_UNSIGNED=1 without " +
       `${missingUpdater.join(", ")} -- building UNSIGNED installers without the updater`,
   );
-  const unsigned = {};
-  if (process.env.MW_RELEASE && /^\d+\.\d+\.\d+/.test(process.env.MW_RELEASE)) {
-    unsigned.version = process.env.MW_RELEASE;
-  }
-  const unsignedOut = fileURLToPath(new URL("../src-tauri/tauri.release.json", import.meta.url));
-  writeFileSync(unsignedOut, `${JSON.stringify(unsigned, null, 2)}\n`);
-  console.log(`release-config: wrote ${unsignedOut} (unsigned, no updater)`);
+  const unsigned = { app: { security }, ...(version ? { version } : {}) };
+  writeFileSync(out, `${JSON.stringify(unsigned, null, 2)}\n`);
+  console.log(`release-config: wrote ${out} (unsigned, no updater)`);
   process.exit(0);
 }
 
@@ -58,6 +118,7 @@ if (!/^[a-z0-9-]+$/.test(channel)) {
 const base = process.env.MW_DESKTOP_UPDATES_URL.replace(/\/+$/, "");
 
 const config = {
+  app: { security },
   bundle: { createUpdaterArtifacts: true },
   plugins: {
     updater: {
@@ -67,13 +128,8 @@ const config = {
       endpoints: [`${base}/desktop/${channel}/{{target}}/{{arch}}/{{current_version}}`],
     },
   },
+  ...(version ? { version } : {}),
 };
-// Tauri versions must be semver; MW_RELEASE is used when it is one so the
-// app and the API report the same string.
-if (process.env.MW_RELEASE && /^\d+\.\d+\.\d+/.test(process.env.MW_RELEASE)) {
-  config.version = process.env.MW_RELEASE;
-}
 
-const out = fileURLToPath(new URL("../src-tauri/tauri.release.json", import.meta.url));
 writeFileSync(out, `${JSON.stringify(config, null, 2)}\n`);
 console.log(`release-config: wrote ${out} for channel ${channel}`);

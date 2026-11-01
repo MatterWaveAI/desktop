@@ -20,6 +20,14 @@ the API's `MW_RELEASE` all report it).
   at a time, and CI fails when `web/` is anything other than that commit
   plus those patches (`pnpm spa:check`).
 
+### Security
+
+- **The packaged app's CSP names the one host it talks to**: `connect-src`
+  allowed any https host, so injected script could send data anywhere.
+  `scripts/release-config.mjs` now rewrites it to the page itself, the IPC
+  bridge and the origin of `MW_DESKTOP_BASE_URL`, which a release must
+  set (https, or http on loopback).
+
 ### Fixed
 
 - **GitHub runs the CI workflow again**: the Rust job read `runner.temp`

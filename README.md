@@ -153,7 +153,11 @@ The webview may call only the app's own sixteen commands (`src-tauri/capabilitie
 no filesystem, shell or HTTP plugin is exposed to it. The page runs under a restrictive CSP
 (`tauri.conf.json`): no remote script (one hash, for the theme boot script inlined to avoid a
 flash), `wasm-unsafe-eval` for the syntax highlighter, and network access only to the page's own
-origin plus https for the API.
+origin and the IPC bridge plus, in the committed config, any https host. A release narrows that
+last part to the API: `scripts/release-config.mjs` rewrites `connect-src` to the origin of
+`MW_DESKTOP_BASE_URL` and nothing else, so script injected into the packaged app cannot reach any
+other host. The webview never talks to the identity provider (sign-in and refresh are native), so
+the issuer is not on the list.
 
 ### Pairing this machine as a device
 
@@ -247,6 +251,7 @@ The endpoint and key come from the release job. `pnpm build:release` runs
 
 | Variable | Meaning |
 |---|---|
+| `MW_DESKTOP_BASE_URL` | The API; required. Its origin is the only host the page's CSP may connect to. |
 | `MW_UPDATER_PUBKEY` | Public half of the updater key (`pnpm tauri signer generate`). |
 | `MW_DESKTOP_CHANNEL` | One channel per `MW_ENV` (`dev`, `staging`, `prod`). |
 | `MW_DESKTOP_UPDATES_URL` | Where the release job publishes manifests. |

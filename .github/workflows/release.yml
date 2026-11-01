@@ -101,10 +101,12 @@ jobs:
             echo "MW_DESKTOP_UNSIGNED=1" >> "$GITHUB_ENV"
             echo "::warning::Signing secrets absent -- building UNSIGNED installers without the updater."
           fi
-      - name: Write the updater build config (scripts/release-config.mjs)
-        # The tag is v0.2.2; the app version is 0.2.2, so the v goes.
+      - name: Write the release build config (scripts/release-config.mjs)
+        # The tag is v0.2.2; the app version is 0.2.2, so the v goes. The
+        # config pins the page's CSP to the API's origin as well.
         run: MW_RELEASE="${GITHUB_REF_NAME#v}" node scripts/release-config.mjs
         env:
+          MW_DESKTOP_BASE_URL: ${{ vars.MW_DESKTOP_BASE_URL || 'https://app.matterwave.ai' }}
           MW_UPDATER_PUBKEY: ${{ secrets.MW_UPDATER_PUBKEY }}
           MW_DESKTOP_CHANNEL: ${{ vars.MW_DESKTOP_CHANNEL || 'prod' }}
           MW_DESKTOP_UPDATES_URL: ${{ secrets.MW_DESKTOP_UPDATES_URL }}
