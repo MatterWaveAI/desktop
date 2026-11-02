@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useHeaderSlot } from "../../shell/headerSlot";
 import { Button } from "../../components/ui/button";
@@ -76,6 +76,9 @@ import { ReportDialog } from "./ReportDialog";
 import { ShareDialog } from "./ShareDialog";
 import { TemporaryNotice, TemporaryToggle } from "./TemporaryChat";
 import { ConnectorNotice } from "./ConnectorSource";
+import { AgentToggle } from "../agent/AgentToggle";
+import { useAgentEnabled } from "../agent/useAgentEnabled";
+import { activeModel, agentAvailability } from "../agent/availability";
 import { fetchFeedback, type Feedback } from "./feedback";
 import { COMPACT_HINT, CompactionDivider, ContextMeter, SummaryMarker } from "./CompactionDivider";
 import { DictationButton, DictationNotices } from "./DictationButton";
@@ -118,6 +121,10 @@ import {
 const REATTACH_FIRST_MS = 750;
 /** How many looks, doubling the wait each time, before the turn is left as it is. */
 const REATTACH_TRIES = 4;
+
+// Agent mode (desktop only, off unless turned on in Preferences) loads as
+// its own chunk the first time the toggle is switched on.
+const AgentPanel = lazy(() => import("../agent/AgentPanel").then((m) => ({ default: m.AgentPanel })));
 
 /** Chat, mounted as app #1 through the app registry. */
 export function ChatPage() {
@@ -743,6 +750,14 @@ function ThreadRuntime(props: {
   // conversation either; unlike a support session it can still be forked.
   const locked = readOnly || source !== null;
 
+  // Agent mode: offered on a new chat once the person turned it on in
+  // Preferences (the desktop's native setting), greyed out when the org or
+  // the model rules it out. While on, the agent panel replaces the thread.
+  const agentEnabled = useAgentEnabled();
+  const [agentOn, setAgentOn] = useState(false);
+  const agent = agentAvailability(shell.principal, activeModel(models, selectedModel, defaultModel));
+  const showAgent = agentEnabled && agentOn && !readOnly;
+
   // What is being reported: the whole conversation, or one reply by id.
   // Null closes the dialog, and the dialog is unmounted with it so the next
   // report starts from a clean form rather than the last one's note.
@@ -877,8 +892,16 @@ function ThreadRuntime(props: {
           instructions={props.instructions}
           onChanged={props.onInstructionsChanged}
         />
+        {agentEnabled && conversationId === null && !readOnly && (
+          <AgentToggle
+            on={agentOn}
+            onChange={setAgentOn}
+            unavailable={agent.reason}
+            disabled={sending}
+          />
+        )}
         {/* Only before the first send: the flag is fixed at creation. */}
-        {conversationId === null && (
+        {conversationId === null && !showAgent && (
           <TemporaryToggle
             on={temporary}
             disabled={sending}
@@ -969,8 +992,17 @@ function ThreadRuntime(props: {
           }}
         />
       )}
-      {temporary && <TemporaryNotice />}
+      {temporary && !showAgent && <TemporaryNotice />}
       {props.origin !== null && <BranchedFrom origin={props.origin} />}
+      {showAgent ? (
+        <Suspense fallback={<TranscriptSkeleton />}>
+          <AgentPanel
+            model={selectedModel}
+            unavailable={agent.reason}
+            onConversationCreated={() => void shell.reloadConversations()}
+          />
+        </Suspense>
+      ) : (
       <ThreadView
         conversationId={conversationId}
         reattaching={props.reattaching}
@@ -1031,6 +1063,7 @@ function ThreadRuntime(props: {
         feedback={feedback}
         onFeedbackChange={onFeedbackChange}
       />
+      )}
     </div>
   );
 }

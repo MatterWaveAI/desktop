@@ -24,6 +24,7 @@ import {
   writeAnswerReadyPrefs,
 } from "../../../shell/answerReady";
 import { PaneSection } from "../PaneSection";
+import { AgentModeChoice } from "../../agent/AgentModeChoice";
 import {
   canSpeak,
   DEFAULT_READ_ALOUD,
@@ -437,6 +438,8 @@ export function PreferencesPane() {
       {isDesktop() && <GlobalHotkeyChoice />}
 
       {isDesktop() && <LaunchAtLoginChoice />}
+
+      {isDesktop() && <AgentModeChoice />}
     </div>
   );
 }

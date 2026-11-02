@@ -21,6 +21,34 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   "Add a passkey in your browser", which opens the same pane of the web
   app in the system browser, where passkeys can be made; the note beside
   it says why the window cannot make one itself.
+- **Agent mode, off by default and not for release until the agent and tool-use security review
+  signs off** (coding-clients parity's native tool host): a local agent loop on new chats behind
+  an Agent toggle, offered only after the person turns agent mode on in Preferences (a native
+  confirmation). The model works in
+  a folder chosen in the OS folder picker through the shared tool contract; the loop runs in the
+  SPA against `/v1/chat/completions` (tool calls come back unexecuted, results go back as
+  `role: "tool"`, `metadata.conversation_id` stores the run), and every file and process
+  operation happens in a native tool host (`src-tauri/src/agent`) behind one allow-listed command
+  per tool -- no fs, shell or dialog plugin reaches the webview. The host confines every path
+  (`..`, absolute outside, links out, the deny list plus `.matterwaveignore`), fixes each run's
+  mode (`plan` is read-only whatever the webview asks), applies a write only as previewed and
+  after a checkpoint, and runs `run_shell` with a timeout, a 64 KiB output cap and a process-tree
+  kill on Stop (a job object on Windows, a process group on Unix). Modes plan / ask (default) /
+  auto-edit / yolo (each of the last two confirmed natively once per folder per session; yolo
+  never saved); unified diffs to read before the native approval below; step and token caps; the chat's budget copy on a 402 and a rate-limit copy on a 429;
+  greyed out when `/api/me` has `local_agent_tools: false` or the model `supports_tools: false`.
+  Also `/approval-mode`, `/restore`, `/init`, `@path`, Shift+Tab through the modes, and a trusted
+  folder's `MATTERWAVE.md` / `AGENTS.md`. The contract is the Python SDK's `contract.json`, copied,
+  and tested against in Rust and in the SPA. README: "Agent mode".
+- **Agent mode: approval is native.** Every `run_shell` in ask and auto-edit, every applied write
+  in ask, a write to `MATTERWAVE.md` / `AGENTS.md` / `MATTERWAVE.local.md` in auto-edit, starting
+  auto-edit or yolo (once per folder per session) and every `/restore` are confirmed in an OS
+  dialog the host raises from inside the call, so script in the webview that calls the commands
+  directly cannot skip it. The dialog shows the command whole (one too long to show whole is
+  refused) or the file's full path and changed lines, with hidden and bidirectional characters
+  spelled out; Cancel is the default; one question at a time; Stop answers an open one no; after a
+  yes the write is recomputed and lands only if the file is still what was shown. The panel keeps
+  the diff for reading, and its Apply… leads to the dialog. The mode picker is locked during a run.
 
 ### Changed
 
@@ -78,6 +106,27 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   License 2.0 and `NOTICE` names the copyright holder; `package.json`,
   `Cargo.toml` and the Tauri bundle declare `Apache-2.0`, and the Windows
   installers show the licence.
+- **Agent mode speaks agent contract 1.2.0** (none of it released). The host and the SPA take the
+  SDKs' 1.2 contract (`contract.json` and the shared conformance cases, copied byte for byte; the
+  TypeScript helpers re-vendored with `web/scripts/vendor-agent-sdk.mjs`), and the Rust host runs
+  every one of the contract's conformance cases (`paths`, `tools`, `ignore`, `shell`,
+  `alias_roots`, with the `links` and `fifos` the platform can make) in `cargo test`. Visible to the model: read_file has no LF after its last line; list_dir lists
+  protected entries and says "has nothing to list" when empty; glob matches a pattern without `/`
+  at any depth and ignores case; grep cuts lines at 400 characters and skips files over 4 MiB;
+  search reads `.gitignore` and `.matterwaveignore` in every folder from the root down (and no
+  longer `.git/info/exclude` or files above the root), case-insensitively, files before
+  subfolders; run_shell says `Exit code N` and keeps the head and tail of long output around a
+  middle marker; refusals and the person's no use the contract's sentences (`rejected`,
+  `unknown_tool`, `mode`); a whole-number `timeout_s` is required. Context files go in the
+  contract's fenced "Project instructions" section in its order (MATTERWAVE.md, AGENTS.md, then
+  the person's own MATTERWAVE.local.md, which wins), 32,768 characters each. Windows aliases are
+  refused on every platform with the contract's `stream`, `trailing`, `device` and `unc` codes,
+  in the names below the root only, so a root inside a folder such as `con` still works. 1.2's
+  fixes: a link that loops is the refusal `loop`; a pipe, socket or device is `special_file` for
+  every read tool, never opened, and left out of searches; a glob class reads the same in every
+  client (`!`/`^` negates, a leading `]` is literal) and a backwards range is `invalid_glob`; an
+  ignore or deny file's byte-order mark is dropped and an invalid line skipped, as git does; and
+  grep stops at 30 s with `timeout`.
 
 ### Security
 
@@ -93,6 +142,33 @@ release's section is its GitHub release notes (`scripts/release-check.mjs`).
   (`.gitleaks.toml` allows the tests' made-up ones), and Renovate's
   weekly grouped updates (`renovate.json`) leave `web/` alone: its
   dependencies come with the platform's SPA.
+- **Agent mode: the gaps the security review's test left** (none of it released). The org's
+  `local_agent_tools` switch is enforced by the native host, which asks `/api/me` itself with the
+  stored credential before every run and refuses when the org says no or cannot be asked. Every
+  native answer goes to an owner-only, size-rotated approval log in the app's data directory
+  (`agent-approvals.log`: time, question, tool, path or command hash, mode, result), a yes the log
+  cannot record is not acted on, and a stored run's results say what the person approved. The
+  page's CSP `connect-src` is also pinned at launch to the API's origin, in every build and not
+  only a release's, and the committed config no longer allows any `https:` host. A write to a protected file -- the contract's 1.1 list, now with
+  `.matterwave/`, shell startup files, `.ssh/`, `.aws/` and `.config/matterwave` -- asks natively
+  in every mode, yolo included (`.matterwaveignore`, refused outright before, now asks too), and in
+  plan and ask reading the settings folder, a startup file or a credentials folder asks natively
+  and search leaves them out. On Linux a command also runs in a cgroup of its own where the app's
+  cgroup is delegated, so Stop ends processes that called `setsid`. CI runs the agent host's suite
+  on Windows and macOS too. `docs/agent-mode-security.md` holds the design pattern and the
+  prompt-injection analysis the review asks for.
+- **Agent mode, from an adversarial review of the tool host** (none of it released): on Windows,
+  a path naming an alternate data stream (`notes.txt:hidden`, `x:Zone.Identifier`) could be
+  written, and device names and trailing dots or spaces were let through -- all now refused; a
+  write to a hard link in the root went through to the file outside it, and a write followed a
+  link swapped in after the check -- writes now land beside the target and are renamed over it,
+  with the folder checked again; an apply could be sent without a preview; a webview could start
+  an auto-edit run (unasked writes) without the person; `/restore` wrote files unasked; a command
+  inherited a `MATTERWAVE_API_KEY` from the app's environment; on Windows the shell ran for an
+  instant before joining its kill-on-Stop job (it now starts suspended); a huge context file was
+  read whole, reads trusted a size taken before the open and would block on a FIFO, and
+  `write_file` content had no cap; two applies at once could share a checkpoint; changing the mode
+  mid-run looked like it applied but did not.
 
 ### Fixed
 

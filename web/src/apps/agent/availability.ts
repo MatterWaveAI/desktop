@@ -1,0 +1,41 @@
+import type { ModelInfo, Principal } from "../../types";
+
+/**
+ * Whether agent mode can run for this person and model, and if not, the
+ * sentence the greyed-out toggle says why. Two flags from the API, each
+ * read the way an older API must be read: missing means allowed.
+ *
+ * - `/api/me`'s `local_agent_tools`: the org's switch for local agent
+ *   tools; only an explicit false turns it off.
+ * - `/api/models`' `supports_tools`: only an explicit false says the model
+ *   cannot call tools; unknown is let through, as `supports_vision` is.
+ */
+export function agentAvailability(
+  principal: Pick<Principal, "local_agent_tools">,
+  model: Pick<ModelInfo, "label" | "supports_tools"> | null,
+): { available: boolean; reason: string | null } {
+  if (principal.local_agent_tools === false) {
+    return {
+      available: false,
+      reason: "Your organisation has turned off local agent tools, so agent mode is not available.",
+    };
+  }
+  if (model?.supports_tools === false) {
+    return {
+      available: false,
+      reason: `${model.label} cannot call tools. Pick another model to use agent mode.`,
+    };
+  }
+  return { available: true, reason: null };
+}
+
+/** The model a turn would use: the picker's choice, else the deployment's default. */
+export function activeModel(
+  models: readonly ModelInfo[] | null,
+  selected: string | null,
+  fallback: string | null,
+): ModelInfo | null {
+  const id = selected ?? fallback;
+  if (id === null || models === null) return null;
+  return models.find((m) => m.id === id) ?? null;
+}

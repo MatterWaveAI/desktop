@@ -51,7 +51,23 @@ base64 = "0.22"
 rand = "0.8"
 url = "2"
 open = "5"
-tokio = { version = "1", features = ["net", "io-util", "time", "sync", "macros"] }
+tokio = { version = "1", features = ["net", "io-util", "time", "sync", "macros", "process"] }
+# The agent tool host (src/agent): grep, the ignore files and the
+# contract's globs compile to `regex` (the walk itself is a port of the
+# SDKs', search.rs), and the workspace root is chosen in the OS's own
+# folder picker -- rfd, the crate the dialog plugin wraps, used from Rust
+# only so no dialog (or fs) permission reaches the webview.
+regex = "1"
+rfd = { version = "0.17", default-features = false, features = ["common-controls-v6", "gtk3"] }
+
+# run_shell's process-tree kill: a job object on Windows, a process group
+# (and on Linux a cgroup, where one can be made) on Unix (src/agent/shell.rs);
+# and the approval log's owner-only DACL on Windows (src/agent/audit.rs).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 # The sign-in test runs a fake issuer on loopback inside its own runtime.
@@ -59,6 +75,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 # The updater test drives the plugin the way updater.rs does, on Tauri's
 # mock runtime: no window, no keychain, no installer.
 tauri = { version = "2", features = ["test"] }
+# The agent tool host's tests build throwaway workspaces.
+tempfile = "3"
 
 [profile.release]
 codegen-units = 1

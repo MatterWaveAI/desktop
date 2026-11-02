@@ -29,6 +29,24 @@ fn main() {
             "autostart_state",
             "set_autostart",
             "set_recent_conversations",
+            // Agent mode's tool host (src/agent): one command per tool, the
+            // run's start and stop, the root, the switch and the
+            // checkpoints. Off until the person turns it on.
+            "agent_state",
+            "agent_set_enabled",
+            "agent_pick_root",
+            "agent_trust_root",
+            "agent_start_run",
+            "agent_stop_run",
+            "agent_read_file",
+            "agent_list_dir",
+            "agent_glob",
+            "agent_grep",
+            "agent_edit",
+            "agent_write_file",
+            "agent_run_shell",
+            "agent_checkpoints",
+            "agent_restore",
         ]),
     ))
     .expect("tauri build script failed");
@@ -42,7 +60,10 @@ fn main() {
     // RT_MANIFEST id 1 replaces rustc's default manifest, exactly as the
     // linked resource replaces it for the app binary.
     if std::env::var("CARGO_CFG_WINDOWS").is_ok() {
-        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        // Read when the script runs, not baked in when it was compiled: a
+        // build script binary is reused when the checkout moves.
+        let dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let manifest = std::path::Path::new(&dir)
             .join("tests/windows.manifest")
             .display()
             .to_string()

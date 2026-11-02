@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window may call the app's own commands and listen for the events the native side emits, and nothing else: no filesystem, shell or HTTP plugin is exposed to the webview.",
+  "description": "The main window may call the app's own commands and listen for the events the native side emits, and nothing else: no filesystem, shell, dialog or HTTP plugin is exposed to the webview. The agent-* commands are the native tool host (src/agent), off until the person turns agent mode on; each confines its paths itself.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
@@ -28,6 +28,21 @@
     "allow-autostart-state",
     "allow-set-autostart",
     "allow-set-recent-conversations",
-    "core:webview:allow-set-webview-zoom"
+    "core:webview:allow-set-webview-zoom",
+    "allow-agent-state",
+    "allow-agent-set-enabled",
+    "allow-agent-pick-root",
+    "allow-agent-trust-root",
+    "allow-agent-start-run",
+    "allow-agent-stop-run",
+    "allow-agent-read-file",
+    "allow-agent-list-dir",
+    "allow-agent-glob",
+    "allow-agent-grep",
+    "allow-agent-edit",
+    "allow-agent-write-file",
+    "allow-agent-run-shell",
+    "allow-agent-checkpoints",
+    "allow-agent-restore"
   ]
 }

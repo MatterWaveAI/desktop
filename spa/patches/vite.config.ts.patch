@@ -1,0 +1,13 @@
+diff --git a/vite.config.ts b/vite.config.ts
+index 3a7e52e..514dece 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -49,6 +49,8 @@ export default defineConfig({
+   server: {
+     proxy: {
+       "/api": proxy,
++      // The OpenAI-compatible surface, which the desktop's agent mode calls.
++      "/v1": proxy,
+       "/healthz": proxy,
+       "/readyz": proxy,
+     },

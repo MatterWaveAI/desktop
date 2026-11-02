@@ -79,6 +79,15 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
   return (await loadInvoke())<T>(cmd, args);
 }
 
+/**
+ * One native command, for the modules that own their own slice of the
+ * bridge (agent mode's tool host, `apps/agent/host.ts`). The command must
+ * be in the capability file; anything else is refused by Tauri.
+ */
+export function desktopInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  return call<T>(cmd, args);
+}
+
 /** Ask the native side for the token, refreshing there when `force`. */
 async function pullToken(force = false): Promise<AccessToken | null> {
   try {
@@ -118,7 +127,10 @@ function isBundledOrigin(): boolean {
 }
 
 function isApiPath(path: string): boolean {
-  return path.startsWith("/api/") || path === "/healthz" || path === "/readyz";
+  // `/v1/` is the OpenAI-compatible surface agent mode's loop calls.
+  return (
+    path.startsWith("/api/") || path.startsWith("/v1/") || path === "/healthz" || path === "/readyz"
+  );
 }
 
 /** The API URL for a same-origin path, when the bundled app needs one. */

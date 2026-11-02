@@ -1,0 +1,211 @@
+diff --git a/src/apps/agent/fakeHost.test-util.ts b/src/apps/agent/fakeHost.test-util.ts
+new file mode 100644
+index 0000000..3f90371
+--- /dev/null
++++ b/src/apps/agent/fakeHost.test-util.ts
+@@ -0,0 +1,205 @@
++/**
++ * Test doubles for agent mode: an in-memory tool host with the native
++ * host's shape (preview, then apply against the previewed fingerprint;
++ * the desktop app's own dialog before a command in ask and auto-edit,
++ * before a write in ask, before a write to a protected file in every
++ * mode, and before a read of a credentials folder in plan and ask), and a
++ * scripted `/v1`. Not a test file itself; the suites import it.
++ */
++import type { AgentHost, AgentStatus, ReadTool, RunStarted, ToolOutput, WriteOutcome, WriteTool } from "./host";
++import { readAsksNatively, type CompletionRequest, type CompletionResponse, type ModelTransport, type ToolCall } from "./loop";
++import { isProtected } from "./sdk/deny";
++import { refusal } from "./sdk/modes";
++import type { ModeName } from "./sdk/types";
++
++export interface HostCall {
++  kind: "start" | "stop" | "read" | "write" | "shell";
++  tool?: string;
++  args?: unknown;
++  apply?: boolean;
++  expectedSha256?: string | null;
++}
++
++function sha(text: string | undefined): string {
++  return text === undefined ? "absent" : `sha:${text.length}:${text}`;
++}
++
++export class FakeHost implements AgentHost {
++  readonly files = new Map<string, string>();
++  readonly calls: HostCall[] = [];
++  stopped: string[] = [];
++  /** A shell call waits on this when set, as a long command would. */
++  shellGate: Promise<void> | null = null;
++  context: RunStarted["context"] = [];
++  untrusted: string[] = [];
++  root = "/work/demo";
++  enabled = true;
++  /** The desktop app's dialog, scripted: each question takes the next answer, yes once they run out. */
++  nativeAnswers: boolean[] = [];
++  /** What the dialog asked about, in order: a command, or a write's path. */
++  readonly nativeAsked: string[] = [];
++  /** The commands that ran. */
++  readonly ran: string[] = [];
++  private mode: ModeName = "ask";
++
++  constructor(files: Record<string, string> = {}) {
++    for (const [k, v] of Object.entries(files)) this.files.set(k, v);
++  }
++
++  status(): Promise<AgentStatus> {
++    return Promise.resolve({
++      enabled: this.enabled,
++      root: this.root,
++      trusted: false,
++      platform: "linux",
++      shell: "sh",
++      contract_version: "1.2.0",
++      yolo_confirmed: false,
++      auto_edit_confirmed: false,
++    });
++  }
++  setEnabled(enabled: boolean): Promise<AgentStatus> {
++    this.enabled = enabled;
++    return this.status();
++  }
++  pickRoot(): Promise<AgentStatus> {
++    return this.status();
++  }
++  trustRoot(): Promise<AgentStatus> {
++    return this.status();
++  }
++  private native(about: string): boolean {
++    this.nativeAsked.push(about);
++    return this.nativeAnswers.length > 0 ? this.nativeAnswers.shift()! : true;
++  }
++  startRun(mode: ModeName): Promise<RunStarted> {
++    this.mode = mode;
++    this.calls.push({ kind: "start", tool: mode });
++    return Promise.resolve({
++      run_id: "run-1",
++      mode,
++      root: this.root,
++      platform: "linux",
++      context: this.context,
++      untrusted_context: this.untrusted,
++    });
++  }
++  stopRun(runId: string): Promise<void> {
++    this.calls.push({ kind: "stop" });
++    this.stopped.push(runId);
++    return Promise.resolve();
++  }
++  read(_runId: string, tool: ReadTool, args: unknown): Promise<ToolOutput> {
++    this.calls.push({ kind: "read", tool, args });
++    const path = (args as { path?: string }).path ?? ".";
++    if (readAsksNatively(this.mode, path) && !this.native(path)) {
++      return Promise.resolve({ output: refusal("rejected", { tool }), is_error: false, rejected: true });
++    }
++    if (tool === "read_file") {
++      if (path === ".env") {
++        return Promise.resolve({
++          output: "Refused: .env is protected (a secret, a key, .git or an entry in .matterwaveignore) and is not sent to the model.",
++          is_error: true,
++        });
++      }
++      const text = this.files.get(path);
++      return Promise.resolve(
++        text === undefined
++          ? { output: `${path} does not exist.`, is_error: true }
++          : { output: text.split("\n").filter(Boolean).map((l, i) => `${i + 1}\t${l}`).join("\n"), is_error: false },
++      );
++    }
++    return Promise.resolve({ output: [...this.files.keys()].join("\n"), is_error: false });
++  }
++  write(
++    _runId: string,
++    tool: WriteTool,
++    args: unknown,
++    step: { apply: false } | { apply: true; expectedSha256: string },
++  ): Promise<WriteOutcome> {
++    this.calls.push({
++      kind: "write",
++      tool,
++      args,
++      apply: step.apply,
++      expectedSha256: step.apply ? step.expectedSha256 : null,
++    });
++    const a = args as { path: string; old_string?: string; new_string?: string; content?: string };
++    const before = this.files.get(a.path);
++    let after: string;
++    if (tool === "edit") {
++      if (before === undefined) return Promise.resolve({ status: "error", output: `${a.path} does not exist. Use write_file to create it.` });
++      if (!before.includes(a.old_string ?? "\u0000")) {
++        return Promise.resolve({ status: "error", output: `old_string was not found in ${a.path}.` });
++      }
++      after = before.replace(a.old_string!, a.new_string ?? "");
++    } else {
++      after = a.content ?? "";
++    }
++    if (!step.apply) {
++      return Promise.resolve({
++        status: "preview",
++        relative: a.path,
++        before: before ?? null,
++        after,
++        before_sha256: sha(before),
++      });
++    }
++    if (step.expectedSha256 !== sha(before)) {
++      return Promise.resolve({ status: "error", output: `${a.path} changed after the change was shown.` });
++    }
++    if ((this.mode === "ask" || isProtected(a.path)) && !this.native(a.path)) {
++      return Promise.resolve({ status: "rejected", output: refusal("rejected", { tool }) });
++    }
++    this.files.set(a.path, after);
++    return Promise.resolve({ status: "applied", output: `Edited ${a.path}.`, relative: a.path, checkpoint: 1 });
++  }
++  async shell(_runId: string, args: unknown): Promise<ToolOutput> {
++    this.calls.push({ kind: "shell", args });
++    const command = (args as { command?: string }).command ?? "";
++    if (this.shellGate) await this.shellGate;
++    if ((this.mode === "ask" || this.mode === "auto-edit") && !this.native(command)) {
++      return { output: refusal("rejected", { tool: "run_shell" }), is_error: false, rejected: true };
++    }
++    this.ran.push(command);
++    return { output: "Exit code 0\nok", is_error: false };
++  }
++  checkpoints() {
++    return Promise.resolve([]);
++  }
++  restore() {
++    return Promise.resolve({ restored: [] });
++  }
++}
++
++export function toolCall(id: string, name: string, args: Record<string, unknown>): ToolCall {
++  return { id, type: "function", function: { name, arguments: JSON.stringify(args) } };
++}
++
++export function reply(content: string | null, calls: ToolCall[] = [], tokens = 100): CompletionResponse {
++  return {
++    choices: [
++      {
++        message: { role: "assistant", content, tool_calls: calls.length > 0 ? calls : undefined },
++        finish_reason: calls.length > 0 ? "tool_calls" : "stop",
++      },
++    ],
++    usage: { prompt_tokens: tokens - 10, completion_tokens: 10, total_tokens: tokens },
++  };
++}
++
++/**
++ * A scripted `/v1`: each request gets the next answer (a response, or an
++ * error to throw); past the end, the last answer repeats, which is how a
++ * looping model is played.
++ */
++export class ScriptedModel implements ModelTransport {
++  readonly requests: CompletionRequest[] = [];
++  constructor(private readonly script: (CompletionResponse | Error)[]) {}
++  complete(request: CompletionRequest, signal: AbortSignal): Promise<CompletionResponse> {
++    this.requests.push(JSON.parse(JSON.stringify(request)) as CompletionRequest);
++    if (signal.aborted) return Promise.reject(new DOMException("aborted", "AbortError"));
++    const next = this.script[Math.min(this.requests.length - 1, this.script.length - 1)]!;
++    return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
++  }
++}

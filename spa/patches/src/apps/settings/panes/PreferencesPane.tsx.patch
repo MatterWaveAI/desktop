@@ -1,5 +1,5 @@
 diff --git a/src/apps/settings/panes/PreferencesPane.tsx b/src/apps/settings/panes/PreferencesPane.tsx
-index a0bb19c..6bee507 100644
+index a0bb19c..3b64996 100644
 --- a/src/apps/settings/panes/PreferencesPane.tsx
 +++ b/src/apps/settings/panes/PreferencesPane.tsx
 @@ -7,6 +7,14 @@ import { Button } from "../../../components/ui/button";
@@ -17,10 +17,11 @@ index a0bb19c..6bee507 100644
  import { useThemePreference, type ThemePreference } from "../../../shell/theme";
  import type { Preferences } from "../../../types";
  import {
-@@ -16,6 +24,15 @@ import {
+@@ -16,6 +24,16 @@ import {
    writeAnswerReadyPrefs,
  } from "../../../shell/answerReady";
  import { PaneSection } from "../PaneSection";
++import { AgentModeChoice } from "../../agent/AgentModeChoice";
 +import {
 +  canSpeak,
 +  DEFAULT_READ_ALOUD,
@@ -33,7 +34,7 @@ index a0bb19c..6bee507 100644
  
  const THEME_CHOICES: ReadonlyArray<{
    value: ThemePreference;
-@@ -380,9 +397,8 @@ function AnswerReadyChoice() {
+@@ -380,9 +398,8 @@ function AnswerReadyChoice() {
  
  /**
   * Preferences: theme (this device), language (this device and the
@@ -45,7 +46,7 @@ index a0bb19c..6bee507 100644
   */
  export function PreferencesPane() {
    const { t } = useLingui();
-@@ -415,6 +431,293 @@ export function PreferencesPane() {
+@@ -415,6 +432,295 @@ export function PreferencesPane() {
        >
          <AnswerReadyChoice />
        </PaneSection>
@@ -55,6 +56,8 @@ index a0bb19c..6bee507 100644
 +      {isDesktop() && <GlobalHotkeyChoice />}
 +
 +      {isDesktop() && <LaunchAtLoginChoice />}
++
++      {isDesktop() && <AgentModeChoice />}
      </div>
    );
  }

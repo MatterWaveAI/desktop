@@ -1,0 +1,80 @@
+/**
+ * Agent mode's composer: its slash commands and `@path` mentions. Pure, so
+ * the parsing is testable without a desktop.
+ */
+import { MODE_NAMES, type ModeName } from "./sdk/types";
+
+export type AgentCommand =
+  | { kind: "approval-mode"; mode: ModeName | null; given: string }
+  | { kind: "restore"; id: number | null }
+  | { kind: "init" }
+  | { kind: "help" }
+  | { kind: "unknown"; name: string };
+
+/** The composer's text as a command, or null when it is a prompt. */
+export function parseAgentCommand(text: string): AgentCommand | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("/")) return null;
+  const [head = "", ...rest] = trimmed.slice(1).split(/\s+/);
+  const name = head.toLowerCase();
+  const arg = rest.join(" ").trim();
+  switch (name) {
+    case "approval-mode":
+    case "mode": {
+      const wanted = arg.toLowerCase();
+      const mode = (MODE_NAMES as readonly string[]).includes(wanted) ? (wanted as ModeName) : null;
+      return { kind: "approval-mode", mode, given: arg };
+    }
+    case "restore": {
+      const id = /^\d+$/.test(arg) ? Number(arg) : null;
+      return { kind: "restore", id };
+    }
+    case "init":
+      return { kind: "init" };
+    case "help":
+      return { kind: "help" };
+    default:
+      return { kind: "unknown", name };
+  }
+}
+
+export const AGENT_HELP =
+  "Agent commands: /approval-mode [plan|ask|auto-edit|yolo] shows or sets the mode " +
+  "(Shift+Tab cycles plan, ask and auto-edit while no run is going; auto-edit and yolo are each allowed in the desktop app's own dialog once per folder per session, and yolo is never remembered). " +
+  "/restore lists the file checkpoints, and /restore <id> puts the files back as they were before it. " +
+  "/init drafts a MATTERWAVE.md for this folder. @path attaches a file from the folder to your message.";
+
+/** What /init asks the agent to do. It goes through approval like any write (and in auto-edit, MATTERWAVE.md still asks). */
+export const INIT_PROMPT =
+  "Look around this folder and draft a MATTERWAVE.md at its root for future agent runs: what the project is, " +
+  "how it is laid out, how to build, test and lint it, and the conventions its code follows. Read before you " +
+  "write, keep it short and factual, and say nothing you did not check. If a MATTERWAVE.md already exists, " +
+  "improve it with edit rather than replacing it. Create it with write_file.";
+
+/** At most this many `@path` files go with one message. */
+export const MAX_MENTIONS = 5;
+
+/**
+ * The `@path` mentions in a prompt, in order and without repeats: an `@`
+ * at the start or after whitespace, then a path. An email address is not
+ * one (its `@` follows a letter).
+ */
+export function mentionsIn(text: string): string[] {
+  const found: string[] = [];
+  for (const match of text.matchAll(/(?:^|\s)@([\w./\\-]*[\w/\\-])/g)) {
+    const path = match[1]!.replace(/[.,;:]+$/, "");
+    if (path && !found.includes(path)) found.push(path);
+  }
+  return found.slice(0, MAX_MENTIONS);
+}
+
+/** The prompt with each mentioned file's text (or its refusal) attached below it. */
+export function withAttachments(prompt: string, files: readonly { path: string; text: string; isError: boolean }[]): string {
+  if (files.length === 0) return prompt;
+  const blocks = files.map((f) =>
+    f.isError
+      ? `[@${f.path} was not attached: ${f.text}]`
+      : `<file path="${f.path}">\n${f.text.replace(/\n$/, "")}\n</file>`,
+  );
+  return `${prompt}\n\nFiles the user attached (line numbers are not part of the files):\n\n${blocks.join("\n\n")}`;
+}

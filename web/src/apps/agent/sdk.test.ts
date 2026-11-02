@@ -1,0 +1,216 @@
+import { describe, expect, it } from "vitest";
+import { CONTRACT, CONTRACT_SHA256 } from "./sdk/contract";
+import { isProtected, windowsAlias } from "./sdk/deny";
+import { SearchIgnore } from "./sdk/ignore";
+import { allowed, refusal, systemPrompt, toolsForMode } from "./sdk/modes";
+import { formatShell, type Limits } from "./sdk/output";
+import { unifiedDiff } from "./sdk/diff";
+import { CONTRACT_VERSION, MODE_NAMES, type AnyToolKind, type ContextFile, type RefusalCode } from "./sdk/types";
+
+/**
+ * The SPA's copy of the SDK's agent helpers against the files the Rust tool
+ * host reads (src-tauri/agent): the same contract, value for value, and the
+ * shared conformance cases for the parts the SPA uses -- the mode and kind
+ * decisions, the protected files, the refusal sentences, the tools each
+ * mode offers, the diff and the system prompt with its context-file slot --
+ * plus the contract's own browser-safe cases (Windows aliases, the search
+ * rules, run_shell's text), which the Rust host runs too. When a checkout
+ * of the TypeScript SDK is at hand (MATTERWAVE_TS_SDK, or a typescript-sdk
+ * beside this repository) each copied file is checked against its source.
+ * node:fs through a dynamic import: the web tsconfig has no node types.
+ */
+const fsModuleName = "node:fs";
+const cryptoModuleName = "node:crypto";
+const processModuleName = "node:process";
+const { readFileSync, existsSync } = (await import(/* @vite-ignore */ fsModuleName)) as {
+  readFileSync: (path: string, encoding: string) => string;
+  existsSync: (path: string) => boolean;
+};
+const { createHash } = (await import(/* @vite-ignore */ cryptoModuleName)) as {
+  createHash: (alg: string) => { update: (s: string, e: string) => { digest: (f: string) => string } };
+};
+const { cwd, env } = (await import(/* @vite-ignore */ processModuleName)) as {
+  cwd: () => string;
+  env: Record<string, string | undefined>;
+};
+
+const hostDir = `${cwd()}/../src-tauri/agent`;
+const hostContract: unknown = JSON.parse(readFileSync(`${hostDir}/contract.json`, "utf-8"));
+const helperCases = JSON.parse(readFileSync(`${hostDir}/conformance.json`, "utf-8")) as {
+  decisions: Record<string, Record<string, string>>;
+  tools_for_mode: Record<string, string[]>;
+  diffs: { name: string; old: string; new: string; path?: string; context?: number; expected: string }[];
+  prompts: { mode: string; root: string; platform: string; expected: string }[];
+  kinds: { tool: string; kind?: AnyToolKind; read_only?: boolean; decisions: Record<string, string> }[];
+  protected: { path: string; protected: boolean; decisions: Record<string, string> }[];
+  refusals: { code: RefusalCode; values: { tool?: string; mode?: string; path?: string }; expected: string }[];
+  prompt_slots: {
+    name: string;
+    mode: string;
+    root: string;
+    platform: string;
+    extra_tools: { name: string; description: string }[];
+    context_files: ContextFile[];
+    expected: string;
+  }[];
+};
+const contractCases = (hostContract as {
+  conformance: {
+    tree: Record<string, string>;
+    paths: { path: string; write?: boolean; relative?: string; refused?: string }[];
+    ignore: { path: string; is_dir?: boolean; ancestors?: boolean; ignored: boolean }[];
+    shell: {
+      output: string;
+      omitted?: number;
+      exit_code: number | null;
+      timed_out?: boolean;
+      stopped?: boolean;
+      timeout_s?: number;
+      limits?: Limits;
+      expected: string;
+    }[];
+    alias_roots: { root: string; path: string; refused: string | null }[];
+  };
+}).conformance;
+
+describe("the vendored agent contract", () => {
+  it("is the contract the native host reads", () => {
+    expect(CONTRACT).toEqual(hostContract);
+    expect(CONTRACT_VERSION).toBe("1.2.0");
+  });
+
+  it("has the hash it was generated with", () => {
+    const digest = createHash("sha256").update(JSON.stringify(CONTRACT), "utf8").digest("hex");
+    expect(digest).toBe(CONTRACT_SHA256);
+  });
+});
+
+describe("the shared conformance cases", () => {
+  it("decides each tool in each mode", () => {
+    for (const [mode, tools] of Object.entries(helperCases.decisions)) {
+      for (const [tool, decision] of Object.entries(tools)) {
+        expect(allowed(tool, mode), `${tool} in ${mode}`).toBe(decision);
+      }
+    }
+  });
+
+  it("decides a client's own tools by kind", () => {
+    for (const c of helperCases.kinds) {
+      for (const [mode, decision] of Object.entries(c.decisions)) {
+        expect(allowed(c.tool, mode, c.kind, { readOnly: c.read_only ?? false }), `${c.tool} in ${mode}`).toBe(decision);
+      }
+    }
+  });
+
+  it("asks before every protected write, yolo included", () => {
+    for (const c of helperCases.protected) {
+      expect(isProtected(c.path), c.path).toBe(c.protected);
+      for (const [key, decision] of Object.entries(c.decisions)) {
+        const [tool, mode] = key.split(" ") as [string, string];
+        expect(allowed(tool, mode, null, { path: c.path }), `${c.path}: ${key}`).toBe(decision);
+      }
+    }
+  });
+
+  it("words each refusal", () => {
+    for (const c of helperCases.refusals) {
+      expect(refusal(c.code, c.values)).toBe(c.expected);
+    }
+  });
+
+  it("offers each mode its tools", () => {
+    for (const mode of MODE_NAMES) {
+      expect(toolsForMode(mode).map((t) => t.function.name)).toEqual(helperCases.tools_for_mode[mode]);
+    }
+  });
+
+  it.each(helperCases.diffs.map((c) => [c.name, c] as const))("diffs %s", (_name, c) => {
+    expect(unifiedDiff(c.old, c.new, c.path ?? "file", c.context === undefined ? {} : { context: c.context })).toBe(
+      c.expected,
+    );
+  });
+
+  it("renders the system prompt", () => {
+    for (const c of helperCases.prompts) {
+      expect(systemPrompt(c.mode, c.root, { platform: c.platform })).toBe(c.expected);
+    }
+  });
+
+  it("renders the prompt's slots", () => {
+    for (const c of helperCases.prompt_slots) {
+      expect(
+        systemPrompt(c.mode, c.root, { platform: c.platform, extraTools: c.extra_tools, contextFiles: c.context_files }),
+        c.name,
+      ).toBe(c.expected);
+    }
+  });
+});
+
+describe("the contract's own cases the SPA can run", () => {
+  it("names the Windows aliases", () => {
+    const aliases = new Set(["stream", "trailing", "device", "unc"]);
+    for (const c of contractCases.paths) {
+      if (c.refused !== undefined && aliases.has(c.refused)) expect(windowsAlias(c.path), c.path).toBe(c.refused);
+      else if (c.relative !== undefined) expect(windowsAlias(c.path), c.path).toBe(null);
+    }
+  });
+
+  it("checks only the names below the root", () => {
+    expect(contractCases.alias_roots).toHaveLength(13);
+    for (const c of contractCases.alias_roots) {
+      expect(windowsAlias(c.path, c.root), `${c.path} under ${c.root}`).toBe(c.refused);
+    }
+  });
+
+  it("ignores what search ignores", () => {
+    const tree = contractCases.tree;
+    const rules = new SearchIgnore((relative) => tree[relative] ?? null);
+    for (const c of contractCases.ignore) {
+      expect(rules.ignored(c.path, { isDir: c.is_dir ?? false, ancestors: c.ancestors ?? true }), c.path).toBe(
+        c.ignored,
+      );
+    }
+  });
+
+  it("words run_shell's result", () => {
+    for (const c of contractCases.shell) {
+      expect(
+        formatShell(c.output, {
+          exitCode: c.exit_code,
+          timedOut: c.timed_out ?? false,
+          stopped: c.stopped ?? false,
+          timeoutS: c.timeout_s,
+          limits: c.limits,
+          omitted: c.omitted,
+        }),
+      ).toBe(c.expected);
+    }
+  });
+});
+
+/** The TypeScript SDK checkout to compare the copy with, when there is one. */
+function sdkCheckout(): string | null {
+  const named = env.MATTERWAVE_TS_SDK;
+  if (named) return named;
+  const sibling = `${cwd()}/../../typescript-sdk`;
+  return existsSync(`${sibling}/src/agent/contract.ts`) ? sibling : null;
+}
+
+describe("the copy against the SDK", () => {
+  const sdk = sdkCheckout();
+  it.skipIf(sdk === null)("is each SDK file with only the vendoring edits", async () => {
+    const scriptPath = "../../../scripts/vendor-agent-sdk.mjs";
+    const script = (await import(/* @vite-ignore */ scriptPath)) as {
+      FILES: string[];
+      vendored: (file: string, source: string) => string;
+    };
+    for (const file of script.FILES) {
+      const copy = readFileSync(`${cwd()}/src/apps/agent/sdk/${file}`, "utf-8");
+      const [first, ...rest] = copy.split("\n");
+      expect(first, file).toMatch(new RegExp(`^// Vendored from @matterwave/sdk \\(typescript-sdk, .+\\), src/agent/${file}\\.$`));
+      const body = rest.slice(3).join("\n");
+      const source = readFileSync(`${sdk}/src/agent/${file}`, "utf-8");
+      expect(body, file).toBe(script.vendored(file, source));
+    }
+  });
+});
