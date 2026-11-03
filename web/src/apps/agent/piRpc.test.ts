@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
+import { FakeHost } from "./fakeHost.test-util";
 import type { AgentEvent } from "./loop";
 import {
   PI_PROVIDER,
+  PiRpcLineBuffer,
   createPiRpcAdapter,
   encodePiCommand,
+  encodePiRpcCommand,
+  mapPiEventToAgentActions,
   parsePiEventLine,
+  runPiRpcTurn,
   type PiNormalizedEvent,
 } from "./piRpc";
+import { hasPiRpcSupport, runDesktopPiTurn } from "./runtime";
 
 describe("encodePiCommand", () => {
   it("encodes a prompt command as newline-terminated JSONL with MatterWave metadata", () => {
@@ -251,5 +257,222 @@ describe("createPiRpcAdapter", () => {
       { kind: "notice", text: "Pi RPC error: Quota exceeded" },
       { kind: "notice", text: expect.stringContaining("Invalid Pi RPC JSON line") },
     ]);
+  });
+});
+
+describe("runPiRpcTurn and Desktop runtime wiring", () => {
+  it("executes a full Pi 1.0 RPC turn end-to-end with streaming deltas, tool start/end, and turn completion", async () => {
+    const sentLines: string[] = [];
+    const listeners = new Set<(line: string) => void>();
+    const events: AgentEvent[] = [];
+    const deltas: string[] = [];
+
+    const emitLine = (line: string) => {
+      for (const listener of [...listeners]) {
+        listener(line);
+      }
+    };
+
+    const turnPromise = runPiRpcTurn({
+      id: "turn_1",
+      message: "List files and summarize",
+      model: "claude-sonnet-4-5",
+      presetId: "preset_code",
+      temporary: true,
+      send: (line) => {
+        sentLines.push(line);
+        const cmd = JSON.parse(line) as { type: string };
+        if (cmd.type === "prompt") {
+          queueMicrotask(() => {
+            emitLine(
+              JSON.stringify({
+                type: "message_update",
+                assistantMessageEvent: { type: "text_delta", delta: "Listing " },
+              }),
+            );
+            emitLine(
+              JSON.stringify({
+                type: "tool_execution_start",
+                toolCallId: "tc_10",
+                toolName: "list_dir",
+                args: { path: "src" },
+              }),
+            );
+            emitLine(
+              JSON.stringify({
+                type: "tool_execution_end",
+                toolCallId: "tc_10",
+                toolName: "list_dir",
+                result: "index.ts\nloop.ts",
+                isError: false,
+              }),
+            );
+            emitLine(
+              JSON.stringify({
+                type: "message_update",
+                assistantMessageEvent: { type: "text_delta", delta: "files complete." },
+              }),
+            );
+            emitLine(
+              JSON.stringify({
+                type: "turn_end",
+                stopReason: "stop",
+                usage: { total_tokens: 215 },
+              }),
+            );
+          });
+        }
+      },
+      onLine: (handler) => {
+        listeners.add(handler);
+        return () => listeners.delete(handler);
+      },
+      onEvent: (ev) => events.push(ev),
+      onTextDelta: (delta) => deltas.push(delta),
+    });
+
+    const result = await turnPromise;
+
+    expect(sentLines).toHaveLength(1);
+    expect(JSON.parse(sentLines[0]!)).toEqual({
+      id: "turn_1",
+      type: "prompt",
+      message: "List files and summarize",
+      provider: "matterwave",
+      model: "claude-sonnet-4-5",
+      presetId: "preset_code",
+      temporary: true,
+    });
+    expect(deltas).toEqual(["Listing ", "files complete."]);
+    expect(result).toEqual({
+      status: "completed",
+      text: "Listing files complete.",
+      stopReason: "stop",
+      steps: 1,
+      tokens: 215,
+      events: [
+        {
+          kind: "tool",
+          id: "tc_10",
+          name: "list_dir",
+          args: { path: "src" },
+          summary: "List src",
+        },
+        {
+          kind: "tool_result",
+          id: "tc_10",
+          name: "list_dir",
+          output: "index.ts\nloop.ts",
+          isError: false,
+        },
+        {
+          kind: "assistant",
+          text: "Listing files complete.",
+        },
+        {
+          kind: "usage",
+          steps: 1,
+          tokens: 215,
+        },
+      ],
+    });
+    expect(events).toEqual(result.events);
+    expect(listeners.size).toBe(0);
+  });
+
+  it("sends { type: 'abort' } when AbortSignal fires mid-turn", async () => {
+    const sentLines: string[] = [];
+    const listeners = new Set<(line: string) => void>();
+    const controller = new AbortController();
+
+    const turnPromise = runPiRpcTurn({
+      prompt: "Long running task",
+      send: (line) => {
+        sentLines.push(line);
+      },
+      onLine: (handler) => {
+        listeners.add(handler);
+        return () => listeners.delete(handler);
+      },
+      signal: controller.signal,
+    });
+
+    for (const listener of [...listeners]) {
+      listener(
+        JSON.stringify({
+          type: "message_update",
+          assistantMessageEvent: { type: "text_delta", delta: "Partial output..." },
+        }),
+      );
+    }
+
+    controller.abort();
+    const result = await turnPromise;
+
+    expect(result.status).toBe("aborted");
+    expect(result.stopReason).toBe("aborted");
+    expect(result.text).toBe("Partial output...");
+    expect(sentLines).toHaveLength(2);
+    expect(JSON.parse(sentLines[0]!)).toMatchObject({
+      type: "prompt",
+      message: "Long running task",
+      provider: "matterwave",
+    });
+    expect(JSON.parse(sentLines[1]!)).toEqual({
+      type: "abort",
+    });
+    expect(listeners.size).toBe(0);
+  });
+
+  it("wires DesktopAgentHost via runDesktopPiTurn and PiRpcLineBuffer / mapPiEventToAgentActions", async () => {
+    const baseHost = new FakeHost();
+    expect(hasPiRpcSupport(baseHost)).toBe(false);
+
+    const buf = new PiRpcLineBuffer();
+    const norm = buf.feed(encodePiRpcCommand({ type: "get_state" }));
+    expect(norm).toHaveLength(1);
+    expect(mapPiEventToAgentActions({ kind: "error", message: "boom", raw: { type: "error" } })).toEqual([
+      { kind: "notice", text: "boom" },
+    ]);
+
+    const sent: string[] = [];
+    const closeSpy = vi.fn();
+    baseHost.piRpcSpawn = vi.fn(async () => {
+      let lineHandler: ((line: string) => void) | null = null;
+      return {
+        send: (line: string) => {
+          sent.push(line);
+          queueMicrotask(() => {
+            lineHandler?.(
+              JSON.stringify({
+                type: "agent_end",
+                stopReason: "stop",
+                usage: { total_tokens: 42 },
+                messages: [{ role: "assistant", content: "Spawned session reply" }],
+              }),
+            );
+          });
+        },
+        onLine: (handler) => {
+          lineHandler = handler;
+          return () => {
+            lineHandler = null;
+          };
+        },
+        close: closeSpy,
+      };
+    });
+
+    expect(hasPiRpcSupport(baseHost)).toBe(true);
+    const res = await runDesktopPiTurn(baseHost, {
+      prompt: "Hello Pi",
+      presetId: "preset_1",
+      temporary: false,
+    });
+
+    expect(res.status).toBe("completed");
+    expect(res.text).toBe("Spawned session reply");
+    expect(res.tokens).toBe(42);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
   });
 });

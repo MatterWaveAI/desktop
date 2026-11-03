@@ -1,0 +1,96 @@
+/**
+ * Desktop Agent Mode runtime bridge for Pi 1.0 (`pi --mode rpc`) JSONL RPC sessions.
+ *
+ * Connects `DesktopAgentHost` (`web/src/apps/agent/host.ts`) with the Pi 1.0
+ * JSONL RPC codec and session driver (`web/src/apps/agent/piRpc.ts`).
+ */
+import type { DesktopAgentHost, PiRpcSessionHandle } from "./host";
+import type { AgentEvent } from "./loop";
+import {
+  PI_PROVIDER,
+  PiRpcLineBuffer,
+  createPiRpcAdapter,
+  encodePiCommand,
+  encodePiRpcCommand,
+  mapPiEventToAgentActions,
+  parsePiEventLine,
+  runPiRpcTurn,
+  type PiNormalizedEvent,
+  type PiPresetMetadata,
+  type PiRpcTurnOptions,
+  type PiRpcTurnResult,
+} from "./piRpc";
+
+export {
+  PI_PROVIDER,
+  PiRpcLineBuffer,
+  createPiRpcAdapter,
+  encodePiCommand,
+  encodePiRpcCommand,
+  mapPiEventToAgentActions,
+  parsePiEventLine,
+  runPiRpcTurn,
+  type PiNormalizedEvent,
+  type PiPresetMetadata,
+  type PiRpcTurnOptions,
+  type PiRpcTurnResult,
+};
+
+export interface DesktopPiTurnOptions extends PiPresetMetadata {
+  prompt?: string;
+  message?: string;
+  id?: string;
+  cwd?: string;
+  onEvent?: (event: AgentEvent) => void;
+  onTextDelta?: (delta: string, accumulated: string) => void;
+  onPiEvent?: (event: PiNormalizedEvent) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Whether the given `DesktopAgentHost` exposes Pi 1.0 JSONL RPC capabilities
+ * (`piRpcSpawn` or `piRpcSend` + `onPiRpcLine`).
+ */
+export function hasPiRpcSupport(host: DesktopAgentHost): boolean {
+  return (
+    typeof host.piRpcSpawn === "function" ||
+    (typeof host.piRpcSend === "function" && typeof host.onPiRpcLine === "function")
+  );
+}
+
+/**
+ * Execute a Pi 1.0 (`pi --mode rpc`) turn through `DesktopAgentHost`.
+ */
+export async function runDesktopPiTurn(
+  host: DesktopAgentHost,
+  options: DesktopPiTurnOptions,
+): Promise<PiRpcTurnResult> {
+  if (typeof host.piRpcSpawn === "function") {
+    const session: PiRpcSessionHandle = await host.piRpcSpawn({
+      cwd: options.cwd,
+      provider: options.provider ?? PI_PROVIDER,
+      model: options.model,
+      presetId: options.presetId,
+      temporary: options.temporary,
+    });
+    try {
+      return await runPiRpcTurn({
+        ...options,
+        send: (line) => session.send(line),
+        onLine: (handler) => session.onLine(handler),
+      });
+    } finally {
+      await session.close?.();
+    }
+  }
+
+  if (typeof host.piRpcSend === "function" && typeof host.onPiRpcLine === "function") {
+    return runPiRpcTurn({
+      ...options,
+      send: (line) => host.piRpcSend!(line),
+      onLine: (handler) => host.onPiRpcLine!(handler),
+    });
+  }
+
+  throw new Error("DesktopAgentHost does not configure Pi 1.0 RPC capabilities (piRpcSpawn or piRpcSend/onPiRpcLine).");
+}

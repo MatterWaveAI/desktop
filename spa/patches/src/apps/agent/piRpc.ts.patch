@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/piRpc.ts b/src/apps/agent/piRpc.ts
 new file mode 100644
-index 0000000..6dda8a0
+index 0000000..ad57598
 --- /dev/null
 +++ b/src/apps/agent/piRpc.ts
-@@ -0,0 +1,518 @@
+@@ -0,0 +1,803 @@
 +/**
 + * Pi 1.0 (`pi --mode rpc`) JSON-Lines RPC protocol codec and session driver
 + * for the Desktop Agent Panel.
@@ -273,7 +273,8 @@ index 0000000..6dda8a0
 +      };
 +    }
 +
-+    case "agent_end": {
++    case "agent_end":
++    case "turn_end": {
 +      let stopReason =
 +        (typeof event.stopReason === "string" && event.stopReason) ||
 +        (typeof event.stop_reason === "string" && event.stop_reason) ||
@@ -286,7 +287,7 @@ index 0000000..6dda8a0
 +            ? usageObj.totalTokens
 +            : 0;
 +      let steps = typeof event.steps === "number" ? event.steps : 1;
-+      let finalText: string | null = null;
++      let finalText: string | null = typeof event.text === "string" ? event.text : null;
 +
 +      if (Array.isArray(event.messages)) {
 +        const assistantMessages = event.messages
@@ -521,4 +522,288 @@ index 0000000..6dda8a0
 +      return ev ? [ev] : [];
 +    },
 +  };
++}
++
++/** Alias for `encodePiCommand` used by Desktop RPC callers. */
++export const encodePiRpcCommand = encodePiCommand;
++
++/**
++ * Stateful JSONL line buffer for Pi 1.0 (`pi --mode rpc`) stdout streams.
++ */
++export class PiRpcLineBuffer {
++  private buffer = "";
++
++  feed(chunk: string): PiNormalizedEvent[] {
++    this.buffer += chunk;
++    const events: PiNormalizedEvent[] = [];
++    let newlineIdx = this.buffer.indexOf("\n");
++    while (newlineIdx !== -1) {
++      const line = this.buffer.slice(0, newlineIdx);
++      this.buffer = this.buffer.slice(newlineIdx + 1);
++      const ev = parsePiEventLine(line);
++      if (ev) events.push(ev);
++      newlineIdx = this.buffer.indexOf("\n");
++    }
++    return events;
++  }
++
++  flush(): PiNormalizedEvent[] {
++    if (!this.buffer.trim()) {
++      this.buffer = "";
++      return [];
++    }
++    const trailing = this.buffer;
++    this.buffer = "";
++    const ev = parsePiEventLine(trailing);
++    return ev ? [ev] : [];
++  }
++}
++
++/**
++ * Map a normalized Pi 1.0 RPC event into Desktop `AgentEvent` actions.
++ */
++export function mapPiEventToAgentActions(
++  ev: PiNormalizedEvent,
++  state?: { accumulatedText?: string; toolCount?: number },
++): AgentEvent[] {
++  switch (ev.kind) {
++    case "tool_start":
++      return [
++        {
++          kind: "tool",
++          id: ev.id,
++          name: ev.name,
++          args: ev.args,
++          summary: ev.summary,
++        },
++      ];
++    case "tool_end":
++      return [
++        {
++          kind: "tool_result",
++          id: ev.id,
++          name: ev.name,
++          output: ev.output,
++          isError: ev.isError,
++        },
++      ];
++    case "agent_end": {
++      const actions: AgentEvent[] = [];
++      const finalText = state?.accumulatedText || ev.text || "";
++      if (finalText) {
++        actions.push({ kind: "assistant", text: finalText });
++      }
++      const toolCount = state?.toolCount ?? 0;
++      const steps = Math.max(ev.steps, toolCount > 0 ? toolCount : 1);
++      actions.push({ kind: "usage", steps, tokens: ev.tokens });
++      return actions;
++    }
++    case "response":
++      if (!ev.success && ev.error) {
++        return [{ kind: "notice", text: `Pi RPC error: ${ev.error}` }];
++      }
++      return [];
++    case "error":
++      return [{ kind: "notice", text: ev.message }];
++    case "text_delta":
++    case "other":
++      return [];
++  }
++}
++
++export interface PiRpcTurnOptions extends PiPresetMetadata {
++  /** User prompt message to send to `pi --mode rpc`. */
++  prompt?: string;
++  /** Alias for `prompt`. */
++  message?: string;
++  /** Optional RPC command correlation id. */
++  id?: string;
++  /** Writes a JSONL command frame to Pi's `stdin`. */
++  send?: (line: string) => void | Promise<void>;
++  /** Alias for `send`. */
++  writeStdin?: (line: string) => void | Promise<void>;
++  /** Subscribes to stdout lines/chunks from the Pi RPC process; returns an unsubscribe callback. */
++  onLine: (handler: (line: string) => void) => () => void;
++  /** Dispatches Desktop `AgentEvent` items as they arrive. */
++  onEvent?: (event: AgentEvent) => void;
++  /** Optional streaming text delta callback. */
++  onTextDelta?: (delta: string, accumulated: string) => void;
++  /** Optional normalized Pi event callback. */
++  onPiEvent?: (event: PiNormalizedEvent) => void;
++  /** Optional AbortSignal; when aborted, sends `{"type":"abort"}` and resolves as aborted. */
++  signal?: AbortSignal;
++}
++
++export interface PiRpcTurnResult {
++  status: "completed" | "aborted" | "error";
++  text: string;
++  stopReason: string;
++  steps: number;
++  tokens: number;
++  error?: string;
++  events: AgentEvent[];
++}
++
++/**
++ * Execute a single turn against `pi --mode rpc`:
++ * - Sends `encodePiRpcCommand({ type: "prompt", message })`
++ * - Buffers and parses incoming JSONL frames via `PiRpcLineBuffer`
++ * - Dispatches `mapPiEventToAgentActions` to `onEvent`
++ * - Resolves when `agent_end` / `turn_end` or `error` arrives, or sends `{"type":"abort"}` on `signal` abort
++ */
++export async function runPiRpcTurn(options: PiRpcTurnOptions): Promise<PiRpcTurnResult> {
++  const writer = options.send ?? options.writeStdin;
++  if (!writer) {
++    throw new Error("runPiRpcTurn requires a `send` or `writeStdin` callback.");
++  }
++  const message = options.message ?? options.prompt ?? "";
++  const lineBuffer = new PiRpcLineBuffer();
++  const events: AgentEvent[] = [];
++  let accumulatedText = "";
++  let toolCount = 0;
++
++  const emitEvent = (ev: AgentEvent) => {
++    events.push(ev);
++    options.onEvent?.(ev);
++  };
++
++  return new Promise<PiRpcTurnResult>((resolve, reject) => {
++    let settled = false;
++    let unsubscribe: (() => void) | null = null;
++
++    const cleanup = () => {
++      if (unsubscribe) {
++        const unsub = unsubscribe;
++        unsubscribe = null;
++        unsub();
++      }
++      options.signal?.removeEventListener("abort", handleAbort);
++    };
++
++    const finish = (result: PiRpcTurnResult) => {
++      if (settled) return;
++      settled = true;
++      cleanup();
++      resolve(result);
++    };
++
++    const handleNormalizedEvents = (normalized: PiNormalizedEvent[]) => {
++      for (const ev of normalized) {
++        if (settled) return;
++        options.onPiEvent?.(ev);
++
++        if (ev.kind === "text_delta" && ev.delta) {
++          accumulatedText += ev.delta;
++          options.onTextDelta?.(ev.delta, accumulatedText);
++        } else if (ev.kind === "tool_start") {
++          toolCount += 1;
++        }
++
++        const actions = mapPiEventToAgentActions(ev, { accumulatedText, toolCount });
++        for (const action of actions) {
++          emitEvent(action);
++        }
++
++        if (ev.kind === "agent_end") {
++          const finalText = accumulatedText || ev.text || "";
++          const steps = Math.max(ev.steps, toolCount > 0 ? toolCount : 1);
++          finish({
++            status: "completed",
++            text: finalText,
++            stopReason: ev.stopReason,
++            steps,
++            tokens: ev.tokens,
++            events,
++          });
++          return;
++        }
++
++        if (ev.kind === "error") {
++          const steps = Math.max(1, toolCount);
++          finish({
++            status: "error",
++            text: accumulatedText,
++            stopReason: "error",
++            steps,
++            tokens: 0,
++            error: ev.message,
++            events,
++          });
++          return;
++        }
++
++        if (ev.kind === "response" && !ev.success) {
++          const steps = Math.max(1, toolCount);
++          finish({
++            status: "error",
++            text: accumulatedText,
++            stopReason: "error",
++            steps,
++            tokens: 0,
++            error: ev.error ?? "Pi RPC command failed",
++            events,
++          });
++          return;
++        }
++      }
++    };
++
++    const handleAbort = () => {
++      if (settled) return;
++      const abortLine = encodePiRpcCommand({ type: "abort" });
++      Promise.resolve(writer(abortLine))
++        .catch(() => undefined)
++        .finally(() => {
++          finish({
++            status: "aborted",
++            text: accumulatedText,
++            stopReason: "aborted",
++            steps: Math.max(1, toolCount),
++            tokens: 0,
++            events,
++          });
++        });
++    };
++
++    if (options.signal?.aborted) {
++      handleAbort();
++      return;
++    }
++
++    options.signal?.addEventListener("abort", handleAbort, { once: true });
++
++    unsubscribe = options.onLine((incoming: string) => {
++      if (settled) return;
++      let chunk = incoming;
++      if (!chunk.includes("\n")) {
++        const trimmed = chunk.trim();
++        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
++          try {
++            JSON.parse(trimmed);
++            chunk = `${chunk}\n`;
++          } catch {
++            // Incomplete JSON chunk; wait for remaining bytes or newline.
++          }
++        }
++      }
++      handleNormalizedEvents(lineBuffer.feed(chunk));
++    });
++
++    const promptFrame = encodePiRpcCommand({
++      id: options.id,
++      type: "prompt",
++      message,
++      provider: options.provider ?? PI_PROVIDER,
++      model: options.model,
++      presetId: options.presetId,
++      temporary: options.temporary,
++    });
++
++    Promise.resolve(writer(promptFrame)).catch((err: unknown) => {
++      if (settled) return;
++      settled = true;
++      cleanup();
++      reject(err instanceof Error ? err : new Error(String(err)));
++    });
++  });
 +}

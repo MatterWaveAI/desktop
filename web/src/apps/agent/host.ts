@@ -93,6 +93,20 @@ export interface Checkpoint {
   files: { relative: string; existed: boolean }[];
 }
 
+export interface PiRpcSpawnOptions {
+  cwd?: string;
+  provider?: string;
+  model?: string | null;
+  presetId?: string | null;
+  temporary?: boolean;
+}
+
+export interface PiRpcSessionHandle {
+  send(line: string): Promise<void> | void;
+  onLine(handler: (line: string) => void): () => void;
+  close?(): Promise<void> | void;
+}
+
 export interface AgentHost {
   status(): Promise<AgentStatus>;
   setEnabled(enabled: boolean): Promise<AgentStatus>;
@@ -116,7 +130,15 @@ export interface AgentHost {
   checkpoints(): Promise<Checkpoint[]>;
   /** Confirmed in the desktop app's dialog, with the files it puts back. */
   restore(checkpointId: number): Promise<{ restored: string[] }>;
+  /** Optional Pi 1.0 (`pi --mode rpc`) JSONL stdin writer. */
+  piRpcSend?(line: string): Promise<void> | void;
+  /** Optional Pi 1.0 (`pi --mode rpc`) JSONL stdout line listener. */
+  onPiRpcLine?(handler: (line: string) => void): () => void;
+  /** Optional Pi 1.0 (`pi --mode rpc`) session spawner. */
+  piRpcSpawn?(options?: PiRpcSpawnOptions): Promise<PiRpcSessionHandle>;
 }
+
+export type DesktopAgentHost = AgentHost;
 
 const READ_COMMANDS: Record<ReadTool, string> = {
   read_file: "agent_read_file",

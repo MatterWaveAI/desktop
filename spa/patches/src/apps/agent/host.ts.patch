@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/host.ts b/src/apps/agent/host.ts
 new file mode 100644
-index 0000000..d5a651f
+index 0000000..bf0c6ff
 --- /dev/null
 +++ b/src/apps/agent/host.ts
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,190 @@
 +/**
 + * The webview's side of the native tool host (src-tauri/src/agent): typed
 + * wrappers over its allow-listed commands, and nothing else. Every file
@@ -99,6 +99,20 @@ index 0000000..d5a651f
 +  files: { relative: string; existed: boolean }[];
 +}
 +
++export interface PiRpcSpawnOptions {
++  cwd?: string;
++  provider?: string;
++  model?: string | null;
++  presetId?: string | null;
++  temporary?: boolean;
++}
++
++export interface PiRpcSessionHandle {
++  send(line: string): Promise<void> | void;
++  onLine(handler: (line: string) => void): () => void;
++  close?(): Promise<void> | void;
++}
++
 +export interface AgentHost {
 +  status(): Promise<AgentStatus>;
 +  setEnabled(enabled: boolean): Promise<AgentStatus>;
@@ -122,7 +136,15 @@ index 0000000..d5a651f
 +  checkpoints(): Promise<Checkpoint[]>;
 +  /** Confirmed in the desktop app's dialog, with the files it puts back. */
 +  restore(checkpointId: number): Promise<{ restored: string[] }>;
++  /** Optional Pi 1.0 (`pi --mode rpc`) JSONL stdin writer. */
++  piRpcSend?(line: string): Promise<void> | void;
++  /** Optional Pi 1.0 (`pi --mode rpc`) JSONL stdout line listener. */
++  onPiRpcLine?(handler: (line: string) => void): () => void;
++  /** Optional Pi 1.0 (`pi --mode rpc`) session spawner. */
++  piRpcSpawn?(options?: PiRpcSpawnOptions): Promise<PiRpcSessionHandle>;
 +}
++
++export type DesktopAgentHost = AgentHost;
 +
 +const READ_COMMANDS: Record<ReadTool, string> = {
 +  read_file: "agent_read_file",
