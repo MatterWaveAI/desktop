@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/AgentPanel.test.tsx b/src/apps/agent/AgentPanel.test.tsx
 new file mode 100644
-index 0000000..e9aef22
+index 0000000..9d3af50
 --- /dev/null
 +++ b/src/apps/agent/AgentPanel.test.tsx
-@@ -0,0 +1,336 @@
+@@ -0,0 +1,438 @@
 +import { act } from "react";
 +import { createRoot, type Root } from "react-dom/client";
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -200,11 +200,18 @@ index 0000000..e9aef22
 +    expect(box.placeholder).toBe("Model M cannot call tools. Pick another model to use agent mode.");
 +  });
 +
-+  it("handles /pi-engine, /pi-status, /pi-compact, and /pi <prompt> via host.piRpcTurn", async () => {
++  it("handles /pi-engine, /pi-status, /pi-model, /pi-compact, /pi-fork, /pi-new, and /pi <prompt> via host.piRpcTurn", async () => {
 +    const host = new FakeHost();
 +    host.piRpcTurn = vi.fn(async ({ prompt }) => {
 +      if (prompt.startsWith("{")) {
-+        const parsed = JSON.parse(prompt) as { id?: string; type: string; customInstructions?: string };
++        const parsed = JSON.parse(prompt) as {
++          id?: string;
++          type: string;
++          customInstructions?: string;
++          provider?: string;
++          modelId?: string;
++          entryId?: string;
++        };
 +        if (parsed.type === "compact") {
 +          return [
 +            JSON.stringify({
@@ -216,6 +223,47 @@ index 0000000..e9aef22
 +                summary: parsed.customInstructions
 +                  ? `Compacted with: ${parsed.customInstructions}`
 +                  : "Compacted 8 turns",
++              },
++            }),
++          ];
++        }
++        if (parsed.type === "set_model") {
++          return [
++            JSON.stringify({
++              type: "response",
++              id: parsed.id ?? "m1",
++              command: "set_model",
++              success: true,
++              data: {
++                provider: parsed.provider ?? "matterwave",
++                modelId: parsed.modelId,
++              },
++            }),
++          ];
++        }
++        if (parsed.type === "fork") {
++          return [
++            JSON.stringify({
++              type: "response",
++              id: parsed.id ?? "f1",
++              command: "fork",
++              success: true,
++              data: {
++                sessionId: "sess_fork_9",
++                ...(parsed.entryId ? { entryId: parsed.entryId } : {}),
++              },
++            }),
++          ];
++        }
++        if (parsed.type === "new_session") {
++          return [
++            JSON.stringify({
++              type: "response",
++              id: parsed.id ?? "n1",
++              command: "new_session",
++              success: true,
++              data: {
++                sessionId: "sess_fresh_1",
 +              },
 +            }),
 +          ];
@@ -252,6 +300,28 @@ index 0000000..e9aef22
 +    await press("Enter");
 +    expect(container!.textContent).toContain("Agent engine: pi (active: pi).");
 +
++    // /pi-model inspects and switches the Pi model
++    await type("/pi-model");
++    await press("Enter");
++    expect(container!.textContent).toContain("Pi 1.0 model: default.");
++
++    await type("/pi-model claude-sonnet-4-5");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Pi 1.0 model set to claude-sonnet-4-5."),
++    );
++    expect(host.piRpcTurn).toHaveBeenCalledWith(
++      expect.objectContaining({
++        workspaceRoot: "/work/demo",
++        prompt: JSON.stringify({
++          type: "set_model",
++          provider: "matterwave",
++          modelId: "claude-sonnet-4-5",
++        }),
++        model: "claude-sonnet-4-5",
++      }),
++    );
++
 +    // /pi-compact compacts the Pi session
 +    await type("/pi-compact keep tests");
 +    await press("Enter");
@@ -259,7 +329,38 @@ index 0000000..e9aef22
 +      expect(container!.textContent).toContain("Pi session compacted: Compacted with: keep tests"),
 +    );
 +
-+    // /pi <prompt> runs a turn through host.piRpcTurn
++    // /pi-fork forks the Pi session
++    await type("/pi-fork entry_42");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Pi session forked (sess_fork_9) from entry_42."),
++    );
++    expect(host.piRpcTurn).toHaveBeenCalledWith(
++      expect.objectContaining({
++        workspaceRoot: "/work/demo",
++        prompt: JSON.stringify({
++          type: "fork",
++          entryId: "entry_42",
++        }),
++      }),
++    );
++
++    // /pi-new starts a new Pi session
++    await type("/pi-new");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Started new Pi session (sess_fresh_1)."),
++    );
++    expect(host.piRpcTurn).toHaveBeenCalledWith(
++      expect.objectContaining({
++        workspaceRoot: "/work/demo",
++        prompt: JSON.stringify({
++          type: "new_session",
++        }),
++      }),
++    );
++
++    // /pi <prompt> runs a turn through host.piRpcTurn with the selected Pi model
 +    await type("/pi check main.ts");
 +    await press("Enter");
 +    await vi.waitFor(() => expect(container!.textContent).toContain("Pi answered: check main.ts"));
@@ -267,6 +368,7 @@ index 0000000..e9aef22
 +      expect.objectContaining({
 +        workspaceRoot: "/work/demo",
 +        prompt: "check main.ts",
++        model: "claude-sonnet-4-5",
 +      }),
 +    );
 +    expect(q("[data-mw-agent-usage]")!.textContent).toContain("77 tokens");

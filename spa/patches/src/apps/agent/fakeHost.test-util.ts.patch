@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/fakeHost.test-util.ts b/src/apps/agent/fakeHost.test-util.ts
 new file mode 100644
-index 0000000..3f90371
+index 0000000..d64dd87
 --- /dev/null
 +++ b/src/apps/agent/fakeHost.test-util.ts
-@@ -0,0 +1,205 @@
+@@ -0,0 +1,209 @@
 +/**
 + * Test doubles for agent mode: an in-memory tool host with the native
 + * host's shape (preview, then apply against the previewed fingerprint;
@@ -46,6 +46,10 @@ index 0000000..3f90371
 +  readonly nativeAsked: string[] = [];
 +  /** The commands that ran. */
 +  readonly ran: string[] = [];
++  piRpcSend?: AgentHost["piRpcSend"];
++  onPiRpcLine?: AgentHost["onPiRpcLine"];
++  piRpcSpawn?: AgentHost["piRpcSpawn"];
++  piRpcTurn?: AgentHost["piRpcTurn"];
 +  private mode: ModeName = "ask";
 +
 +  constructor(files: Record<string, string> = {}) {

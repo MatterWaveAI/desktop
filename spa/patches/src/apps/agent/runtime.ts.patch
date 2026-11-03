@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/runtime.ts b/src/apps/agent/runtime.ts
 new file mode 100644
-index 0000000..d031a2f
+index 0000000..7ebfe6d
 --- /dev/null
 +++ b/src/apps/agent/runtime.ts
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,166 @@
 +/**
 + * Desktop Agent Mode runtime bridge for Pi 1.0 (`pi --mode rpc`) JSONL RPC sessions.
 + *
@@ -19,16 +19,19 @@ index 0000000..d031a2f
 +  createPiRpcAdapter,
 +  encodePiCommand,
 +  encodePiRpcCommand,
++  forkPiRpcSession,
 +  getPiRpcState,
 +  mapPiEventToAgentActions,
 +  newPiRpcSession,
 +  parsePiEventLine,
 +  runPiRpcTurn,
 +  sendPiRpcRequest,
++  setPiRpcModel,
 +  steerPiRpcTurn,
 +  type PiNormalizedEvent,
 +  type PiPresetMetadata,
 +  type PiRpcCommand,
++  type PiRpcCommandHost,
 +  type PiRpcRequestIo,
 +  type PiRpcRequestOptions,
 +  type PiRpcSendIo,
@@ -43,16 +46,19 @@ index 0000000..d031a2f
 +  createPiRpcAdapter,
 +  encodePiCommand,
 +  encodePiRpcCommand,
++  forkPiRpcSession,
 +  getPiRpcState,
 +  mapPiEventToAgentActions,
 +  newPiRpcSession,
 +  parsePiEventLine,
 +  runPiRpcTurn,
 +  sendPiRpcRequest,
++  setPiRpcModel,
 +  steerPiRpcTurn,
 +  type PiNormalizedEvent,
 +  type PiPresetMetadata,
 +  type PiRpcCommand,
++  type PiRpcCommandHost,
 +  type PiRpcRequestIo,
 +  type PiRpcRequestOptions,
 +  type PiRpcSendIo,

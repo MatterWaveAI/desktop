@@ -40,6 +40,10 @@ export class FakeHost implements AgentHost {
   readonly nativeAsked: string[] = [];
   /** The commands that ran. */
   readonly ran: string[] = [];
+  piRpcSend?: AgentHost["piRpcSend"];
+  onPiRpcLine?: AgentHost["onPiRpcLine"];
+  piRpcSpawn?: AgentHost["piRpcSpawn"];
+  piRpcTurn?: AgentHost["piRpcTurn"];
   private mode: ModeName = "ask";
 
   constructor(files: Record<string, string> = {}) {

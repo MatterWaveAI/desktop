@@ -20,7 +20,7 @@ describe("agent slash commands", () => {
     expect(parseAgentCommand("fix the bug")).toBeNull();
   });
 
-  it("reads /pi, /pi-engine, /pi-compact, and /pi-status and documents them in AGENT_HELP", () => {
+  it("reads /pi, /pi-engine, /pi-model, /pi-compact, /pi-fork, /pi-new, and /pi-status and documents them in AGENT_HELP", () => {
     expect(parseAgentCommand("/pi Refactor loop.ts")).toEqual({
       kind: "pi",
       prompt: "Refactor loop.ts",
@@ -49,6 +49,14 @@ describe("agent slash commands", () => {
       kind: "pi-engine",
       engine: null,
     });
+    expect(parseAgentCommand("/pi-model")).toEqual({
+      kind: "pi-model",
+      model: "",
+    });
+    expect(parseAgentCommand("/pi-model claude-sonnet-4-5")).toEqual({
+      kind: "pi-model",
+      model: "claude-sonnet-4-5",
+    });
     expect(parseAgentCommand("/pi-compact")).toEqual({
       kind: "pi-compact",
       instructions: "",
@@ -57,12 +65,26 @@ describe("agent slash commands", () => {
       kind: "pi-compact",
       instructions: "keep file paths",
     });
+    expect(parseAgentCommand("/pi-fork")).toEqual({
+      kind: "pi-fork",
+      entryId: "",
+    });
+    expect(parseAgentCommand("/pi-fork entry_42")).toEqual({
+      kind: "pi-fork",
+      entryId: "entry_42",
+    });
+    expect(parseAgentCommand("/pi-new")).toEqual({
+      kind: "pi-new",
+    });
     expect(parseAgentCommand("/pi-status")).toEqual({
       kind: "pi-status",
     });
     expect(AGENT_HELP).toContain("/pi <prompt>");
     expect(AGENT_HELP).toContain("/pi-engine [auto|pi|builtin]");
+    expect(AGENT_HELP).toContain("/pi-model [model]");
     expect(AGENT_HELP).toContain("/pi-compact [instructions]");
+    expect(AGENT_HELP).toContain("/pi-fork [entryId]");
+    expect(AGENT_HELP).toContain("/pi-new");
     expect(AGENT_HELP).toContain("/pi-status");
   });
 });

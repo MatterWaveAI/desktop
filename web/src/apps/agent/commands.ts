@@ -14,7 +14,10 @@ export type AgentSlashCommand =
   | { kind: "help" }
   | { kind: "pi"; prompt: string }
   | { kind: "pi-engine"; engine: PiEngineName | null }
+  | { kind: "pi-model"; model: string }
   | { kind: "pi-compact"; instructions: string }
+  | { kind: "pi-fork"; entryId: string }
+  | { kind: "pi-new" }
   | { kind: "pi-status" }
   | { kind: "unknown"; name: string };
 
@@ -52,8 +55,14 @@ export function parseAgentCommand(text: string): AgentSlashCommand | null {
         : null;
       return { kind: "pi-engine", engine };
     }
+    case "pi-model":
+      return { kind: "pi-model", model: arg };
     case "pi-compact":
       return { kind: "pi-compact", instructions: arg };
+    case "pi-fork":
+      return { kind: "pi-fork", entryId: arg };
+    case "pi-new":
+      return { kind: "pi-new" };
     case "pi-status":
       return { kind: "pi-status" };
     default:
@@ -67,7 +76,8 @@ export const AGENT_HELP =
   "/restore lists the file checkpoints, and /restore <id> puts the files back as they were before it. " +
   "/init drafts a MATTERWAVE.md for this folder. " +
   "/pi <prompt> runs a prompt through the Pi 1.0 RPC engine, /pi-engine [auto|pi|builtin] shows or switches the agent engine, " +
-  "/pi-compact [instructions] compacts the Pi 1.0 session, and /pi-status shows Pi 1.0 engine status. " +
+  "/pi-model [model] shows or sets the Pi 1.0 model, /pi-compact [instructions] compacts the Pi 1.0 session, " +
+  "/pi-fork [entryId] forks the Pi 1.0 session, /pi-new starts a new Pi 1.0 session, and /pi-status shows Pi 1.0 engine status. " +
   "@path attaches a file from the folder to your message.";
 
 /** What /init asks the agent to do. It goes through approval like any write (and in auto-edit, MATTERWAVE.md still asks). */

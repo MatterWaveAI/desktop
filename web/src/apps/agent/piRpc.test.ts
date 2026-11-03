@@ -8,22 +8,26 @@ import {
   createPiRpcAdapter,
   encodePiCommand,
   encodePiRpcCommand,
+  forkPiRpcSession,
   getPiRpcState,
   mapPiEventToAgentActions,
   newPiRpcSession,
   parsePiEventLine,
   runPiRpcTurn,
   sendPiRpcRequest,
+  setPiRpcModel,
   steerPiRpcTurn,
   type PiNormalizedEvent,
 } from "./piRpc";
 import {
   compactPiRpcSession as runtimeCompactPiRpcSession,
+  forkPiRpcSession as runtimeForkPiRpcSession,
   getPiRpcState as runtimeGetPiRpcState,
   hasPiRpcSupport,
   newPiRpcSession as runtimeNewPiRpcSession,
   runDesktopPiTurn,
   sendPiRpcRequest as runtimeSendPiRpcRequest,
+  setPiRpcModel as runtimeSetPiRpcModel,
   steerPiRpcTurn as runtimeSteerPiRpcTurn,
 } from "./runtime";
 
@@ -518,9 +522,101 @@ describe("Pi 1.0 RPC session controls (sendPiRpcRequest, compactPiRpcSession, ge
   it("re-exports session control helpers from runtime.ts", () => {
     expect(runtimeSendPiRpcRequest).toBe(sendPiRpcRequest);
     expect(runtimeCompactPiRpcSession).toBe(compactPiRpcSession);
+    expect(runtimeForkPiRpcSession).toBe(forkPiRpcSession);
     expect(runtimeGetPiRpcState).toBe(getPiRpcState);
     expect(runtimeNewPiRpcSession).toBe(newPiRpcSession);
+    expect(runtimeSetPiRpcModel).toBe(setPiRpcModel);
     expect(runtimeSteerPiRpcTurn).toBe(steerPiRpcTurn);
+  });
+
+  it("switches model via setPiRpcModel and forks/resets session via forkPiRpcSession and newPiRpcSession", async () => {
+    const host = new FakeHost();
+    host.piRpcTurn = vi.fn(async ({ prompt }) => {
+      const parsed = JSON.parse(prompt) as {
+        type: string;
+        provider?: string;
+        modelId?: string;
+        entryId?: string;
+      };
+      return [
+        JSON.stringify({
+          type: "response",
+          command: parsed.type,
+          success: true,
+          data: {
+            command: parsed.type,
+            ...(parsed.provider ? { provider: parsed.provider } : {}),
+            ...(parsed.modelId ? { modelId: parsed.modelId } : {}),
+            ...(parsed.entryId ? { entryId: parsed.entryId } : {}),
+            sessionId: parsed.type === "fork" ? "sess_forked" : "sess_1",
+          },
+        }),
+      ];
+    });
+
+    const modelRes = await setPiRpcModel(host, "/work/demo", "claude-sonnet-4-5");
+    expect(host.piRpcTurn).toHaveBeenCalledWith({
+      workspaceRoot: "/work/demo",
+      prompt: JSON.stringify({
+        type: "set_model",
+        provider: "matterwave",
+        modelId: "claude-sonnet-4-5",
+      }),
+      model: "claude-sonnet-4-5",
+    });
+    expect(modelRes).toMatchObject({
+      command: "set_model",
+      provider: "matterwave",
+      modelId: "claude-sonnet-4-5",
+    });
+
+    await setPiRpcModel(host, "/work/demo", "gpt-5.4", "openai", { CUSTOM_ENV: "1" });
+    expect(host.piRpcTurn).toHaveBeenCalledWith({
+      workspaceRoot: "/work/demo",
+      prompt: JSON.stringify({
+        type: "set_model",
+        provider: "openai",
+        modelId: "gpt-5.4",
+      }),
+      model: "gpt-5.4",
+      env: { CUSTOM_ENV: "1" },
+    });
+
+    const forkRes = await forkPiRpcSession(host, "/work/demo", "entry_7", { CUSTOM_ENV: "1" });
+    expect(host.piRpcTurn).toHaveBeenCalledWith({
+      workspaceRoot: "/work/demo",
+      prompt: JSON.stringify({
+        type: "fork",
+        entryId: "entry_7",
+      }),
+      env: { CUSTOM_ENV: "1" },
+    });
+    expect(forkRes).toMatchObject({
+      command: "fork",
+      entryId: "entry_7",
+      sessionId: "sess_forked",
+    });
+
+    await forkPiRpcSession(host, "/work/demo");
+    expect(host.piRpcTurn).toHaveBeenCalledWith({
+      workspaceRoot: "/work/demo",
+      prompt: JSON.stringify({
+        type: "fork",
+      }),
+    });
+
+    const newRes = await newPiRpcSession(host, "/work/demo", { CUSTOM_ENV: "1" });
+    expect(host.piRpcTurn).toHaveBeenCalledWith({
+      workspaceRoot: "/work/demo",
+      prompt: JSON.stringify({
+        type: "new_session",
+      }),
+      env: { CUSTOM_ENV: "1" },
+    });
+    expect(newRes).toMatchObject({
+      command: "new_session",
+      sessionId: "sess_1",
+    });
   });
 
   it("correlates sendPiRpcRequest by unique id across chunked JSONL frames and ignores unrelated responses", async () => {

@@ -53,6 +53,11 @@ export type PiRpcCommand =
     }
   | {
       id?: string;
+      type: "fork";
+      entryId?: string;
+    }
+  | {
+      id?: string;
       type: "steer";
       message: string;
     };
@@ -127,6 +132,7 @@ export function encodePiCommand(
     | { id?: string; type: "get_state" }
     | { id?: string; type: "compact"; customInstructions?: string }
     | { id?: string; type: "new_session" }
+    | { id?: string; type: "fork"; entryId?: string }
     | { id?: string; type: "steer"; message: string }
     | (Record<string, unknown> & { id?: string; type: string }),
 ): string {
@@ -992,42 +998,169 @@ export async function sendPiRpcRequest<T = Record<string, unknown>>(
   });
 }
 
+export interface PiRpcCommandHost extends PiRpcRequestIo {
+  piRpcSpawn?: (options?: {
+    cwd?: string;
+    provider?: string;
+    model?: string | null;
+    presetId?: string | null;
+    temporary?: boolean;
+  }) => Promise<{
+    send(line: string): Promise<void> | void;
+    onLine(handler: (line: string) => void): () => void;
+    close?(): Promise<void> | void;
+  }>;
+  piRpcTurn?: (args: {
+    workspaceRoot: string;
+    prompt: string;
+    model?: string;
+    env?: Record<string, string>;
+  }) => Promise<string[]>;
+}
+
+async function runPiRpcHostCommand<T = Record<string, unknown>>(
+  host: PiRpcCommandHost,
+  workspaceRoot: string,
+  command: Record<string, unknown> & { type: string; id?: string },
+  env?: Record<string, string>,
+  options?: PiRpcRequestOptions,
+): Promise<T> {
+  if (resolvePiRpcWriter(host) && resolvePiRpcLineListener(host)) {
+    return sendPiRpcRequest<T>(host, command, options);
+  }
+  if (typeof host.piRpcSpawn === "function") {
+    const session = await host.piRpcSpawn({
+      cwd: workspaceRoot || undefined,
+      ...(typeof command.modelId === "string" && command.modelId ? { model: command.modelId } : {}),
+    });
+    try {
+      return await sendPiRpcRequest<T>(
+        { send: (l) => session.send(l), onLine: (h) => session.onLine(h) },
+        command,
+        options,
+      );
+    } finally {
+      await session.close?.();
+    }
+  }
+  if (typeof host.piRpcTurn === "function") {
+    const lines = await host.piRpcTurn({
+      workspaceRoot,
+      prompt: encodePiRpcCommand(command).trim(),
+      ...(typeof command.modelId === "string" && command.modelId ? { model: command.modelId } : {}),
+      ...(env ? { env } : {}),
+    });
+    let responseData: T | undefined;
+    for (const line of lines) {
+      const ev = parsePiEventLine(line);
+      if (ev?.kind === "response") {
+        if (!ev.success) {
+          throw new Error(ev.error ?? `Pi RPC command '${command.type}' failed`);
+        }
+        responseData = (ev.data as T) ?? ({} as T);
+      } else if (ev?.kind === "error") {
+        throw new Error(ev.message);
+      }
+    }
+    return responseData !== undefined ? responseData : ({} as T);
+  }
+  return sendPiRpcRequest<T>(host, command, options);
+}
+
 /**
- * Send `{"type": "compact", "customInstructions"?: ...}` via `sendPiRpcRequest`.
+ * Send `{"type": "compact", "customInstructions"?: ...}` via `sendPiRpcRequest` or `piRpcTurn`.
  */
 export async function compactPiRpcSession<T = Record<string, unknown>>(
-  io: PiRpcRequestIo,
+  io: PiRpcCommandHost,
   customInstructions?: string,
   options?: PiRpcRequestOptions,
 ): Promise<T> {
-  return sendPiRpcRequest<T>(
+  return runPiRpcHostCommand<T>(
     io,
+    "",
     {
       type: "compact",
       ...(customInstructions !== undefined ? { customInstructions } : {}),
     },
+    undefined,
     options,
   );
 }
 
 /**
- * Send `{"type": "get_state"}` via `sendPiRpcRequest`.
+ * Send `{"type": "get_state"}` via `sendPiRpcRequest` or `piRpcTurn`.
  */
 export async function getPiRpcState<T = Record<string, unknown>>(
-  io: PiRpcRequestIo,
+  io: PiRpcCommandHost,
   options?: PiRpcRequestOptions,
 ): Promise<T> {
-  return sendPiRpcRequest<T>(io, { type: "get_state" }, options);
+  return runPiRpcHostCommand<T>(io, "", { type: "get_state" }, undefined, options);
 }
 
 /**
- * Send `{"type": "new_session"}` via `sendPiRpcRequest`.
+ * Send `{"type": "new_session"}` via `sendPiRpcRequest` or `piRpcTurn`.
  */
 export async function newPiRpcSession<T = Record<string, unknown>>(
-  io: PiRpcRequestIo,
+  host: PiRpcCommandHost,
+  workspaceRootOrOptions?: string | PiRpcRequestOptions,
+  env?: Record<string, string>,
   options?: PiRpcRequestOptions,
 ): Promise<T> {
-  return sendPiRpcRequest<T>(io, { type: "new_session" }, options);
+  const workspaceRoot = typeof workspaceRootOrOptions === "string" ? workspaceRootOrOptions : "";
+  const reqOptions =
+    typeof workspaceRootOrOptions === "object" && workspaceRootOrOptions !== null
+      ? workspaceRootOrOptions
+      : options;
+  return runPiRpcHostCommand<T>(host, workspaceRoot, { type: "new_session" }, env, reqOptions);
+}
+
+/**
+ * Send `{"type": "set_model", "provider": provider ?? "matterwave", "modelId": model}`
+ * via `piRpcTurn`, `piRpcSpawn`, or `sendPiRpcRequest`.
+ */
+export async function setPiRpcModel<T = Record<string, unknown>>(
+  host: PiRpcCommandHost,
+  workspaceRoot: string,
+  model?: string,
+  provider?: string,
+  env?: Record<string, string>,
+  options?: PiRpcRequestOptions,
+): Promise<T> {
+  const actualWorkspaceRoot = model === undefined ? "" : workspaceRoot;
+  const actualModel = model === undefined ? workspaceRoot : model;
+  return runPiRpcHostCommand<T>(
+    host,
+    actualWorkspaceRoot,
+    {
+      type: "set_model",
+      provider: provider ?? PI_PROVIDER,
+      modelId: actualModel,
+    },
+    env,
+    options,
+  );
+}
+
+/**
+ * Send `{"type": "fork", ...}` via `piRpcTurn`, `piRpcSpawn`, or `sendPiRpcRequest`.
+ */
+export async function forkPiRpcSession<T = Record<string, unknown>>(
+  host: PiRpcCommandHost,
+  workspaceRoot = "",
+  entryId?: string,
+  env?: Record<string, string>,
+  options?: PiRpcRequestOptions,
+): Promise<T> {
+  return runPiRpcHostCommand<T>(
+    host,
+    workspaceRoot,
+    {
+      type: "fork",
+      ...(entryId ? { entryId } : {}),
+    },
+    env,
+    options,
+  );
 }
 
 /**

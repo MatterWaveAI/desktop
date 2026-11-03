@@ -19,10 +19,13 @@ import {
 import {
   compactPiRpcSession,
   encodePiRpcCommand,
+  forkPiRpcSession,
   getPiRpcState,
   hasPiRpcSupport,
+  newPiRpcSession,
   parsePiEventLine,
   runDesktopPiTurn,
+  setPiRpcModel,
 } from "./runtime";
 import { MODES_BY_NAME, type ModeName } from "./sdk/types";
 import { CYCLE, MODE_LABELS, loadMode, saveMode } from "./mode";
@@ -62,6 +65,7 @@ export function AgentPanel(props: {
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [mode, setModeState] = useState<ModeName>(loadMode);
   const [piEngine, setPiEngine] = useState<PiEngineName>("auto");
+  const [piModel, setPiModel] = useState<string | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [history, setHistory] = useState<AgentMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -213,6 +217,7 @@ export function AgentPanel(props: {
 
   const resolvedPiEngine: "pi" | "builtin" =
     piEngine === "auto" ? (hasPiRpcSupport(host) ? "pi" : "builtin") : piEngine;
+  const effectivePiModel = piModel ?? props.model;
 
   const runPi = async (prompt: string, shown: string = prompt) => {
     if (!status?.root) {
@@ -232,7 +237,7 @@ export function AgentPanel(props: {
       const result = await runDesktopPiTurn(host, {
         prompt,
         cwd: status.root,
-        model: props.model,
+        model: effectivePiModel,
         signal: abort.signal,
         onEvent,
       });
@@ -336,8 +341,69 @@ export function AgentPanel(props: {
           }
         }
         say(
-          `Pi 1.0 status: engine=${piEngine} (active: ${resolvedPiEngine}) | rpc=${hasPiRpcSupport(host) ? "ready" : "unavailable"} | model=${props.model ?? "default"} | mode=${mode} | root=${status?.root ?? "none"}${details}`,
+          `Pi 1.0 status: engine=${piEngine} (active: ${resolvedPiEngine}) | rpc=${hasPiRpcSupport(host) ? "ready" : "unavailable"} | model=${effectivePiModel ?? "default"} | mode=${mode} | root=${status?.root ?? "none"}${details}`,
         );
+        break;
+      }
+      case "pi-model": {
+        if (!command.model) {
+          say(`Pi 1.0 model: ${effectivePiModel ?? "default"}. Use /pi-model <model> to switch.`);
+          break;
+        }
+        if (!hasPiRpcSupport(host)) {
+          say("Pi 1.0 RPC is not available on this host.");
+          break;
+        }
+        try {
+          await setPiRpcModel(host, status?.root ?? "", command.model);
+          setPiModel(command.model);
+          say(`Pi 1.0 model set to ${command.model}.`);
+        } catch (err) {
+          say(`Pi model switch failed: ${hostError(err)}`);
+        }
+        break;
+      }
+      case "pi-fork": {
+        if (!hasPiRpcSupport(host)) {
+          say("Pi 1.0 RPC is not available on this host.");
+          break;
+        }
+        try {
+          const res = await forkPiRpcSession<{ sessionId?: string }>(
+            host,
+            status?.root ?? "",
+            command.entryId || undefined,
+          );
+          if (typeof res?.sessionId === "string" && res.sessionId) {
+            say(
+              `Pi session forked (${res.sessionId})${command.entryId ? ` from ${command.entryId}` : ""}.`,
+            );
+          } else if (command.entryId) {
+            say(`Pi session forked from ${command.entryId}.`);
+          } else {
+            say("Pi session forked.");
+          }
+        } catch (err) {
+          say(`Pi fork failed: ${hostError(err)}`);
+        }
+        break;
+      }
+      case "pi-new": {
+        if (!hasPiRpcSupport(host)) {
+          say("Pi 1.0 RPC is not available on this host.");
+          break;
+        }
+        try {
+          const res = await newPiRpcSession<{ sessionId?: string }>(host, status?.root ?? "");
+          setHistory([]);
+          if (typeof res?.sessionId === "string" && res.sessionId) {
+            say(`Started new Pi session (${res.sessionId}).`);
+          } else {
+            say("Started new Pi session.");
+          }
+        } catch (err) {
+          say(`Pi new session failed: ${hostError(err)}`);
+        }
         break;
       }
       case "pi-compact": {

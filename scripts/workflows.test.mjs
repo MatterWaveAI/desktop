@@ -138,4 +138,38 @@ jobs:
 `);
     assert.deepEqual(workflowProblems(doc), []);
   });
+
+  it("release.yml verifies the tagged commit is an ancestor of origin/main before building", () => {
+    const doc = parse(fs.readFileSync(path.join(WORKFLOWS, "release.yml"), "utf8"));
+    const prepare = doc.jobs?.prepare;
+    assert.ok(prepare, "release.yml must define jobs.prepare");
+    assert.equal(doc.jobs?.build?.needs, "prepare", "jobs.build must depend on jobs.prepare");
+
+    const checkoutStep = (prepare.steps ?? []).find(
+      (s) => typeof s.uses === "string" && s.uses.startsWith("actions/checkout@"),
+    );
+    assert.ok(checkoutStep, "prepare must check out the repository");
+    assert.equal(checkoutStep.with?.["fetch-depth"], 0, "prepare checkout must use fetch-depth: 0");
+
+    const guardStep = (prepare.steps ?? []).find(
+      (s) => typeof s.run === "string" && s.run.includes('git merge-base --is-ancestor "$GITHUB_SHA" origin/main'),
+    );
+    assert.ok(guardStep, 'prepare must verify git merge-base --is-ancestor "$GITHUB_SHA" origin/main');
+    assert.match(guardStep.run, /git fetch origin main/);
+  });
+
+  it("RELEASING.md documents merging develop into main, manifest version bumps, tagging, and release verification", () => {
+    const releasingPath = fileURLToPath(new URL("../RELEASING.md", import.meta.url));
+    assert.ok(fs.existsSync(releasingPath), "RELEASING.md must exist at the repo root");
+    const text = fs.readFileSync(releasingPath, "utf8");
+    assert.match(text, /develop/);
+    assert.match(text, /main/);
+    assert.match(text, /package\.json/);
+    assert.match(text, /src-tauri\/Cargo\.toml/);
+    assert.match(text, /src-tauri\/tauri\.conf\.json/);
+    assert.match(text, /CHANGELOG\.md/);
+    assert.match(text, /scripts\/release-check\.mjs/);
+    assert.match(text, /git merge-base --is-ancestor/);
+    assert.match(text, /origin\/main/);
+  });
 });
