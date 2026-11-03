@@ -1,10 +1,10 @@
 diff --git a/src/apps/agent/sdk/types.ts b/src/apps/agent/sdk/types.ts
 new file mode 100644
-index 0000000..ebbe328
+index 0000000..1ea0be1
 --- /dev/null
 +++ b/src/apps/agent/sdk/types.ts
-@@ -0,0 +1,148 @@
-+// Vendored from @matterwave/sdk (typescript-sdk, agent-contract-1.1 b58c5bf), src/agent/types.ts.
+@@ -0,0 +1,145 @@
++// Vendored from @matterwave/sdk (typescript-sdk, agent-contract-1.1 cce162b), src/agent/types.ts.
 +// Do not edit here: change the SDK (or the Python SDK's contract.json it is
 +// generated from), then copy the file again. sdk.test.ts checks the copy
 +// against src-tauri/agent/contract.json, the file the Rust tool host reads.
@@ -21,17 +21,14 @@ index 0000000..ebbe328
 +/** The contract's own version, semver: `CONTRACT.contract_version`. */
 +export const CONTRACT_VERSION: string = CONTRACT.contract_version;
 +
-+type ContractTool = (typeof CONTRACT.tools)[number];
-+type ContractMode = (typeof CONTRACT.approval_modes)[number];
-+
-+export type ToolName = ContractTool["name"];
++export type ToolName = (typeof CONTRACT.tools)[number]["name"];
 +/** The kinds of the contract's own seven tools. */
-+export type ToolKind = ContractTool["kind"];
++export type ToolKind = (typeof CONTRACT.tools)[number]["kind"];
 +/** Every kind a tool may have: the contract's three, then `network`, `mcp` and `meta`. */
 +export type AnyToolKind = keyof typeof CONTRACT.tool_kinds;
 +/** The kinds a client's own tools may have beyond the contract's: web_fetch (`network`), an MCP server's tool (`mcp`), todo_write, leaving plan mode or dispatching a subagent (`meta`). */
 +export type ExtraToolKind = Exclude<AnyToolKind, ToolKind>;
-+export type ModeName = ContractMode["name"];
++export type ModeName = (typeof CONTRACT.approval_modes)[number]["name"];
 +export type Decision = "allow" | "ask" | "deny";
 +export type Refusal = keyof typeof CONTRACT.confinement.refusals;
 +export type ApprovalRefusal = keyof typeof CONTRACT.approval.refusals;

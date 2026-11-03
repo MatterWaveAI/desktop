@@ -144,7 +144,7 @@ describe("the shipped app registry", () => {
       // like /pricing (the token is the credential), not installable, so
       // not an app.
       "/share/$token",
-      // The developer portal moved to the public site (docs.matterwave.ai) and
+      // The developer portal moved to the public site (matterwave.dev) and
       // the app links there externally; the app carries no routes for it.
       // `/device` is where a terminal or editor's sign-in code is approved:
       // reachable signed out (it sends to login first), not installable, so

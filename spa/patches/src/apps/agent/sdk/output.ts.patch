@@ -1,10 +1,10 @@
 diff --git a/src/apps/agent/sdk/output.ts b/src/apps/agent/sdk/output.ts
 new file mode 100644
-index 0000000..836323e
+index 0000000..2f07af4
 --- /dev/null
 +++ b/src/apps/agent/sdk/output.ts
-@@ -0,0 +1,312 @@
-+// Vendored from @matterwave/sdk (typescript-sdk, agent-contract-1.1 b58c5bf), src/agent/output.ts.
+@@ -0,0 +1,315 @@
++// Vendored from @matterwave/sdk (typescript-sdk, agent-contract-1.1 cce162b), src/agent/output.ts.
 +// Do not edit here: change the SDK (or the Python SDK's contract.json it is
 +// generated from), then copy the file again. sdk.test.ts checks the copy
 +// against src-tauri/agent/contract.json, the file the Rust tool host reads.
@@ -30,17 +30,20 @@ index 0000000..836323e
 +/**
 + * The tool cannot answer, and nothing was read or run. `reason` is the
 + * contract's code; `message` is its sentence for the model with `values`
-+ * filled in.
++ * filled in. `cause`, when set, is what failed underneath (a search's worker
++ * thread that died, say), for the client's own logs.
 + */
 +export class ToolError extends Error {
 +  readonly reason: ToolFailure;
 +  readonly values: Readonly<Record<string, string | number>>;
++  declare readonly cause?: unknown;
 +
-+  constructor(reason: ToolFailure, values: Record<string, string | number> = {}) {
++  constructor(reason: ToolFailure, values: Record<string, string | number> = {}, options: { cause?: unknown } = {}) {
 +    super(fill(TOOL_ERRORS[reason], Object.fromEntries(Object.entries(values).map(([k, v]) => [k, String(v)]))));
 +    this.name = "ToolError";
 +    this.reason = reason;
 +    this.values = values;
++    if ("cause" in options) Object.defineProperty(this, "cause", { value: options.cause, writable: true, configurable: true });
 +  }
 +}
 +

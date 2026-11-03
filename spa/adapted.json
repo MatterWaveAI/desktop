@@ -1,7 +1,10 @@
 {
   "index.html": "The desktop's own page: the CSP allows its inline theme script by hash, held to tauri.conf.json by src-tauri/tests/bundle_config.rs.",
+  "vite.config.ts": "Dev server proxy for /v1, the OpenAI-compatible surface agent mode calls.",
+  "scripts/vendor-agent-sdk.mjs": "Desktop only: copies the TypeScript SDK's browser-safe agent helpers into src/apps/agent/sdk/.",
   "src/main.tsx": "Installs the desktop's link handling before the first render: matterwave:// links and the launch link, and links out of the app to the system browser.",
-  "src/lib/desktopAuth.ts": "The platform's bridge to the desktop shell, extended with the desktop's commands and events: API key and device pairing in the OS keychain, the updater, notifications, launch at login, the global hotkey, the tray's recent chats.",
+  "src/types.ts": "Agent mode's Principal.local_agent_tools and ModelInfo.supports_tools flags.",
+  "src/lib/desktopAuth.ts": "The platform's bridge to the desktop shell, extended with the desktop's commands and events: API key and device pairing in the OS keychain, the updater, notifications, launch at login, the global hotkey, the tray's recent chats, and agent mode's /v1/ API path and command bridge.",
   "src/lib/desktopAuth.test.ts": "Tests for the desktop's additions to desktopAuth.ts.",
   "src/lib/desktopAuth.notify.test.ts": "Desktop only: the finished-answer notification through the bridge.",
   "src/lib/desktopBilling.*": "Desktop only: Stripe Checkout and the portal open in the system browser, and the page re-reads the subscription when the window comes back.",
@@ -16,12 +19,13 @@
   "src/shell/UpdateBanner.*": "Desktop only: the updater's banner.",
   "src/shell/UserMenu.tsx": "No account switcher in the desktop shell: parked accounts are browser cookies, desktop auth is one keychain credential.",
   "src/shell/UserMenu.test.tsx": "Tests for the desktop's account switcher gate.",
+  "src/apps/agent/**": "Desktop only: agent mode -- the local tool loop, panel, toggle, availability checks, and vendored SDK contract.",
   "src/apps/chat/speech.ts": "The refused-microphone message points at the OS's privacy settings in the webview, which has no address bar; the wording follows isDesktop() by default, so the dictation hook stays the platform's.",
   "src/apps/chat/speech.desktop.test.ts": "Desktop only: the desktop wording of the refused microphone.",
   "src/apps/chat/tts.*": "Desktop only: read-aloud through the webview's speechSynthesis.",
   "src/apps/chat/useReadAloud.*": "Desktop only: the read-aloud hook.",
   "src/apps/chat/ReadAloudAction.tsx": "Desktop only: the Read aloud button.",
-  "src/apps/chat/ChatPage.tsx": "The chat adapter's onDone hook tells the native side a generation finished, so it can notify an unfocused window; read-aloud: one hook above the transcript, handed to each stored reply.",
+  "src/apps/chat/ChatPage.tsx": "The chat adapter's onDone hook tells the native side a generation finished, so it can notify an unfocused window; read-aloud: one hook above the transcript, handed to each stored reply; agent mode: the Agent toggle and lazy AgentPanel on a new chat.",
   "src/apps/chat/MessageControls.tsx": "Read-aloud: the button in a reply's action row.",
   "src/apps/chat/MessageControls.test.tsx": "Tests for the read-aloud button in the action row.",
   "src/apps/chat/BranchControls.tsx": "Read-aloud: the button's icons.",
@@ -32,5 +36,5 @@
   "src/apps/settings/panes/DesktopPane.*": "Desktop only: the dev diagnostics pane.",
   "src/apps/settings/panes/AccountPane.*": "An API key kept in the OS keychain, and passkeys added by way of the browser.",
   "src/apps/settings/panes/DevicesPane.*": "Pairing this machine as a device, against the API base rather than the webview's origin.",
-  "src/apps/settings/panes/PreferencesPane.*": "The global hotkey and launch at login."
+  "src/apps/settings/panes/PreferencesPane.*": "The global hotkey, launch at login, and agent mode."
 }

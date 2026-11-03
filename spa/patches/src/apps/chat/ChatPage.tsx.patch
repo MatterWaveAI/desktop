@@ -1,5 +1,5 @@
 diff --git a/src/apps/chat/ChatPage.tsx b/src/apps/chat/ChatPage.tsx
-index 99b4b46..f563e70 100644
+index 99b4b46..c4b9310 100644
 --- a/src/apps/chat/ChatPage.tsx
 +++ b/src/apps/chat/ChatPage.tsx
 @@ -1,4 +1,4 @@
@@ -8,7 +8,7 @@ index 99b4b46..f563e70 100644
  import { createPortal } from "react-dom";
  import { useHeaderSlot } from "../../shell/headerSlot";
  import { Button } from "../../components/ui/button";
-@@ -78,10 +78,16 @@ import { ReportDialog } from "./ReportDialog";
+@@ -76,10 +76,15 @@ import { ReportDialog } from "./ReportDialog";
  import { ShareDialog } from "./ShareDialog";
  import { TemporaryNotice, TemporaryToggle } from "./TemporaryChat";
  import { ConnectorNotice } from "./ConnectorSource";
@@ -24,7 +24,7 @@ index 99b4b46..f563e70 100644
  import {
    compactConversation,
    endedOnLength,
-@@ -119,6 +125,10 @@ const REATTACH_FIRST_MS = 750;
+@@ -117,6 +122,10 @@ const REATTACH_FIRST_MS = 750;
  /** How many looks, doubling the wait each time, before the turn is left as it is. */
  const REATTACH_TRIES = 4;
  
@@ -35,7 +35,7 @@ index 99b4b46..f563e70 100644
  /** Chat, mounted as app #1 through the app registry. */
  export function ChatPage() {
    const shell = useShell();
-@@ -558,7 +568,13 @@ function ThreadRuntime(props: {
+@@ -558,7 +567,13 @@ function ThreadRuntime(props: {
          onContext: (frame) => setContext(readingOfFrame(frame)),
          onNotice: setNotice,
          onLengthTruncated: (id) => setLengthCut((current) => new Set(current).add(id)),
@@ -50,11 +50,10 @@ index 99b4b46..f563e70 100644
          onConnectorConversation: (found) => {
            setSource(found);
            setError(null);
-@@ -738,6 +754,14 @@ function ThreadRuntime(props: {
-   // Nothing may be sent, edited or regenerated in a connector's
+@@ -735,6 +750,14 @@ function ThreadRuntime(props: {
    // conversation either; unlike a support session it can still be forked.
    const locked = readOnly || source !== null;
-+
+ 
 +  // Agent mode: offered on a new chat once the person turned it on in
 +  // Preferences (the desktop's native setting), greyed out when the org or
 +  // the model rules it out. While on, the agent panel replaces the thread.
@@ -62,10 +61,11 @@ index 99b4b46..f563e70 100644
 +  const [agentOn, setAgentOn] = useState(false);
 +  const agent = agentAvailability(shell.principal, activeModel(models, selectedModel, defaultModel));
 +  const showAgent = agentEnabled && agentOn && !readOnly;
- 
++
    // What is being reported: the whole conversation, or one reply by id.
    // Null closes the dialog, and the dialog is unmounted with it so the next
-@@ -872,8 +896,16 @@ function ThreadRuntime(props: {
+   // report starts from a clean form rather than the last one's note.
+@@ -869,8 +892,16 @@ function ThreadRuntime(props: {
            instructions={props.instructions}
            onChanged={props.onInstructionsChanged}
          />
@@ -83,7 +83,7 @@ index 99b4b46..f563e70 100644
            <TemporaryToggle
              on={temporary}
              disabled={sending}
-@@ -972,8 +1004,17 @@ function ThreadRuntime(props: {
+@@ -961,8 +992,17 @@ function ThreadRuntime(props: {
            }}
          />
        )}
@@ -102,7 +102,7 @@ index 99b4b46..f563e70 100644
        <ThreadView
          conversationId={conversationId}
          reattaching={props.reattaching}
-@@ -1034,6 +1075,7 @@ function ThreadRuntime(props: {
+@@ -1023,6 +1063,7 @@ function ThreadRuntime(props: {
          feedback={feedback}
          onFeedbackChange={onFeedbackChange}
        />
@@ -110,7 +110,7 @@ index 99b4b46..f563e70 100644
      </div>
    );
  }
-@@ -1147,6 +1189,10 @@ function ThreadView(props: {
+@@ -1147,6 +1188,10 @@ function ThreadView(props: {
    // in its own channel, and a rewritten question would be refused the way a
    // new one is.
    const editLastId = props.busy || props.source !== null ? null : lastEditableId(props.branched);
@@ -121,7 +121,7 @@ index 99b4b46..f563e70 100644
    const copiedWhat = useCopyShortcuts({
      branched: props.branched,
      messages: props.messages,
-@@ -1340,6 +1386,15 @@ function ThreadView(props: {
+@@ -1340,6 +1385,15 @@ function ThreadView(props: {
                    feedback={props.feedback.get(row.entry.message.id) ?? null}
                    onFeedbackChange={props.onFeedbackChange}
                    modelLabel={labelOf}
@@ -137,7 +137,7 @@ index 99b4b46..f563e70 100644
                  />
                ),
              )}
-@@ -1911,6 +1966,11 @@ function BranchedRow(props: {
+@@ -1911,6 +1965,11 @@ function BranchedRow(props: {
    modelLabel: (id: string) => string;
    /** False where the reader's own turns may not be rewritten: a connector's conversation. */
    canEdit: boolean;
@@ -149,7 +149,7 @@ index 99b4b46..f563e70 100644
  }) {
    const { editing, onEditingChange: setEditing } = props;
    const { message, branch } = props.entry;
-@@ -1964,6 +2024,7 @@ function BranchedRow(props: {
+@@ -1964,6 +2023,7 @@ function BranchedRow(props: {
              }
            : undefined
        }
