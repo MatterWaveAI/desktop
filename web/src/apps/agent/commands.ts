@@ -4,15 +4,24 @@
  */
 import { MODE_NAMES, type ModeName } from "./sdk/types";
 
-export type AgentCommand =
+export const PI_ENGINE_NAMES = ["auto", "pi", "builtin"] as const;
+export type PiEngineName = (typeof PI_ENGINE_NAMES)[number];
+
+export type AgentSlashCommand =
   | { kind: "approval-mode"; mode: ModeName | null; given: string }
   | { kind: "restore"; id: number | null }
   | { kind: "init" }
   | { kind: "help" }
+  | { kind: "pi"; prompt: string }
+  | { kind: "pi-engine"; engine: PiEngineName | null }
+  | { kind: "pi-compact"; instructions: string }
+  | { kind: "pi-status" }
   | { kind: "unknown"; name: string };
 
+export type AgentCommand = AgentSlashCommand;
+
 /** The composer's text as a command, or null when it is a prompt. */
-export function parseAgentCommand(text: string): AgentCommand | null {
+export function parseAgentCommand(text: string): AgentSlashCommand | null {
   const trimmed = text.trim();
   if (!trimmed.startsWith("/")) return null;
   const [head = "", ...rest] = trimmed.slice(1).split(/\s+/);
@@ -33,6 +42,20 @@ export function parseAgentCommand(text: string): AgentCommand | null {
       return { kind: "init" };
     case "help":
       return { kind: "help" };
+    case "pi":
+      return { kind: "pi", prompt: arg };
+    case "pi-engine":
+    case "agent-engine": {
+      const wanted = arg.toLowerCase();
+      const engine = (PI_ENGINE_NAMES as readonly string[]).includes(wanted)
+        ? (wanted as PiEngineName)
+        : null;
+      return { kind: "pi-engine", engine };
+    }
+    case "pi-compact":
+      return { kind: "pi-compact", instructions: arg };
+    case "pi-status":
+      return { kind: "pi-status" };
     default:
       return { kind: "unknown", name };
   }
@@ -42,7 +65,10 @@ export const AGENT_HELP =
   "Agent commands: /approval-mode [plan|ask|auto-edit|yolo] shows or sets the mode " +
   "(Shift+Tab cycles plan, ask and auto-edit while no run is going; auto-edit and yolo are each allowed in the desktop app's own dialog once per folder per session, and yolo is never remembered). " +
   "/restore lists the file checkpoints, and /restore <id> puts the files back as they were before it. " +
-  "/init drafts a MATTERWAVE.md for this folder. @path attaches a file from the folder to your message.";
+  "/init drafts a MATTERWAVE.md for this folder. " +
+  "/pi <prompt> runs a prompt through the Pi 1.0 RPC engine, /pi-engine [auto|pi|builtin] shows or switches the agent engine, " +
+  "/pi-compact [instructions] compacts the Pi 1.0 session, and /pi-status shows Pi 1.0 engine status. " +
+  "@path attaches a file from the folder to your message.";
 
 /** What /init asks the agent to do. It goes through approval like any write (and in auto-edit, MATTERWAVE.md still asks). */
 export const INIT_PROMPT =

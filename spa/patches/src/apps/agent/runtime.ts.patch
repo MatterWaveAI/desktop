@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/runtime.ts b/src/apps/agent/runtime.ts
 new file mode 100644
-index 0000000..0f4a799
+index 0000000..d031a2f
 --- /dev/null
 +++ b/src/apps/agent/runtime.ts
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,160 @@
 +/**
 + * Desktop Agent Mode runtime bridge for Pi 1.0 (`pi --mode rpc`) JSONL RPC sessions.
 + *
@@ -73,12 +73,13 @@ index 0000000..0f4a799
 +
 +/**
 + * Whether the given `DesktopAgentHost` exposes Pi 1.0 JSONL RPC capabilities
-+ * (`piRpcSpawn` or `piRpcSend` + `onPiRpcLine`).
++ * (`piRpcSpawn`, `piRpcSend` + `onPiRpcLine`, or `piRpcTurn`).
 + */
 +export function hasPiRpcSupport(host: DesktopAgentHost): boolean {
 +  return (
 +    typeof host.piRpcSpawn === "function" ||
-+    (typeof host.piRpcSend === "function" && typeof host.onPiRpcLine === "function")
++    (typeof host.piRpcSend === "function" && typeof host.onPiRpcLine === "function") ||
++    typeof host.piRpcTurn === "function"
 +  );
 +}
 +
@@ -116,5 +117,50 @@ index 0000000..0f4a799
 +    });
 +  }
 +
-+  throw new Error("DesktopAgentHost does not configure Pi 1.0 RPC capabilities (piRpcSpawn or piRpcSend/onPiRpcLine).");
++  if (typeof host.piRpcTurn === "function") {
++    let lineHandler: ((line: string) => void) | null = null;
++    const promptText = options.message ?? options.prompt ?? "";
++    return runPiRpcTurn({
++      ...options,
++      send: async (line) => {
++        try {
++          const parsed = JSON.parse(line) as { type?: string };
++          if (parsed?.type === "abort") return;
++        } catch {
++          // Non-JSON line; proceed.
++        }
++        const lines = await host.piRpcTurn!({
++          workspaceRoot: options.cwd ?? "",
++          prompt: promptText,
++          ...(options.model ? { model: options.model } : {}),
++        });
++        let sawTerminal = false;
++        for (const outLine of lines) {
++          const ev = parsePiEventLine(outLine);
++          if (
++            ev &&
++            (ev.kind === "agent_end" ||
++              ev.kind === "error" ||
++              (ev.kind === "response" && !ev.success))
++          ) {
++            sawTerminal = true;
++          }
++          lineHandler?.(`${outLine.replace(/\r?\n$/, "")}\n`);
++        }
++        if (!sawTerminal) {
++          lineHandler?.(`${JSON.stringify({ type: "turn_end", stopReason: "stop" })}\n`);
++        }
++      },
++      onLine: (handler) => {
++        lineHandler = handler;
++        return () => {
++          lineHandler = null;
++        };
++      },
++    });
++  }
++
++  throw new Error(
++    "DesktopAgentHost does not configure Pi 1.0 RPC capabilities (piRpcSpawn, piRpcSend/onPiRpcLine, or piRpcTurn).",
++  );
 +}

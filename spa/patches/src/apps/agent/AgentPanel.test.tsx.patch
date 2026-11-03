@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/AgentPanel.test.tsx b/src/apps/agent/AgentPanel.test.tsx
 new file mode 100644
-index 0000000..6f137e5
+index 0000000..e9aef22
 --- /dev/null
 +++ b/src/apps/agent/AgentPanel.test.tsx
-@@ -0,0 +1,264 @@
+@@ -0,0 +1,336 @@
 +import { act } from "react";
 +import { createRoot, type Root } from "react-dom/client";
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -198,6 +198,78 @@ index 0000000..6f137e5
 +    const box = q<HTMLTextAreaElement>("[data-mw-agent-composer]")!;
 +    expect(box.disabled).toBe(true);
 +    expect(box.placeholder).toBe("Model M cannot call tools. Pick another model to use agent mode.");
++  });
++
++  it("handles /pi-engine, /pi-status, /pi-compact, and /pi <prompt> via host.piRpcTurn", async () => {
++    const host = new FakeHost();
++    host.piRpcTurn = vi.fn(async ({ prompt }) => {
++      if (prompt.startsWith("{")) {
++        const parsed = JSON.parse(prompt) as { id?: string; type: string; customInstructions?: string };
++        if (parsed.type === "compact") {
++          return [
++            JSON.stringify({
++              type: "response",
++              id: parsed.id ?? "c1",
++              command: "compact",
++              success: true,
++              data: {
++                summary: parsed.customInstructions
++                  ? `Compacted with: ${parsed.customInstructions}`
++                  : "Compacted 8 turns",
++              },
++            }),
++          ];
++        }
++      }
++      return [
++        JSON.stringify({
++          type: "message_update",
++          assistantMessageEvent: { type: "text_delta", delta: `Pi answered: ${prompt}` },
++        }),
++        JSON.stringify({
++          type: "turn_end",
++          stopReason: "stop",
++          usage: { total_tokens: 77 },
++        }),
++      ];
++    });
++
++    const model = new ScriptedModel([reply("unused")]);
++    await mount(host, model);
++    await vi.waitFor(() => expect(q("[data-mw-agent-root]")!.textContent).toBe("/work/demo"));
++
++    // /pi-status shows active engine & RPC readiness
++    await type("/pi-status");
++    await press("Enter");
++    expect(container!.textContent).toContain("Pi 1.0 status: engine=auto (active: pi) | rpc=ready");
++
++    // /pi-engine switches and inspects the engine
++    await type("/pi-engine pi");
++    await press("Enter");
++    expect(container!.textContent).toContain("Agent engine set to pi (active: pi).");
++
++    await type("/pi-engine");
++    await press("Enter");
++    expect(container!.textContent).toContain("Agent engine: pi (active: pi).");
++
++    // /pi-compact compacts the Pi session
++    await type("/pi-compact keep tests");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Pi session compacted: Compacted with: keep tests"),
++    );
++
++    // /pi <prompt> runs a turn through host.piRpcTurn
++    await type("/pi check main.ts");
++    await press("Enter");
++    await vi.waitFor(() => expect(container!.textContent).toContain("Pi answered: check main.ts"));
++    expect(host.piRpcTurn).toHaveBeenCalledWith(
++      expect.objectContaining({
++        workspaceRoot: "/work/demo",
++        prompt: "check main.ts",
++      }),
++    );
++    expect(q("[data-mw-agent-usage]")!.textContent).toContain("77 tokens");
 +  });
 +});
 +

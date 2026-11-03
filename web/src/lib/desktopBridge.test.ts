@@ -30,9 +30,9 @@ function sources(dir: string): string[] {
   });
 }
 
-/** The command names passed as a literal to the bridge: `call("x")`, `invoke("plugin:y|z")`. */
+/** The command names passed as a literal to the bridge: `call("x")`, `desktopInvoke("x")`, `invoke("plugin:y|z")`. */
 function bridgeCalls(text: string): string[] {
-  const calls = [...text.matchAll(/\b(?:call|invoke)\s*(?:<[^>()]*>)?\(\s*"([a-z_:|-]+)"/g)].map((m) => m[1]);
+  const calls = [...text.matchAll(/\b(?:call|invoke|desktopInvoke)\s*(?:<[^>()]*>)?\(\s*"([a-z_:|-]+)"/g)].map((m) => m[1]);
   return calls.filter((name) => name.includes("|") || /^[a-z_]+$/.test(name));
 }
 

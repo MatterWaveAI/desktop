@@ -4,7 +4,7 @@ import { ApiError, apiFetch } from "../../lib/api";
 import type { Conversation } from "../../types";
 import { Button } from "../../components/ui/button";
 import { SimpleSelect } from "../../components/ui/select";
-import { AGENT_HELP, INIT_PROMPT, parseAgentCommand } from "./commands";
+import { AGENT_HELP, INIT_PROMPT, parseAgentCommand, type PiEngineName } from "./commands";
 import { desktopHost, hostError, type AgentHost, type AgentStatus } from "./host";
 import {
   DEFAULT_CAPS,
@@ -16,6 +16,14 @@ import {
   type Caps,
   type ModelTransport,
 } from "./loop";
+import {
+  compactPiRpcSession,
+  encodePiRpcCommand,
+  getPiRpcState,
+  hasPiRpcSupport,
+  parsePiEventLine,
+  runDesktopPiTurn,
+} from "./runtime";
 import { MODES_BY_NAME, type ModeName } from "./sdk/types";
 import { CYCLE, MODE_LABELS, loadMode, saveMode } from "./mode";
 
@@ -53,6 +61,7 @@ export function AgentPanel(props: {
   const transport = props.transport ?? v1Transport;
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [mode, setModeState] = useState<ModeName>(loadMode);
+  const [piEngine, setPiEngine] = useState<PiEngineName>("auto");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [history, setHistory] = useState<AgentMessage[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -202,6 +211,42 @@ export function AgentPanel(props: {
     controller.current?.abort();
   };
 
+  const resolvedPiEngine: "pi" | "builtin" =
+    piEngine === "auto" ? (hasPiRpcSupport(host) ? "pi" : "builtin") : piEngine;
+
+  const runPi = async (prompt: string, shown: string = prompt) => {
+    if (!status?.root) {
+      say("Choose a folder for the agent to work in first.");
+      return;
+    }
+    if (!hasPiRpcSupport(host)) {
+      say("Pi 1.0 RPC is not available on this host.");
+      return;
+    }
+    setEntries((e) => [...e, { kind: "user", text: shown }]);
+    const abort = new AbortController();
+    controller.current = abort;
+    setRunning(true);
+    setUsage(null);
+    try {
+      const result = await runDesktopPiTurn(host, {
+        prompt,
+        cwd: status.root,
+        model: props.model,
+        signal: abort.signal,
+        onEvent,
+      });
+      if (result.status === "aborted") {
+        say("Stopped. Anything already changed stays changed; /restore puts files back.");
+      }
+    } catch (err) {
+      say(hostError(err));
+    } finally {
+      setRunning(false);
+      controller.current = null;
+    }
+  };
+
   const runCommand = async (text: string): Promise<boolean> => {
     const command = parseAgentCommand(text);
     if (command === null) return false;
@@ -259,6 +304,110 @@ export function AgentPanel(props: {
           await run(INIT_PROMPT, "/init");
         }
         break;
+      case "pi-engine": {
+        const rawArg = text.trim().split(/\s+/).slice(1).join(" ").trim();
+        if (command.engine === null) {
+          say(
+            rawArg
+              ? `Unknown agent engine "${rawArg}". Choose auto, pi, or builtin.`
+              : `Agent engine: ${piEngine} (active: ${resolvedPiEngine}). Use /pi-engine [auto|pi|builtin] to switch.`,
+          );
+        } else {
+          setPiEngine(command.engine);
+          const nextActive =
+            command.engine === "auto" ? (hasPiRpcSupport(host) ? "pi" : "builtin") : command.engine;
+          say(`Agent engine set to ${command.engine} (active: ${nextActive}).`);
+        }
+        break;
+      }
+      case "pi-status": {
+        let details = "";
+        if (typeof host.piRpcSend === "function" && typeof host.onPiRpcLine === "function") {
+          try {
+            const state = await getPiRpcState(
+              { piRpcSend: (l) => host.piRpcSend!(l), onPiRpcLine: (h) => host.onPiRpcLine!(h) },
+              { timeoutMs: 2000 },
+            );
+            if (state && typeof state.sessionId === "string") {
+              details = ` | session=${state.sessionId}`;
+            }
+          } catch {
+            // Fall back to static status summary.
+          }
+        }
+        say(
+          `Pi 1.0 status: engine=${piEngine} (active: ${resolvedPiEngine}) | rpc=${hasPiRpcSupport(host) ? "ready" : "unavailable"} | model=${props.model ?? "default"} | mode=${mode} | root=${status?.root ?? "none"}${details}`,
+        );
+        break;
+      }
+      case "pi-compact": {
+        if (!hasPiRpcSupport(host)) {
+          say("Pi 1.0 RPC is not available on this host.");
+          break;
+        }
+        try {
+          let summary = "";
+          if (typeof host.piRpcSend === "function" && typeof host.onPiRpcLine === "function") {
+            const res = await compactPiRpcSession<{ summary?: string }>(
+              { piRpcSend: (l) => host.piRpcSend!(l), onPiRpcLine: (h) => host.onPiRpcLine!(h) },
+              command.instructions || undefined,
+            );
+            if (typeof res?.summary === "string") summary = res.summary;
+          } else if (typeof host.piRpcSpawn === "function") {
+            const session = await host.piRpcSpawn({
+              cwd: status?.root ?? undefined,
+              model: props.model,
+            });
+            try {
+              const res = await compactPiRpcSession<{ summary?: string }>(
+                { send: (l) => session.send(l), onLine: (h) => session.onLine(h) },
+                command.instructions || undefined,
+              );
+              if (typeof res?.summary === "string") summary = res.summary;
+            } finally {
+              await session.close?.();
+            }
+          } else if (typeof host.piRpcTurn === "function") {
+            const lines = await host.piRpcTurn({
+              workspaceRoot: status?.root ?? "",
+              prompt: encodePiRpcCommand({
+                type: "compact",
+                ...(command.instructions ? { customInstructions: command.instructions } : {}),
+              }).trim(),
+              ...(props.model ? { model: props.model } : {}),
+            });
+            for (const line of lines) {
+              const ev = parsePiEventLine(line);
+              if (ev?.kind === "response") {
+                if (!ev.success) {
+                  throw new Error(ev.error ?? "Pi RPC compaction failed");
+                }
+                const data = ev.data as { summary?: string } | undefined;
+                if (typeof data?.summary === "string") summary = data.summary;
+              } else if (ev?.kind === "error") {
+                throw new Error(ev.message);
+              }
+            }
+          }
+          if (summary) {
+            say(`Pi session compacted: ${summary}`);
+          } else if (command.instructions) {
+            say(`Pi session compacted (${command.instructions}).`);
+          } else {
+            say("Pi session compacted.");
+          }
+        } catch (err) {
+          say(`Pi compaction failed: ${hostError(err)}`);
+        }
+        break;
+      }
+      case "pi":
+        if (!command.prompt) {
+          say("Usage: /pi <prompt> — run a prompt through Pi 1.0.");
+        } else {
+          await runPi(command.prompt);
+        }
+        break;
       case "unknown":
         say(`/${command.name} is not an agent command. ${AGENT_HELP}`);
         break;
@@ -271,6 +420,10 @@ export function AgentPanel(props: {
     if (!text || running) return;
     setDraft("");
     if (await runCommand(text)) return;
+    if (piEngine === "pi") {
+      await runPi(text);
+      return;
+    }
     await run(text);
   };
 

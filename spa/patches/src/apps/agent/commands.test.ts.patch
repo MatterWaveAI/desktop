@@ -1,11 +1,11 @@
 diff --git a/src/apps/agent/commands.test.ts b/src/apps/agent/commands.test.ts
 new file mode 100644
-index 0000000..38a93d8
+index 0000000..5878f82
 --- /dev/null
 +++ b/src/apps/agent/commands.test.ts
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,117 @@
 +import { describe, expect, it } from "vitest";
-+import { MAX_MENTIONS, mentionsIn, parseAgentCommand, withAttachments } from "./commands";
++import { AGENT_HELP, MAX_MENTIONS, mentionsIn, parseAgentCommand, withAttachments } from "./commands";
 +import { agentAvailability, activeModel } from "./availability";
 +import type { ModelInfo } from "../../types";
 +
@@ -24,6 +24,52 @@ index 0000000..38a93d8
 +    expect(parseAgentCommand("/help")).toEqual({ kind: "help" });
 +    expect(parseAgentCommand("/compact")).toEqual({ kind: "unknown", name: "compact" });
 +    expect(parseAgentCommand("fix the bug")).toBeNull();
++  });
++
++  it("reads /pi, /pi-engine, /pi-compact, and /pi-status and documents them in AGENT_HELP", () => {
++    expect(parseAgentCommand("/pi Refactor loop.ts")).toEqual({
++      kind: "pi",
++      prompt: "Refactor loop.ts",
++    });
++    expect(parseAgentCommand("/pi")).toEqual({
++      kind: "pi",
++      prompt: "",
++    });
++    expect(parseAgentCommand("/pi-engine auto")).toEqual({
++      kind: "pi-engine",
++      engine: "auto",
++    });
++    expect(parseAgentCommand("/pi-engine PI")).toEqual({
++      kind: "pi-engine",
++      engine: "pi",
++    });
++    expect(parseAgentCommand("/pi-engine builtin")).toEqual({
++      kind: "pi-engine",
++      engine: "builtin",
++    });
++    expect(parseAgentCommand("/pi-engine")).toEqual({
++      kind: "pi-engine",
++      engine: null,
++    });
++    expect(parseAgentCommand("/pi-engine unknown")).toEqual({
++      kind: "pi-engine",
++      engine: null,
++    });
++    expect(parseAgentCommand("/pi-compact")).toEqual({
++      kind: "pi-compact",
++      instructions: "",
++    });
++    expect(parseAgentCommand("/pi-compact keep file paths")).toEqual({
++      kind: "pi-compact",
++      instructions: "keep file paths",
++    });
++    expect(parseAgentCommand("/pi-status")).toEqual({
++      kind: "pi-status",
++    });
++    expect(AGENT_HELP).toContain("/pi <prompt>");
++    expect(AGENT_HELP).toContain("/pi-engine [auto|pi|builtin]");
++    expect(AGENT_HELP).toContain("/pi-compact [instructions]");
++    expect(AGENT_HELP).toContain("/pi-status");
 +  });
 +});
 +

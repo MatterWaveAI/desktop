@@ -120,3 +120,53 @@ fn the_window_zooms_on_the_standard_shortcuts() {
         .iter()
         .any(|p| p == "core:webview:allow-set-webview-zoom"));
 }
+
+/// Every command declared in `build.rs`'s `AppManifest::new().commands(&[...])`
+/// has a matching `allow-<command>` permission in `capabilities/default.json`,
+/// including `agent_pi_rpc_turn` -> `allow-agent-pi-rpc-turn`.
+#[test]
+fn every_manifest_command_in_build_rs_is_allowed_by_the_capability_file() {
+    let build = read("build.rs");
+    let commands_block = build
+        .split(".commands(&[")
+        .nth(1)
+        .and_then(|rest| rest.split("])").next())
+        .expect("build.rs declares commands(&[...])");
+    let commands: Vec<&str> = commands_block
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("//") {
+                return None;
+            }
+            let start = trimmed.find('"')? + 1;
+            let end = trimmed[start..].find('"')? + start;
+            Some(&trimmed[start..end])
+        })
+        .collect();
+    assert!(
+        commands.contains(&"agent_pi_rpc_turn"),
+        "build.rs should register agent_pi_rpc_turn"
+    );
+
+    let capability: Value =
+        serde_json::from_str(&read("capabilities/default.json")).expect("the capability parses");
+    let permissions: Vec<&str> = capability["permissions"]
+        .as_array()
+        .expect("permissions")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(
+        permissions.contains(&"allow-agent-pi-rpc-turn"),
+        "capabilities/default.json should include allow-agent-pi-rpc-turn"
+    );
+
+    for cmd in commands {
+        let expected_perm = format!("allow-{}", cmd.replace('_', "-"));
+        assert!(
+            permissions.contains(&expected_perm.as_str()),
+            "capabilities/default.json is missing {expected_perm} for build.rs command {cmd}"
+        );
+    }
+}

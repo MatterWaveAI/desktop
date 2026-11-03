@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/host.ts b/src/apps/agent/host.ts
 new file mode 100644
-index 0000000..bf0c6ff
+index 0000000..1d6539c
 --- /dev/null
 +++ b/src/apps/agent/host.ts
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,198 @@
 +/**
 + * The webview's side of the native tool host (src-tauri/src/agent): typed
 + * wrappers over its allow-listed commands, and nothing else. Every file
@@ -142,6 +142,13 @@ index 0000000..bf0c6ff
 +  onPiRpcLine?(handler: (line: string) => void): () => void;
 +  /** Optional Pi 1.0 (`pi --mode rpc`) session spawner. */
 +  piRpcSpawn?(options?: PiRpcSpawnOptions): Promise<PiRpcSessionHandle>;
++  /** Optional Pi 1.0 (`pi --mode rpc`) single-turn native command. */
++  piRpcTurn?: (args: {
++    workspaceRoot: string;
++    prompt: string;
++    model?: string;
++    env?: Record<string, string>;
++  }) => Promise<string[]>;
 +}
 +
 +export type DesktopAgentHost = AgentHost;
@@ -173,6 +180,7 @@ index 0000000..bf0c6ff
 +  checkpoints: () => desktopInvoke<Checkpoint[]>("agent_checkpoints"),
 +  restore: (checkpointId) =>
 +    desktopInvoke<{ restored: string[] }>("agent_restore", { checkpoint_id: checkpointId }),
++  piRpcTurn: (args) => desktopInvoke<string[]>("agent_pi_rpc_turn", args),
 +};
 +
 +/**

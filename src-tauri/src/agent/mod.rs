@@ -831,6 +831,134 @@ impl AgentState {
             .await?
             .map(|restored| Restored { restored })
     }
+
+    /// Execute one turn against `pi --mode rpc` inside the chosen workspace root.
+    pub(crate) async fn pi_rpc_turn(
+        &self,
+        _workspace_root: Option<String>,
+        prompt: String,
+        model: Option<String>,
+        env: Option<HashMap<String, String>>,
+    ) -> Result<Vec<String>, String> {
+        let root = self.workspace_root()?;
+        let pi_bin = env
+            .as_ref()
+            .and_then(|m| m.get("MATTERWAVE_PI_BIN"))
+            .cloned()
+            .or_else(|| std::env::var("MATTERWAVE_PI_BIN").ok())
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "pi".to_string());
+        run_pi_rpc_turn_process(&pi_bin, &root, &prompt, model.as_deref(), env.as_ref()).await
+    }
+}
+
+/// Spawns `pi --mode rpc`, writes one JSONL command frame to stdin, reads
+/// stdout JSONL lines until `turn_end`, `agent_end`, or `error`, and returns
+/// the collected lines.
+pub(crate) async fn run_pi_rpc_turn_process(
+    pi_bin: &str,
+    cwd: &Path,
+    prompt: &str,
+    model: Option<&str>,
+    env: Option<&HashMap<String, String>>,
+) -> Result<Vec<String>, String> {
+    use std::process::Stdio;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::process::Command;
+
+    let mut cmd = Command::new(pi_bin);
+    cmd.arg("--mode")
+        .arg("rpc")
+        .arg("--provider")
+        .arg("matterwave");
+    if let Some(m) = model.filter(|m| !m.trim().is_empty()) {
+        cmd.arg("--model").arg(m.trim());
+    }
+    cmd.current_dir(cwd)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    if let Some(vars) = env {
+        cmd.envs(vars);
+    }
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Could not start pi --mode rpc ({pi_bin}): {e}"))?;
+
+    let trimmed = prompt.trim();
+    let parsed_cmd = if trimmed.starts_with('{') {
+        serde_json::from_str::<serde_json::Value>(trimmed)
+            .ok()
+            .filter(|v| v.get("type").and_then(|t| t.as_str()).is_some())
+    } else {
+        None
+    };
+
+    let (frame, is_non_prompt_rpc) = if let Some(obj) = parsed_cmd {
+        let cmd_type = obj.get("type").and_then(|t| t.as_str()).unwrap_or("prompt");
+        (format!("{obj}\n"), cmd_type != "prompt")
+    } else {
+        let mut payload = serde_json::Map::new();
+        payload.insert("type".into(), serde_json::Value::String("prompt".into()));
+        payload.insert(
+            "message".into(),
+            serde_json::Value::String(prompt.to_string()),
+        );
+        payload.insert(
+            "provider".into(),
+            serde_json::Value::String("matterwave".into()),
+        );
+        if let Some(m) = model.filter(|m| !m.trim().is_empty()) {
+            payload.insert("model".into(), serde_json::Value::String(m.trim().into()));
+        }
+        (format!("{}\n", serde_json::Value::Object(payload)), false)
+    };
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(frame.as_bytes())
+            .await
+            .map_err(|e| format!("Failed writing to pi stdin: {e}"))?;
+        let _ = stdin.flush().await;
+    }
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "pi stdout is not available".to_string())?;
+    let mut reader = BufReader::new(stdout).lines();
+    let mut lines = Vec::new();
+
+    while let Some(line) = reader
+        .next_line()
+        .await
+        .map_err(|e| format!("Failed reading pi stdout: {e}"))?
+    {
+        let clean = line.trim().to_string();
+        if clean.is_empty() {
+            continue;
+        }
+        let terminal = serde_json::from_str::<serde_json::Value>(&clean)
+            .ok()
+            .and_then(|v| {
+                let kind = v.get("type")?.as_str()?;
+                let done = matches!(kind, "turn_end" | "agent_end" | "error")
+                    || (kind == "response"
+                        && (is_non_prompt_rpc
+                            || v.get("success") == Some(&serde_json::Value::Bool(false))));
+                Some(done)
+            })
+            .unwrap_or(false);
+        lines.push(clean);
+        if terminal {
+            break;
+        }
+    }
+
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+    Ok(lines)
 }
 
 #[derive(Serialize, Debug)]
@@ -1290,6 +1418,19 @@ pub(crate) async fn agent_restore(
     state.restore(checkpoint_id).await
 }
 
+/// Run one turn against `pi --mode rpc` in the workspace root and return the
+/// emitted JSONL event lines.
+#[tauri::command]
+pub(crate) async fn agent_pi_rpc_turn(
+    state: State<'_, AgentState>,
+    workspace_root: Option<String>,
+    prompt: String,
+    model: Option<String>,
+    env: Option<HashMap<String, String>>,
+) -> Result<Vec<String>, String> {
+    state.pi_rpc_turn(workspace_root, prompt, model, env).await
+}
+
 /// The commands this module adds, for build.rs's allow-list and the
 /// capability file: one per tool, the run's start and stop, the root, the
 /// switch and the checkpoints. Kept here so a test can hold the three
@@ -1311,6 +1452,7 @@ pub(crate) const COMMANDS: &[&str] = &[
     "agent_run_shell",
     "agent_checkpoints",
     "agent_restore",
+    "agent_pi_rpc_turn",
 ];
 
 #[cfg(test)]

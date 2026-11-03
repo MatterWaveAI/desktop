@@ -47,6 +47,7 @@ fn main() {
             "agent_run_shell",
             "agent_checkpoints",
             "agent_restore",
+            "agent_pi_rpc_turn",
         ]),
     ))
     .expect("tauri build script failed");

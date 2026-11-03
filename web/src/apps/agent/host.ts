@@ -136,6 +136,13 @@ export interface AgentHost {
   onPiRpcLine?(handler: (line: string) => void): () => void;
   /** Optional Pi 1.0 (`pi --mode rpc`) session spawner. */
   piRpcSpawn?(options?: PiRpcSpawnOptions): Promise<PiRpcSessionHandle>;
+  /** Optional Pi 1.0 (`pi --mode rpc`) single-turn native command. */
+  piRpcTurn?: (args: {
+    workspaceRoot: string;
+    prompt: string;
+    model?: string;
+    env?: Record<string, string>;
+  }) => Promise<string[]>;
 }
 
 export type DesktopAgentHost = AgentHost;
@@ -167,6 +174,7 @@ export const desktopHost: AgentHost = {
   checkpoints: () => desktopInvoke<Checkpoint[]>("agent_checkpoints"),
   restore: (checkpointId) =>
     desktopInvoke<{ restored: string[] }>("agent_restore", { checkpoint_id: checkpointId }),
+  piRpcTurn: (args) => desktopInvoke<string[]>("agent_pi_rpc_turn", args),
 };
 
 /**

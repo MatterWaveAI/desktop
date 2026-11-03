@@ -897,7 +897,8 @@ pub fn run() {
             agent::agent_write_file,
             agent::agent_run_shell,
             agent::agent_checkpoints,
-            agent::agent_restore
+            agent::agent_restore,
+            agent::agent_pi_rpc_turn
         ])
         .run(context)
         .expect("error while running the MatterWave desktop app");

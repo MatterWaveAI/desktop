@@ -43,6 +43,7 @@
     "allow-agent-write-file",
     "allow-agent-run-shell",
     "allow-agent-checkpoints",
-    "allow-agent-restore"
+    "allow-agent-restore",
+    "allow-agent-pi-rpc-turn"
   ]
 }
