@@ -1,0 +1,255 @@
+import { describe, expect, it, vi } from "vitest";
+import type { AgentEvent } from "./loop";
+import {
+  PI_PROVIDER,
+  createPiRpcAdapter,
+  encodePiCommand,
+  parsePiEventLine,
+  type PiNormalizedEvent,
+} from "./piRpc";
+
+describe("encodePiCommand", () => {
+  it("encodes a prompt command as newline-terminated JSONL with MatterWave metadata", () => {
+    const line = encodePiCommand({
+      id: "req_1",
+      type: "prompt",
+      message: "Refactor loop.ts",
+      model: "claude-sonnet-4-5",
+      presetId: "preset_architect",
+      temporary: true,
+    });
+    expect(line.endsWith("\n")).toBe(true);
+    expect(line.trim().includes("\n")).toBe(false);
+    expect(JSON.parse(line)).toEqual({
+      id: "req_1",
+      type: "prompt",
+      message: "Refactor loop.ts",
+      provider: PI_PROVIDER,
+      model: "claude-sonnet-4-5",
+      presetId: "preset_architect",
+      temporary: true,
+    });
+  });
+
+  it("encodes abort, set_model, and get_state commands", () => {
+    expect(JSON.parse(encodePiCommand({ id: "ab_1", type: "abort" }))).toEqual({
+      id: "ab_1",
+      type: "abort",
+    });
+    expect(JSON.parse(encodePiCommand({ type: "set_model", modelId: "gpt-5.4" }))).toEqual({
+      type: "set_model",
+      provider: "matterwave",
+      modelId: "gpt-5.4",
+    });
+    expect(encodePiCommand({ type: "get_state" })).toBe('{"type":"get_state"}\n');
+  });
+});
+
+describe("parsePiEventLine", () => {
+  it("returns null on blank lines and reports malformed JSON as error events", () => {
+    expect(parsePiEventLine("")).toBeNull();
+    expect(parsePiEventLine("   \r\n")).toBeNull();
+
+    const bad = parsePiEventLine("{not-valid-json");
+    expect(bad).toMatchObject({
+      kind: "error",
+    });
+    expect(bad && "message" in bad ? bad.message : "").toContain("Invalid Pi RPC JSON line");
+  });
+
+  it("maps message_update text_delta, tool_execution_start, tool_execution_end, and agent_end", () => {
+    const delta = parsePiEventLine(
+      JSON.stringify({
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "Checking files..." },
+      }),
+    );
+    expect(delta).toEqual({
+      kind: "text_delta",
+      delta: "Checking files...",
+      raw: {
+        type: "message_update",
+        assistantMessageEvent: { type: "text_delta", delta: "Checking files..." },
+      },
+    });
+
+    const toolStart = parsePiEventLine(
+      JSON.stringify({
+        type: "tool_execution_start",
+        toolCallId: "tc_1",
+        toolName: "read_file",
+        args: { path: "src/main.tsx" },
+      }),
+    );
+    expect(toolStart).toMatchObject({
+      kind: "tool_start",
+      id: "tc_1",
+      name: "read_file",
+      args: { path: "src/main.tsx" },
+      summary: "Read src/main.tsx",
+    });
+
+    const toolEnd = parsePiEventLine(
+      JSON.stringify({
+        type: "tool_execution_end",
+        toolCallId: "tc_1",
+        toolName: "read_file",
+        result: { content: [{ type: "text", text: "import React from 'react';" }] },
+        isError: false,
+      }),
+    );
+    expect(toolEnd).toMatchObject({
+      kind: "tool_end",
+      id: "tc_1",
+      name: "read_file",
+      output: "import React from 'react';",
+      isError: false,
+    });
+
+    const agentEnd = parsePiEventLine(
+      JSON.stringify({
+        type: "agent_end",
+        stopReason: "stop",
+        usage: { total_tokens: 340 },
+        messages: [
+          { role: "user", content: "hi" },
+          { role: "assistant", content: [{ type: "text", text: "Done!" }] },
+        ],
+      }),
+    );
+    expect(agentEnd).toMatchObject({
+      kind: "agent_end",
+      stopReason: "stop",
+      text: "Done!",
+      steps: 1,
+      tokens: 340,
+    });
+  });
+});
+
+describe("createPiRpcAdapter", () => {
+  it("handles chunked JSONL line buffering and maps a full turn into AgentEvent items", async () => {
+    const stdinLines: string[] = [];
+    const agentEvents: AgentEvent[] = [];
+    const piEvents: PiNormalizedEvent[] = [];
+    const turnEnds: { text: string; stopReason: string; steps: number; tokens: number }[] = [];
+
+    const adapter = createPiRpcAdapter({
+      presetId: "preset_default",
+      temporary: true,
+      model: "gpt-5.4",
+      writeStdin: (line) => {
+        stdinLines.push(line);
+      },
+      onEvent: (e) => agentEvents.push(e),
+      onPiEvent: (e) => piEvents.push(e),
+      onTurnEnd: (r) => turnEnds.push(r),
+    });
+
+    await adapter.sendPrompt("Inspect package.json", { id: "p_1" });
+    expect(stdinLines).toHaveLength(1);
+    expect(JSON.parse(stdinLines[0]!)).toEqual({
+      id: "p_1",
+      type: "prompt",
+      message: "Inspect package.json",
+      provider: "matterwave",
+      model: "gpt-5.4",
+      presetId: "preset_default",
+      temporary: true,
+    });
+
+    const frame1 = JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", delta: "Reading " },
+    });
+    const frame2 = JSON.stringify({
+      type: "tool_execution_start",
+      toolCallId: "call_7",
+      toolName: "read_file",
+      args: { path: "package.json" },
+    });
+    const frame3 = JSON.stringify({
+      type: "tool_execution_end",
+      toolCallId: "call_7",
+      toolName: "read_file",
+      result: { content: [{ type: "text", text: '{"name":"matterwave-desktop"}' }] },
+      isError: false,
+    });
+    const frame4 = JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", delta: "package.json complete." },
+    });
+    const frame5 = JSON.stringify({
+      type: "agent_end",
+      stopReason: "stop",
+      usage: { total_tokens: 128 },
+    });
+
+    // Feed split across arbitrary chunk boundaries
+    const combined = `${frame1}\n${frame2}\n${frame3}\n${frame4}\n${frame5}\n`;
+    adapter.feedStdout(combined.slice(0, 25));
+    expect(piEvents).toHaveLength(0);
+
+    adapter.feedStdout(combined.slice(25, 190));
+    adapter.feedStdout(combined.slice(190));
+
+    expect(adapter.assistantText).toBe("Reading package.json complete.");
+    expect(agentEvents).toEqual([
+      {
+        kind: "tool",
+        id: "call_7",
+        name: "read_file",
+        args: { path: "package.json" },
+        summary: "Read package.json",
+      },
+      {
+        kind: "tool_result",
+        id: "call_7",
+        name: "read_file",
+        output: '{"name":"matterwave-desktop"}',
+        isError: false,
+      },
+      {
+        kind: "assistant",
+        text: "Reading package.json complete.",
+      },
+      {
+        kind: "usage",
+        steps: 1,
+        tokens: 128,
+      },
+    ]);
+    expect(turnEnds).toEqual([
+      {
+        text: "Reading package.json complete.",
+        stopReason: "stop",
+        steps: 1,
+        tokens: 128,
+      },
+    ]);
+  });
+
+  it("generates abort command and surfaces RPC/parse errors as notice events", async () => {
+    const writeStdin = vi.fn();
+    const events: AgentEvent[] = [];
+    const adapter = createPiRpcAdapter({
+      writeStdin,
+      onEvent: (e) => events.push(e),
+    });
+
+    const abortFrame = await adapter.abort("abort_99");
+    expect(abortFrame).toBe('{"id":"abort_99","type":"abort"}\n');
+    expect(writeStdin).toHaveBeenCalledWith('{"id":"abort_99","type":"abort"}\n');
+
+    adapter.feedStdout(
+      `${JSON.stringify({ type: "response", id: "p_1", command: "prompt", success: false, error: "Quota exceeded" })}\n`,
+    );
+    adapter.feedStdout("not-json-at-all");
+    adapter.flush();
+
+    expect(events).toEqual([
+      { kind: "notice", text: "Pi RPC error: Quota exceeded" },
+      { kind: "notice", text: expect.stringContaining("Invalid Pi RPC JSON line") },
+    ]);
+  });
+});
