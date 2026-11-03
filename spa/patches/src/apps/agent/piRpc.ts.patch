@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/piRpc.ts b/src/apps/agent/piRpc.ts
 new file mode 100644
-index 0000000..ad57598
+index 0000000..654f952
 --- /dev/null
 +++ b/src/apps/agent/piRpc.ts
-@@ -0,0 +1,803 @@
+@@ -0,0 +1,1052 @@
 +/**
 + * Pi 1.0 (`pi --mode rpc`) JSON-Lines RPC protocol codec and session driver
 + * for the Desktop Agent Panel.
@@ -47,6 +47,20 @@ index 0000000..ad57598
 +  | {
 +      id?: string;
 +      type: "get_state";
++    }
++  | {
++      id?: string;
++      type: "compact";
++      customInstructions?: string;
++    }
++  | {
++      id?: string;
++      type: "new_session";
++    }
++  | {
++      id?: string;
++      type: "steer";
++      message: string;
 +    };
 +
 +export interface PiRawEvent {
@@ -85,6 +99,7 @@ index 0000000..ad57598
 +      id: string | null;
 +      command: string | null;
 +      success: boolean;
++      data?: unknown;
 +      error: string | null;
 +      raw: PiRawEvent;
 +    }
@@ -115,7 +130,11 @@ index 0000000..ad57598
 +      }
 +    | { id?: string; type: "abort" }
 +    | { id?: string; type: "set_model"; provider?: string; modelId: string }
-+    | { id?: string; type: "get_state" },
++    | { id?: string; type: "get_state" }
++    | { id?: string; type: "compact"; customInstructions?: string }
++    | { id?: string; type: "new_session" }
++    | { id?: string; type: "steer"; message: string }
++    | (Record<string, unknown> & { id?: string; type: string }),
 +): string {
 +  if (command.type === "prompt") {
 +    const payload: Record<string, unknown> = {
@@ -138,9 +157,11 @@ index 0000000..ad57598
 +    };
 +    return `${JSON.stringify(payload)}\n`;
 +  }
++  const { id, type, ...rest } = command as Record<string, unknown> & { id?: string; type: string };
 +  const payload: Record<string, unknown> = {
-+    ...(command.id ? { id: command.id } : {}),
-+    type: command.type,
++    ...(id ? { id } : {}),
++    type,
++    ...rest,
 +  };
 +  return `${JSON.stringify(payload)}\n`;
 +}
@@ -334,6 +355,7 @@ index 0000000..ad57598
 +        id: typeof event.id === "string" ? event.id : null,
 +        command: typeof event.command === "string" ? event.command : null,
 +        success,
++        ...("data" in event ? { data: event.data } : {}),
 +        error,
 +        raw: event,
 +      };
@@ -806,4 +828,231 @@ index 0000000..ad57598
 +      reject(err instanceof Error ? err : new Error(String(err)));
 +    });
 +  });
++}
++
++export interface PiRpcSendIo {
++  send?: (line: string) => void | Promise<void>;
++  writeStdin?: (line: string) => void | Promise<void>;
++  piRpcSend?: (line: string) => void | Promise<void>;
++}
++
++export interface PiRpcRequestIo extends PiRpcSendIo {
++  onLine?: (handler: (line: string) => void) => () => void;
++  onPiRpcLine?: (handler: (line: string) => void) => () => void;
++}
++
++export interface PiRpcRequestOptions {
++  /** Optional explicit correlation id for the RPC command. */
++  id?: string;
++  /** Optional timeout in milliseconds before rejecting the request. */
++  timeoutMs?: number;
++  /** Optional AbortSignal to cancel waiting for the RPC response. */
++  signal?: AbortSignal;
++}
++
++let rpcRequestCounter = 0;
++
++function nextPiRpcRequestId(prefix = "rpc"): string {
++  rpcRequestCounter += 1;
++  return `${prefix}_${rpcRequestCounter}`;
++}
++
++function resolvePiRpcWriter(io: PiRpcSendIo): ((line: string) => void | Promise<void>) | null {
++  if (typeof io.piRpcSend === "function") {
++    return (line) => io.piRpcSend!(line);
++  }
++  if (typeof io.send === "function") {
++    return (line) => io.send!(line);
++  }
++  if (typeof io.writeStdin === "function") {
++    return (line) => io.writeStdin!(line);
++  }
++  return null;
++}
++
++function resolvePiRpcLineListener(
++  io: PiRpcRequestIo,
++): ((handler: (line: string) => void) => () => void) | null {
++  if (typeof io.onPiRpcLine === "function") {
++    return (handler) => io.onPiRpcLine!(handler);
++  }
++  if (typeof io.onLine === "function") {
++    return (handler) => io.onLine!(handler);
++  }
++  return null;
++}
++
++/**
++ * Send a Pi 1.0 RPC command with a unique `id`, listen for the matching
++ * `{ type: "response", id, success, data, error }` JSONL line via `PiRpcLineBuffer`,
++ * and resolve with `data` (or reject on `success === false`, timeout, or abort).
++ */
++export async function sendPiRpcRequest<T = Record<string, unknown>>(
++  io: PiRpcRequestIo,
++  command: Record<string, unknown> & { type: string; id?: string },
++  options?: PiRpcRequestOptions,
++): Promise<T> {
++  const writer = resolvePiRpcWriter(io);
++  const onLine = resolvePiRpcLineListener(io);
++  if (!writer || !onLine) {
++    throw new Error(
++      "sendPiRpcRequest requires a send/piRpcSend writer and an onLine/onPiRpcLine listener.",
++    );
++  }
++
++  const requestId =
++    (typeof options?.id === "string" && options.id) ||
++    (typeof command.id === "string" && command.id) ||
++    nextPiRpcRequestId(command.type || "rpc");
++  const lineBuffer = new PiRpcLineBuffer();
++
++  return new Promise<T>((resolve, reject) => {
++    let settled = false;
++    let unsubscribe: (() => void) | null = null;
++    let timer: ReturnType<typeof setTimeout> | null = null;
++
++    const cleanup = () => {
++      if (timer !== null) {
++        clearTimeout(timer);
++        timer = null;
++      }
++      if (unsubscribe) {
++        const unsub = unsubscribe;
++        unsubscribe = null;
++        unsub();
++      }
++      options?.signal?.removeEventListener("abort", handleAbort);
++    };
++
++    const fail = (err: Error) => {
++      if (settled) return;
++      settled = true;
++      cleanup();
++      reject(err);
++    };
++
++    const succeed = (data: T) => {
++      if (settled) return;
++      settled = true;
++      cleanup();
++      resolve(data);
++    };
++
++    const handleAbort = () => {
++      fail(new Error(`Pi RPC request aborted (${command.type})`));
++    };
++
++    if (options?.signal?.aborted) {
++      handleAbort();
++      return;
++    }
++
++    options?.signal?.addEventListener("abort", handleAbort, { once: true });
++
++    if (typeof options?.timeoutMs === "number" && options.timeoutMs > 0) {
++      timer = setTimeout(() => {
++        fail(new Error(`Pi RPC request timed out after ${options.timeoutMs}ms (${command.type})`));
++      }, options.timeoutMs);
++    }
++
++    unsubscribe = onLine((incoming: string) => {
++      if (settled) return;
++      let chunk = incoming;
++      if (!chunk.includes("\n")) {
++        const trimmed = chunk.trim();
++        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
++          try {
++            JSON.parse(trimmed);
++            chunk = `${chunk}\n`;
++          } catch {
++            // Incomplete JSON chunk; wait for remaining bytes or newline.
++          }
++        }
++      }
++
++      const events = lineBuffer.feed(chunk);
++      for (const ev of events) {
++        if (settled) return;
++        if (ev.kind !== "response") continue;
++        if (ev.id !== null && ev.id !== requestId) continue;
++        if (ev.id === null && ev.command !== null && ev.command !== command.type) continue;
++
++        if (!ev.success) {
++          fail(new Error(ev.error ?? `Pi RPC command '${command.type}' failed`));
++          return;
++        }
++
++        succeed((ev.data as T) ?? ({} as T));
++        return;
++      }
++    });
++
++    const frame = encodePiRpcCommand({
++      ...command,
++      id: requestId,
++    });
++
++    Promise.resolve(writer(frame)).catch((err: unknown) => {
++      fail(err instanceof Error ? err : new Error(String(err)));
++    });
++  });
++}
++
++/**
++ * Send `{"type": "compact", "customInstructions"?: ...}` via `sendPiRpcRequest`.
++ */
++export async function compactPiRpcSession<T = Record<string, unknown>>(
++  io: PiRpcRequestIo,
++  customInstructions?: string,
++  options?: PiRpcRequestOptions,
++): Promise<T> {
++  return sendPiRpcRequest<T>(
++    io,
++    {
++      type: "compact",
++      ...(customInstructions !== undefined ? { customInstructions } : {}),
++    },
++    options,
++  );
++}
++
++/**
++ * Send `{"type": "get_state"}` via `sendPiRpcRequest`.
++ */
++export async function getPiRpcState<T = Record<string, unknown>>(
++  io: PiRpcRequestIo,
++  options?: PiRpcRequestOptions,
++): Promise<T> {
++  return sendPiRpcRequest<T>(io, { type: "get_state" }, options);
++}
++
++/**
++ * Send `{"type": "new_session"}` via `sendPiRpcRequest`.
++ */
++export async function newPiRpcSession<T = Record<string, unknown>>(
++  io: PiRpcRequestIo,
++  options?: PiRpcRequestOptions,
++): Promise<T> {
++  return sendPiRpcRequest<T>(io, { type: "new_session" }, options);
++}
++
++/**
++ * Send `{"type": "steer", "message": ...}` to steer an active Pi 1.0 RPC turn.
++ */
++export async function steerPiRpcTurn(
++  io: PiRpcSendIo,
++  message: string,
++  options?: { id?: string },
++): Promise<string> {
++  const writer = resolvePiRpcWriter(io);
++  if (!writer) {
++    throw new Error("steerPiRpcTurn requires a send/piRpcSend writer.");
++  }
++  const frame = encodePiRpcCommand({
++    ...(options?.id ? { id: options.id } : {}),
++    type: "steer",
++    message,
++  });
++  await writer(frame);
++  return frame;
 +}

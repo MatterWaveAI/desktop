@@ -4,15 +4,28 @@ import type { AgentEvent } from "./loop";
 import {
   PI_PROVIDER,
   PiRpcLineBuffer,
+  compactPiRpcSession,
   createPiRpcAdapter,
   encodePiCommand,
   encodePiRpcCommand,
+  getPiRpcState,
   mapPiEventToAgentActions,
+  newPiRpcSession,
   parsePiEventLine,
   runPiRpcTurn,
+  sendPiRpcRequest,
+  steerPiRpcTurn,
   type PiNormalizedEvent,
 } from "./piRpc";
-import { hasPiRpcSupport, runDesktopPiTurn } from "./runtime";
+import {
+  compactPiRpcSession as runtimeCompactPiRpcSession,
+  getPiRpcState as runtimeGetPiRpcState,
+  hasPiRpcSupport,
+  newPiRpcSession as runtimeNewPiRpcSession,
+  runDesktopPiTurn,
+  sendPiRpcRequest as runtimeSendPiRpcRequest,
+  steerPiRpcTurn as runtimeSteerPiRpcTurn,
+} from "./runtime";
 
 describe("encodePiCommand", () => {
   it("encodes a prompt command as newline-terminated JSONL with MatterWave metadata", () => {
@@ -474,5 +487,203 @@ describe("runPiRpcTurn and Desktop runtime wiring", () => {
     expect(res.text).toBe("Spawned session reply");
     expect(res.tokens).toBe(42);
     expect(closeSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Pi 1.0 RPC session controls (sendPiRpcRequest, compactPiRpcSession, getPiRpcState, newPiRpcSession, steerPiRpcTurn)", () => {
+  function createMockRpcIo(
+    responder?: (cmd: Record<string, unknown>, emit: (chunk: string) => void) => void,
+  ) {
+    const sent: Record<string, unknown>[] = [];
+    const listeners = new Set<(line: string) => void>();
+    const emit = (chunk: string) => {
+      for (const listener of [...listeners]) {
+        listener(chunk);
+      }
+    };
+    const io = {
+      piRpcSend: (line: string) => {
+        const parsed = JSON.parse(line) as Record<string, unknown>;
+        sent.push(parsed);
+        responder?.(parsed, emit);
+      },
+      onPiRpcLine: (handler: (line: string) => void) => {
+        listeners.add(handler);
+        return () => listeners.delete(handler);
+      },
+    };
+    return { io, sent, listeners, emit };
+  }
+
+  it("re-exports session control helpers from runtime.ts", () => {
+    expect(runtimeSendPiRpcRequest).toBe(sendPiRpcRequest);
+    expect(runtimeCompactPiRpcSession).toBe(compactPiRpcSession);
+    expect(runtimeGetPiRpcState).toBe(getPiRpcState);
+    expect(runtimeNewPiRpcSession).toBe(newPiRpcSession);
+    expect(runtimeSteerPiRpcTurn).toBe(steerPiRpcTurn);
+  });
+
+  it("correlates sendPiRpcRequest by unique id across chunked JSONL frames and ignores unrelated responses", async () => {
+    const { io, sent, listeners } = createMockRpcIo((cmd, emit) => {
+      queueMicrotask(() => {
+        // Emit an unrelated response first
+        emit(`${JSON.stringify({ type: "response", id: "other_req", success: true, data: { ignored: true } })}\n`);
+        // Emit matching response split across two chunks
+        const matching = `${JSON.stringify({
+          type: "response",
+          id: cmd.id,
+          command: cmd.type,
+          success: true,
+          data: { ok: true, echoedType: cmd.type },
+        })}\n`;
+        emit(matching.slice(0, 18));
+        emit(matching.slice(18));
+      });
+    });
+
+    const data = await sendPiRpcRequest<{ ok: boolean; echoedType: string }>(io, {
+      type: "get_state",
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(typeof sent[0]!.id).toBe("string");
+    expect((sent[0]!.id as string).length).toBeGreaterThan(0);
+    expect(data).toEqual({ ok: true, echoedType: "get_state" });
+    expect(listeners.size).toBe(0);
+  });
+
+  it("compacts session via compactPiRpcSession with and without customInstructions", async () => {
+    const { io, sent } = createMockRpcIo((cmd, emit) => {
+      queueMicrotask(() => {
+        emit(
+          JSON.stringify({
+            type: "response",
+            id: cmd.id,
+            command: "compact",
+            success: true,
+            data: { summary: "Compacted 12 messages", tokensBefore: 4800, tokensAfter: 900 },
+          }),
+        );
+      });
+    });
+
+    const first = await compactPiRpcSession(io);
+    expect(sent[0]).toEqual({
+      id: expect.any(String),
+      type: "compact",
+    });
+    expect(first).toEqual({
+      summary: "Compacted 12 messages",
+      tokensBefore: 4800,
+      tokensAfter: 900,
+    });
+
+    const second = await compactPiRpcSession(io, "Preserve file paths and test commands", {
+      id: "compact_custom_1",
+    });
+    expect(sent[1]).toEqual({
+      id: "compact_custom_1",
+      type: "compact",
+      customInstructions: "Preserve file paths and test commands",
+    });
+    expect(second).toEqual({
+      summary: "Compacted 12 messages",
+      tokensBefore: 4800,
+      tokensAfter: 900,
+    });
+  });
+
+  it("queries state via getPiRpcState and resets session via newPiRpcSession", async () => {
+    const { io, sent } = createMockRpcIo((cmd, emit) => {
+      queueMicrotask(() => {
+        if (cmd.type === "get_state") {
+          emit(
+            JSON.stringify({
+              type: "response",
+              id: cmd.id,
+              command: "get_state",
+              success: true,
+              data: {
+                sessionId: "sess_abc",
+                model: { provider: "matterwave", id: "gpt-5.4" },
+                messageCount: 6,
+                isStreaming: false,
+              },
+            }),
+          );
+        } else if (cmd.type === "new_session") {
+          emit(
+            JSON.stringify({
+              type: "response",
+              id: cmd.id,
+              command: "new_session",
+              success: true,
+              data: { cancelled: false, sessionId: "sess_new" },
+            }),
+          );
+        }
+      });
+    });
+
+    const state = await getPiRpcState(io, { id: "state_1" });
+    expect(sent[0]).toEqual({ id: "state_1", type: "get_state" });
+    expect(state).toEqual({
+      sessionId: "sess_abc",
+      model: { provider: "matterwave", id: "gpt-5.4" },
+      messageCount: 6,
+      isStreaming: false,
+    });
+
+    const reset = await newPiRpcSession(io, { id: "new_1" });
+    expect(sent[1]).toEqual({ id: "new_1", type: "new_session" });
+    expect(reset).toEqual({ cancelled: false, sessionId: "sess_new" });
+  });
+
+  it("sends steer command via steerPiRpcTurn", async () => {
+    const { io, sent } = createMockRpcIo();
+    const frame = await steerPiRpcTurn(io, "Focus on unit tests first", { id: "steer_1" });
+    expect(frame).toBe('{"id":"steer_1","type":"steer","message":"Focus on unit tests first"}\n');
+    expect(sent).toEqual([
+      {
+        id: "steer_1",
+        type: "steer",
+        message: "Focus on unit tests first",
+      },
+    ]);
+  });
+
+  it("rejects sendPiRpcRequest when success === false, on timeout, or on AbortSignal", async () => {
+    // 1. success === false rejection
+    const { io: errorIo, listeners: errListeners } = createMockRpcIo((cmd, emit) => {
+      queueMicrotask(() => {
+        emit(
+          JSON.stringify({
+            type: "response",
+            id: cmd.id,
+            command: cmd.type,
+            success: false,
+            error: "Session is currently streaming",
+          }),
+        );
+      });
+    });
+
+    await expect(compactPiRpcSession(errorIo)).rejects.toThrow("Session is currently streaming");
+    expect(errListeners.size).toBe(0);
+
+    // 2. Timeout rejection
+    const { io: slowIo, listeners: slowListeners } = createMockRpcIo();
+    await expect(getPiRpcState(slowIo, { timeoutMs: 20 })).rejects.toThrow(
+      /timed out after 20ms/i,
+    );
+    expect(slowListeners.size).toBe(0);
+
+    // 3. AbortSignal rejection
+    const { io: abortIo, listeners: abortListeners } = createMockRpcIo();
+    const controller = new AbortController();
+    const pending = newPiRpcSession(abortIo, { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toThrow(/aborted/i);
+    expect(abortListeners.size).toBe(0);
   });
 });
