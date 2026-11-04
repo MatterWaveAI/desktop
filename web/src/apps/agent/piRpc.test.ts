@@ -470,7 +470,7 @@ describe("runPiRpcTurn and Desktop runtime wiring", () => {
             );
           });
         },
-        onLine: (handler) => {
+        onLine: (handler: (line: string) => void) => {
           lineHandler = handler;
           return () => {
             lineHandler = null;

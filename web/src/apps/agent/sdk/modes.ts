@@ -1,4 +1,4 @@
-// Vendored from @matterwave/sdk (typescript-sdk, agent-contract-1.1 cce162b), src/agent/modes.ts.
+// Vendored from @matterwave/sdk (typescript-sdk, develop), src/agent/modes.ts.
 // Do not edit here: change the SDK (or the Python SDK's contract.json it is
 // generated from), then copy the file again. sdk.test.ts checks the copy
 // against src-tauri/agent/contract.json, the file the Rust tool host reads.
@@ -244,4 +244,46 @@ export function systemPrompt(
     sections.push(FILES.heading.join("\n") + "\n\n" + trusted.map(contextBlock).join("\n\n"));
   }
   return sections.join("\n\n");
+}
+
+/** Inputs to `agentAvailability` for checking whether local agent tools can run. */
+export interface AgentAvailabilityInput {
+  signedIn?: boolean;
+  trusted?: boolean;
+  hasWorkspace?: boolean;
+  localAgentTools?: "yes" | "no" | "unknown" | boolean | null;
+  model?: { label?: string; id?: string; tools?: "yes" | "no" | "unknown" | boolean | null } | null;
+}
+
+/** Result of `agentAvailability`: whether agent mode can run, and the user-facing refusal reason when not. */
+export interface AgentAvailability {
+  available: boolean;
+  reason: string | null;
+}
+
+/**
+ * Whether local agent tools can run in the current session, and the sentence
+ * explaining why not when unavailable. Only explicit `"no"` / `false` verdicts
+ * refuse; `"unknown"` / `undefined` (a server or model list that does not say)
+ * is allowed through.
+ */
+export function agentAvailability(input: AgentAvailabilityInput = {}): AgentAvailability {
+  const no = (reason: string): AgentAvailability => ({ available: false, reason });
+  if (input.signedIn === false) return no("Sign in to use the agent.");
+  if (input.trusted === false) {
+    return no(
+      "The agent is off in an untrusted workspace: it reads files and runs commands. Trust the folder to use it.",
+    );
+  }
+  if (input.hasWorkspace === false) {
+    return no("Open a folder: the agent works inside a workspace folder.");
+  }
+  if (input.localAgentTools === "no" || input.localAgentTools === false) {
+    return no("Your organisation has turned off local agent tools.");
+  }
+  if (input.model && (input.model.tools === "no" || input.model.tools === false)) {
+    const label = input.model.label || input.model.id || "This model";
+    return no(`${label} cannot call tools. Pick a model that can to use the agent.`);
+  }
+  return { available: true, reason: null };
 }

@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { FolderOpenIcon, ShieldCheckIcon, SquareIcon } from "lucide-react";
-import { ApiError, apiFetch } from "../../lib/api";
+import {
+  ApiError,
+  apiFetch,
+  getReliabilityMetrics,
+  getRunDecisionTrail,
+  listConnectorCatalog,
+  listRunCheckpoints,
+  planTools,
+  replayRun,
+  resumeRun,
+} from "../../lib/api";
 import type { Conversation } from "../../types";
 import { Button } from "../../components/ui/button";
 import { SimpleSelect } from "../../components/ui/select";
@@ -474,6 +484,113 @@ export function AgentPanel(props: {
           await runPi(command.prompt);
         }
         break;
+      case "connectors": {
+        try {
+          const catalog = await listConnectorCatalog(command.category || undefined);
+          const items = catalog.data ?? catalog.connectors ?? [];
+          if (items.length === 0) {
+            say("Universal connectors: none matched.");
+          } else {
+            const summary = items
+              .map((c) => `${c.name ?? c.display_name ?? c.provider_id ?? c.id} (${c.category})`)
+              .join(", ");
+            say(`Universal connectors (${catalog.total}): ${summary}`);
+          }
+        } catch (err) {
+          say(`Connectors failed: ${hostError(err)}`);
+        }
+        break;
+      }
+      case "trail": {
+        if (!command.runId) {
+          say("Usage: /trail <runId> — inspect the decision trail DAG for a run.");
+          break;
+        }
+        try {
+          const trail = await getRunDecisionTrail(command.runId);
+          const labels = trail.nodes.map((n) => n.label).join(" -> ") || "no nodes";
+          say(
+            `Decision trail for ${trail.run_id}: ${trail.nodes.length} node(s), ${trail.edges.length} edge(s) (${labels}).`,
+          );
+        } catch (err) {
+          say(`Decision trail failed: ${hostError(err)}`);
+        }
+        break;
+      }
+      case "replay": {
+        if (!command.runId) {
+          say("Usage: /replay <runId> [strict|simulated|counterfactual] — replay a recorded run.");
+          break;
+        }
+        try {
+          const res = await replayRun(command.runId, command.mode);
+          const replayId = res.replay_id ?? res.replay_run_id ?? command.runId;
+          say(
+            `Replay ${replayId} (${res.mode}): ${res.differences.length} difference(s).`,
+          );
+        } catch (err) {
+          say(`Replay failed: ${hostError(err)}`);
+        }
+        break;
+      }
+      case "checkpoints": {
+        if (!command.runId) {
+          say("Usage: /checkpoints <runId> [checkpointId] — list or resume run checkpoints.");
+          break;
+        }
+        try {
+          if (command.checkpointId) {
+            const resumed = await resumeRun(command.runId, command.checkpointId);
+            const id = resumed.run_id ?? resumed.resumed_run_id ?? command.runId;
+            const cp = resumed.resumed_from_checkpoint_id ?? resumed.checkpoint_id ?? command.checkpointId;
+            say(`Resumed run ${id} from checkpoint ${cp} (step ${resumed.resumed_from_step}).`);
+          } else {
+            const list = await listRunCheckpoints(command.runId);
+            const items = list.data ?? list.checkpoints ?? [];
+            if (items.length === 0) {
+              say(`Run checkpoints for ${list.run_id}: none recorded.`);
+            } else {
+              const summary = items
+                .map((cp) => `${cp.checkpoint_id} (step ${cp.step_index})`)
+                .join(", ");
+              say(`Run checkpoints for ${list.run_id}: ${summary}`);
+            }
+          }
+        } catch (err) {
+          say(`Checkpoints failed: ${hostError(err)}`);
+        }
+        break;
+      }
+      case "reliability": {
+        try {
+          const metrics = await getReliabilityMetrics(command.agentId || undefined);
+          const sr = ((metrics.sr ?? metrics.success_rate ?? 0) * 100).toFixed(1);
+          const cr = ((metrics.cr ?? metrics.completion_rate ?? 0) * 100).toFixed(1);
+          const tcl = metrics.tcl ?? metrics.tool_call_latency_ms ?? 0;
+          const wct = metrics.wct ?? metrics.wall_clock_time_ms ?? 0;
+          const target = metrics.agent_id ? `agent ${metrics.agent_id}` : "all agents";
+          say(
+            `Reliability (${target}, ${metrics.total_runs} runs): SR ${sr}%, CR ${cr}%, TCL ${tcl} ms, WCT ${wct} ms.`,
+          );
+        } catch (err) {
+          say(`Reliability failed: ${hostError(err)}`);
+        }
+        break;
+      }
+      case "plan-tools": {
+        if (!command.goal) {
+          say("Usage: /plan-tools <goal> — generate a multi-step tool execution plan.");
+          break;
+        }
+        try {
+          const plan = await planTools(command.goal);
+          const chain = plan.steps.map((s) => s.tool_name).join(" -> ") || "no steps";
+          say(`Tool plan ${plan.plan_id} (${plan.steps.length} step(s)): ${chain}.`);
+        } catch (err) {
+          say(`Tool plan failed: ${hostError(err)}`);
+        }
+        break;
+      }
       case "unknown":
         say(`/${command.name} is not an agent command. ${AGENT_HELP}`);
         break;

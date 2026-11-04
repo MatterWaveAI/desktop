@@ -1,0 +1,55 @@
+diff --git a/src/lib/api.ts b/src/lib/api.ts
+index f6de218..da3edcc 100644
+--- a/src/lib/api.ts
++++ b/src/lib/api.ts
+@@ -300,3 +300,50 @@ export function isSuspended(err: unknown): boolean {
+ 
+ /** Fired on `window` when any API call answers 403 suspended; Boot listens. */
+ export const SUSPENDED_EVENT = "mw:suspended";
++
++export {
++  enforceOidcClaims,
++  evaluateGuardrails,
++  getOidcConfig,
++  getReliabilityMetrics,
++  getRunDecisionTrail,
++  listConnectorCatalog,
++  listRunCheckpoints,
++  planTools,
++  proxyOAuthRequest,
++  registerOAuthAuthenticator,
++  replayRun,
++  resumeRun,
++  syncAgentKeyOidc,
++  type A2ALimits,
++  type A2APermissionEnvelope,
++  type CheckpointList,
++  type CheckpointRecord,
++  type ConnectorCatalogEntry,
++  type ConnectorCatalogList,
++  type CredentialProxyResponse,
++  type DecisionEdge,
++  type DecisionNode,
++  type DecisionTrail,
++  type DecisionTrailStatistics,
++  type EnforceClaimsResult,
++  type EnforceOidcClaimsParams,
++  type EvaluateGuardrailsOptions,
++  type GuardrailEvaluation,
++  type GuardrailType,
++  type GuardrailViolation,
++  type OAuthAuthenticator,
++  type OidcConfig,
++  type OidcSyncResult,
++  type ProxyOAuthRequestInput,
++  type ProxyOAuthRequestOptions,
++  type RegisterOAuthAuthenticatorParams,
++  type ReliabilityMetrics,
++  type ReplayDifference,
++  type ReplayMode,
++  type ReplayRunResult,
++  type ResumeRunResult,
++  type ToolPlan,
++  type ToolPlanStep,
++} from "./matterwaveClient";
++

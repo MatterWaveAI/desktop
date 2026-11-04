@@ -1,6 +1,6 @@
 diff --git a/src/apps/agent/piRpc.test.ts b/src/apps/agent/piRpc.test.ts
 new file mode 100644
-index 0000000..92ab39e
+index 0000000..35623db
 --- /dev/null
 +++ b/src/apps/agent/piRpc.test.ts
 @@ -0,0 +1,785 @@
@@ -476,7 +476,7 @@ index 0000000..92ab39e
 +            );
 +          });
 +        },
-+        onLine: (handler) => {
++        onLine: (handler: (line: string) => void) => {
 +          lineHandler = handler;
 +          return () => {
 +            lineHandler = null;

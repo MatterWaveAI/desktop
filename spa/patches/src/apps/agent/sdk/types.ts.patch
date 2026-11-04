@@ -1,10 +1,10 @@
 diff --git a/src/apps/agent/sdk/types.ts b/src/apps/agent/sdk/types.ts
 new file mode 100644
-index 0000000..1ea0be1
+index 0000000..6721a6e
 --- /dev/null
 +++ b/src/apps/agent/sdk/types.ts
 @@ -0,0 +1,145 @@
-+// Vendored from @matterwave/sdk (typescript-sdk, agent-contract-1.1 cce162b), src/agent/types.ts.
++// Vendored from @matterwave/sdk (typescript-sdk, develop), src/agent/types.ts.
 +// Do not edit here: change the SDK (or the Python SDK's contract.json it is
 +// generated from), then copy the file again. sdk.test.ts checks the copy
 +// against src-tauri/agent/contract.json, the file the Rust tool host reads.

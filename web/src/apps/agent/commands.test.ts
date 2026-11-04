@@ -87,6 +87,64 @@ describe("agent slash commands", () => {
     expect(AGENT_HELP).toContain("/pi-new");
     expect(AGENT_HELP).toContain("/pi-status");
   });
+
+  it("reads /connectors, /trail, /replay, /checkpoints, /reliability, and /plan-tools and documents them in AGENT_HELP", () => {
+    expect(parseAgentCommand("/connectors")).toEqual({
+      kind: "connectors",
+      category: "",
+    });
+    expect(parseAgentCommand("/connectors developer")).toEqual({
+      kind: "connectors",
+      category: "developer",
+    });
+    expect(parseAgentCommand("/trail run_42")).toEqual({
+      kind: "trail",
+      runId: "run_42",
+    });
+    expect(parseAgentCommand("/replay run_42")).toEqual({
+      kind: "replay",
+      runId: "run_42",
+      mode: "simulated",
+    });
+    expect(parseAgentCommand("/replay run_42 counterfactual")).toEqual({
+      kind: "replay",
+      runId: "run_42",
+      mode: "counterfactual",
+    });
+    expect(parseAgentCommand("/replay run_42 STRICT")).toEqual({
+      kind: "replay",
+      runId: "run_42",
+      mode: "strict",
+    });
+    expect(parseAgentCommand("/checkpoints run_42")).toEqual({
+      kind: "checkpoints",
+      runId: "run_42",
+      checkpointId: "",
+    });
+    expect(parseAgentCommand("/checkpoints run_42 cp_7")).toEqual({
+      kind: "checkpoints",
+      runId: "run_42",
+      checkpointId: "cp_7",
+    });
+    expect(parseAgentCommand("/reliability")).toEqual({
+      kind: "reliability",
+      agentId: "",
+    });
+    expect(parseAgentCommand("/reliability agent_coder")).toEqual({
+      kind: "reliability",
+      agentId: "agent_coder",
+    });
+    expect(parseAgentCommand("/plan-tools Fix failing tests and open PR")).toEqual({
+      kind: "plan-tools",
+      goal: "Fix failing tests and open PR",
+    });
+    expect(AGENT_HELP).toContain("/connectors [category]");
+    expect(AGENT_HELP).toContain("/trail <runId>");
+    expect(AGENT_HELP).toContain("/replay <runId>");
+    expect(AGENT_HELP).toContain("/checkpoints <runId>");
+    expect(AGENT_HELP).toContain("/reliability [agentId]");
+    expect(AGENT_HELP).toContain("/plan-tools <goal>");
+  });
 });
 
 describe("@path mentions", () => {

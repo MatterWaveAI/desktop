@@ -7,6 +7,9 @@ import { MODE_NAMES, type ModeName } from "./sdk/types";
 export const PI_ENGINE_NAMES = ["auto", "pi", "builtin"] as const;
 export type PiEngineName = (typeof PI_ENGINE_NAMES)[number];
 
+export const REPLAY_MODES = ["strict", "simulated", "counterfactual"] as const;
+export type ReplayModeName = (typeof REPLAY_MODES)[number];
+
 export type AgentSlashCommand =
   | { kind: "approval-mode"; mode: ModeName | null; given: string }
   | { kind: "restore"; id: number | null }
@@ -19,6 +22,12 @@ export type AgentSlashCommand =
   | { kind: "pi-fork"; entryId: string }
   | { kind: "pi-new" }
   | { kind: "pi-status" }
+  | { kind: "connectors"; category: string }
+  | { kind: "trail"; runId: string }
+  | { kind: "replay"; runId: string; mode: ReplayModeName }
+  | { kind: "checkpoints"; runId: string; checkpointId: string }
+  | { kind: "reliability"; agentId: string }
+  | { kind: "plan-tools"; goal: string }
   | { kind: "unknown"; name: string };
 
 export type AgentCommand = AgentSlashCommand;
@@ -65,6 +74,27 @@ export function parseAgentCommand(text: string): AgentSlashCommand | null {
       return { kind: "pi-new" };
     case "pi-status":
       return { kind: "pi-status" };
+    case "connectors":
+      return { kind: "connectors", category: arg };
+    case "trail":
+      return { kind: "trail", runId: arg };
+    case "replay": {
+      const runId = (rest[0] ?? "").trim();
+      const rawMode = (rest[1] ?? "").trim().toLowerCase();
+      const mode: ReplayModeName = (REPLAY_MODES as readonly string[]).includes(rawMode)
+        ? (rawMode as ReplayModeName)
+        : "simulated";
+      return { kind: "replay", runId, mode };
+    }
+    case "checkpoints": {
+      const runId = (rest[0] ?? "").trim();
+      const checkpointId = (rest[1] ?? "").trim();
+      return { kind: "checkpoints", runId, checkpointId };
+    }
+    case "reliability":
+      return { kind: "reliability", agentId: arg };
+    case "plan-tools":
+      return { kind: "plan-tools", goal: arg };
     default:
       return { kind: "unknown", name };
   }
@@ -78,6 +108,9 @@ export const AGENT_HELP =
   "/pi <prompt> runs a prompt through the Pi 1.0 RPC engine, /pi-engine [auto|pi|builtin] shows or switches the agent engine, " +
   "/pi-model [model] shows or sets the Pi 1.0 model, /pi-compact [instructions] compacts the Pi 1.0 session, " +
   "/pi-fork [entryId] forks the Pi 1.0 session, /pi-new starts a new Pi 1.0 session, and /pi-status shows Pi 1.0 engine status. " +
+  "/connectors [category] lists universal connectors, /trail <runId> inspects a run decision trail, " +
+  "/replay <runId> [strict|simulated|counterfactual] replays a run, /checkpoints <runId> [checkpointId] lists or resumes run checkpoints, " +
+  "/reliability [agentId] shows agent reliability metrics, and /plan-tools <goal> generates a tool execution plan. " +
   "@path attaches a file from the folder to your message.";
 
 /** What /init asks the agent to do. It goes through approval like any write (and in auto-edit, MATTERWAVE.md still asks). */

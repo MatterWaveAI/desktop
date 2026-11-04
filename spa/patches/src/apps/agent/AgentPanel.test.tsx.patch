@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/AgentPanel.test.tsx b/src/apps/agent/AgentPanel.test.tsx
 new file mode 100644
-index 0000000..9d3af50
+index 0000000..68ec791
 --- /dev/null
 +++ b/src/apps/agent/AgentPanel.test.tsx
-@@ -0,0 +1,438 @@
+@@ -0,0 +1,564 @@
 +import { act } from "react";
 +import { createRoot, type Root } from "react-dom/client";
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -372,6 +372,132 @@ index 0000000..9d3af50
 +      }),
 +    );
 +    expect(q("[data-mw-agent-usage]")!.textContent).toContain("77 tokens");
++  });
++
++  it("executes /connectors, /trail, /replay, /checkpoints, /reliability, and /plan-tools from the composer", async () => {
++    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
++      const url = String(input);
++      if (url.startsWith("/api/v1/connectors/catalog")) {
++        return new Response(
++          JSON.stringify({
++            data: [{ provider_id: "github", name: "GitHub", category: "developer", auth_types: ["oauth2"] }],
++            total: 1,
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } },
++        );
++      }
++      if (url === "/api/v1/runs/run_1/decision-trail") {
++        return new Response(
++          JSON.stringify({
++            run_id: "run_1",
++            nodes: [{ id: "n1", label: "read_file" }],
++            edges: [],
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } },
++        );
++      }
++      if (url === "/api/v1/runs/run_1/replay" && init?.method === "POST") {
++        return new Response(
++          JSON.stringify({
++            replay_id: "rep_1",
++            run_id: "run_1",
++            mode: "counterfactual",
++            differences: [{ field: "output", original: "a", replayed: "b" }],
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } },
++        );
++      }
++      if (url === "/api/v1/runs/run_1/checkpoints") {
++        return new Response(
++          JSON.stringify({
++            run_id: "run_1",
++            data: [{ checkpoint_id: "cp_1", run_id: "run_1", step_index: 2 }],
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } },
++        );
++      }
++      if (url === "/api/v1/runs/run_1/resume" && init?.method === "POST") {
++        return new Response(
++          JSON.stringify({
++            run_id: "run_2",
++            resumed_from_checkpoint_id: "cp_1",
++            resumed_from_step: 2,
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } },
++        );
++      }
++      if (url.startsWith("/api/v1/reliability/metrics")) {
++        return new Response(
++          JSON.stringify({
++            agent_id: "agent_1",
++            total_runs: 10,
++            sr: 0.9,
++            cr: 1.0,
++            tcl: 40,
++            wct: 800,
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } },
++        );
++      }
++      if (url === "/api/v1/tools/plan" && init?.method === "POST") {
++        return new Response(
++          JSON.stringify({
++            plan_id: "plan_1",
++            steps: [{ tool_name: "grep", description: "Search files", depends_on: [] }],
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } },
++        );
++      }
++      return new Response(JSON.stringify({}), { status: 200 });
++    });
++    vi.stubGlobal("fetch", fetchMock);
++
++    const host = new FakeHost();
++    const model = new ScriptedModel([reply("unused")]);
++    await mount(host, model);
++    await vi.waitFor(() => expect(q("[data-mw-agent-root]")!.textContent).toBe("/work/demo"));
++
++    await type("/connectors developer");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Universal connectors (1): GitHub (developer)"),
++    );
++
++    await type("/trail run_1");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Decision trail for run_1: 1 node(s), 0 edge(s) (read_file)."),
++    );
++
++    await type("/replay run_1 counterfactual");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Replay rep_1 (counterfactual): 1 difference(s)."),
++    );
++
++    await type("/checkpoints run_1");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Run checkpoints for run_1: cp_1 (step 2)"),
++    );
++
++    await type("/checkpoints run_1 cp_1");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Resumed run run_2 from checkpoint cp_1 (step 2)."),
++    );
++
++    await type("/reliability agent_1");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Reliability (agent agent_1, 10 runs): SR 90.0%, CR 100.0%, TCL 40 ms, WCT 800 ms."),
++    );
++
++    await type("/plan-tools Search for TODOs");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain("Tool plan plan_1 (1 step(s)): grep."),
++    );
 +  });
 +});
 +
