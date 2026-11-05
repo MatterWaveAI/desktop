@@ -1,13 +1,13 @@
 diff --git a/src/apps/agent/AgentPanel.test.tsx b/src/apps/agent/AgentPanel.test.tsx
 new file mode 100644
-index 0000000..68ec791
+index 0000000..bacbdbf
 --- /dev/null
 +++ b/src/apps/agent/AgentPanel.test.tsx
-@@ -0,0 +1,564 @@
+@@ -0,0 +1,624 @@
 +import { act } from "react";
 +import { createRoot, type Root } from "react-dom/client";
 +import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-+import { ApiError } from "../../lib/api";
++import { ApiError, GRT_HF_MODELS, GRT_HF_ORG, GRT_HF_ORG_URL } from "../../lib/api";
 +import { STREAM_ERROR_COPY } from "../chat/streamErrors";
 +import { AgentPanel } from "./AgentPanel";
 +import { loadMode, saveMode } from "./mode";
@@ -497,6 +497,66 @@ index 0000000..68ec791
 +    await press("Enter");
 +    await vi.waitFor(() =>
 +      expect(container!.textContent).toContain("Tool plan plan_1 (1 step(s)): grep."),
++    );
++  });
++
++  it("executes /rerank and /tts from the composer and exports all 9 MatterWaveAI GRT HF models", async () => {
++    expect(GRT_HF_ORG).toBe("MatterWaveAI");
++    expect(GRT_HF_ORG_URL).toBe("https://huggingface.co/MatterWaveAI");
++    expect(GRT_HF_MODELS).toHaveLength(9);
++
++    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
++      const url = String(input);
++      if (url === "/v1/rerank" && init?.method === "POST") {
++        return new Response(
++          JSON.stringify({
++            model: "MatterWaveAI/grt-30m-reranker",
++            results: [
++              { index: 1, relevance_score: 0.912, document: "doc two" },
++              { index: 0, relevance_score: 0.341, document: "doc one" },
++            ],
++          }),
++          { status: 200, headers: { "Content-Type": "application/json" } },
++        );
++      }
++      if (url === "/v1/audio/speech" && init?.method === "POST") {
++        return new Response(
++          JSON.stringify({
++            model: "MatterWaveAI/grt-30m-tts",
++            voice: "aurora",
++            format: "wav",
++            sample_rate_hz: 24000,
++            audio_base64: "UklGRg==",
++          }),
++          {
++            status: 200,
++            headers: { "Content-Type": "application/json" },
++          },
++        );
++      }
++      return new Response(JSON.stringify({}), { status: 200 });
++    });
++    vi.stubGlobal("fetch", fetchMock);
++
++    const host = new FakeHost();
++    const model = new ScriptedModel([reply("unused")]);
++    await mount(host, model);
++    await vi.waitFor(() => expect(q("[data-mw-agent-root]")!.textContent).toBe("/work/demo"));
++
++    await type("/rerank grt | doc one ; doc two");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain(
++        "Rerank (MatterWaveAI/grt-30m-reranker, 2 docs): [#1 score=0.9120] doc two; [#0 score=0.3410] doc one",
++      ),
++    );
++
++    await type("/tts Synthesize hello");
++    await press("Enter");
++    await vi.waitFor(() =>
++      expect(container!.textContent).toContain(
++        "Synthesized speech (MatterWaveAI/grt-30m-tts, voice=aurora, 24000 Hz, wav).",
++      ),
 +    );
 +  });
 +});

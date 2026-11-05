@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/commands.test.ts b/src/apps/agent/commands.test.ts
 new file mode 100644
-index 0000000..efb3478
+index 0000000..f0e1e66
 --- /dev/null
 +++ b/src/apps/agent/commands.test.ts
-@@ -0,0 +1,197 @@
+@@ -0,0 +1,225 @@
 +import { describe, expect, it } from "vitest";
 +import { AGENT_HELP, MAX_MENTIONS, mentionsIn, parseAgentCommand, withAttachments } from "./commands";
 +import { agentAvailability, activeModel } from "./availability";
@@ -150,6 +150,34 @@ index 0000000..efb3478
 +    expect(AGENT_HELP).toContain("/checkpoints <runId>");
 +    expect(AGENT_HELP).toContain("/reliability [agentId]");
 +    expect(AGENT_HELP).toContain("/plan-tools <goal>");
++  });
++
++  it("reads /rerank and /tts and documents them in AGENT_HELP", () => {
++    expect(parseAgentCommand("/rerank grt architecture | doc one ; doc two ; doc three")).toEqual({
++      kind: "rerank",
++      query: "grt architecture",
++      documents: ["doc one", "doc two", "doc three"],
++    });
++    expect(parseAgentCommand("/rerank missing separator")).toEqual({
++      kind: "rerank",
++      query: "",
++      documents: [],
++    });
++    expect(parseAgentCommand("/rerank")).toEqual({
++      kind: "rerank",
++      query: "",
++      documents: [],
++    });
++    expect(parseAgentCommand("/tts Hello from MatterWaveAI GRT")).toEqual({
++      kind: "tts",
++      text: "Hello from MatterWaveAI GRT",
++    });
++    expect(parseAgentCommand("/tts")).toEqual({
++      kind: "tts",
++      text: "",
++    });
++    expect(AGENT_HELP).toContain("/rerank <query> | <doc1> ; <doc2>");
++    expect(AGENT_HELP).toContain("/tts <text>");
 +  });
 +});
 +

@@ -1,8 +1,8 @@
 diff --git a/src/lib/api.ts b/src/lib/api.ts
-index f6de218..da3edcc 100644
+index f6de218..01f462f 100644
 --- a/src/lib/api.ts
 +++ b/src/lib/api.ts
-@@ -300,3 +300,50 @@ export function isSuspended(err: unknown): boolean {
+@@ -300,3 +300,61 @@ export function isSuspended(err: unknown): boolean {
  
  /** Fired on `window` when any API call answers 403 suspended; Boot listens. */
  export const SUSPENDED_EVENT = "mw:suspended";
@@ -10,17 +10,23 @@ index f6de218..da3edcc 100644
 +export {
 +  enforceOidcClaims,
 +  evaluateGuardrails,
++  getGrtSuite,
 +  getOidcConfig,
 +  getReliabilityMetrics,
 +  getRunDecisionTrail,
++  GRT_HF_MODELS,
++  GRT_HF_ORG,
++  GRT_HF_ORG_URL,
 +  listConnectorCatalog,
 +  listRunCheckpoints,
 +  planTools,
 +  proxyOAuthRequest,
 +  registerOAuthAuthenticator,
 +  replayRun,
++  rerank,
 +  resumeRun,
 +  syncAgentKeyOidc,
++  synthesizeSpeech,
 +  type A2ALimits,
 +  type A2APermissionEnvelope,
 +  type CheckpointList,
@@ -35,6 +41,8 @@ index f6de218..da3edcc 100644
 +  type EnforceClaimsResult,
 +  type EnforceOidcClaimsParams,
 +  type EvaluateGuardrailsOptions,
++  type GrtModelEntry,
++  type GrtSuiteCatalog,
 +  type GuardrailEvaluation,
 +  type GuardrailType,
 +  type GuardrailViolation,
@@ -48,7 +56,10 @@ index f6de218..da3edcc 100644
 +  type ReplayDifference,
 +  type ReplayMode,
 +  type ReplayRunResult,
++  type RerankItem,
++  type RerankResult,
 +  type ResumeRunResult,
++  type SpeechSynthesisResult,
 +  type ToolPlan,
 +  type ToolPlanStep,
 +} from "./matterwaveClient";

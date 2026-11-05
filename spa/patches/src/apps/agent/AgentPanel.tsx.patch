@@ -1,9 +1,9 @@
 diff --git a/src/apps/agent/AgentPanel.tsx b/src/apps/agent/AgentPanel.tsx
 new file mode 100644
-index 0000000..8e630c4
+index 0000000..d076ee2
 --- /dev/null
 +++ b/src/apps/agent/AgentPanel.tsx
-@@ -0,0 +1,908 @@
+@@ -0,0 +1,950 @@
 +import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 +import { FolderOpenIcon, ShieldCheckIcon, SquareIcon } from "lucide-react";
 +import {
@@ -15,7 +15,9 @@ index 0000000..8e630c4
 +  listRunCheckpoints,
 +  planTools,
 +  replayRun,
++  rerank,
 +  resumeRun,
++  synthesizeSpeech,
 +} from "../../lib/api";
 +import type { Conversation } from "../../types";
 +import { Button } from "../../components/ui/button";
@@ -594,6 +596,46 @@ index 0000000..8e630c4
 +          say(`Tool plan ${plan.plan_id} (${plan.steps.length} step(s)): ${chain}.`);
 +        } catch (err) {
 +          say(`Tool plan failed: ${hostError(err)}`);
++        }
++        break;
++      }
++      case "rerank": {
++        if (!command.query || command.documents.length === 0) {
++          say(
++            "Usage: /rerank <query> | <doc1> ; <doc2> — rerank candidate documents with MatterWaveAI/grt-30m-reranker.",
++          );
++          break;
++        }
++        try {
++          const res = await rerank(command.query, command.documents);
++          const items = res.results ?? res.data ?? [];
++          const summary = items
++            .map((item) => {
++              const docText =
++                typeof item.document === "string"
++                  ? item.document
++                  : (item.document?.text ?? `doc#${item.index}`);
++              return `[#${item.index} score=${item.relevance_score.toFixed(4)}] ${docText}`;
++            })
++            .join("; ");
++          say(`Rerank (${res.model}, ${items.length} docs): ${summary}`);
++        } catch (err) {
++          say(`Rerank failed: ${hostError(err)}`);
++        }
++        break;
++      }
++      case "tts": {
++        if (!command.text) {
++          say("Usage: /tts <text> — synthesize speech audio with MatterWaveAI/grt-30m-tts.");
++          break;
++        }
++        try {
++          const res = await synthesizeSpeech(command.text);
++          say(
++            `Synthesized speech (${res.model}, voice=${res.voice}, ${res.sample_rate_hz} Hz, ${res.format}).`,
++          );
++        } catch (err) {
++          say(`Speech synthesis failed: ${hostError(err)}`);
 +        }
 +        break;
 +      }

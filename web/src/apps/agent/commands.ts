@@ -28,6 +28,8 @@ export type AgentSlashCommand =
   | { kind: "checkpoints"; runId: string; checkpointId: string }
   | { kind: "reliability"; agentId: string }
   | { kind: "plan-tools"; goal: string }
+  | { kind: "rerank"; query: string; documents: string[] }
+  | { kind: "tts"; text: string }
   | { kind: "unknown"; name: string };
 
 export type AgentCommand = AgentSlashCommand;
@@ -95,6 +97,20 @@ export function parseAgentCommand(text: string): AgentSlashCommand | null {
       return { kind: "reliability", agentId: arg };
     case "plan-tools":
       return { kind: "plan-tools", goal: arg };
+    case "rerank": {
+      if (!arg.includes("|")) {
+        return { kind: "rerank", query: "", documents: [] };
+      }
+      const [qPart = "", docsPart = ""] = arg.split("|", 2);
+      const query = qPart.trim();
+      const documents = docsPart
+        .split(";")
+        .map((d) => d.trim())
+        .filter(Boolean);
+      return { kind: "rerank", query, documents };
+    }
+    case "tts":
+      return { kind: "tts", text: arg };
     default:
       return { kind: "unknown", name };
   }
@@ -110,7 +126,9 @@ export const AGENT_HELP =
   "/pi-fork [entryId] forks the Pi 1.0 session, /pi-new starts a new Pi 1.0 session, and /pi-status shows Pi 1.0 engine status. " +
   "/connectors [category] lists universal connectors, /trail <runId> inspects a run decision trail, " +
   "/replay <runId> [strict|simulated|counterfactual] replays a run, /checkpoints <runId> [checkpointId] lists or resumes run checkpoints, " +
-  "/reliability [agentId] shows agent reliability metrics, and /plan-tools <goal> generates a tool execution plan. " +
+  "/reliability [agentId] shows agent reliability metrics, /plan-tools <goal> generates a tool execution plan, " +
+  "/rerank <query> | <doc1> ; <doc2> reranks candidate documents with MatterWaveAI/grt-30m-reranker, " +
+  "and /tts <text> synthesizes speech audio with MatterWaveAI/grt-30m-tts. " +
   "@path attaches a file from the folder to your message.";
 
 /** What /init asks the agent to do. It goes through approval like any write (and in auto-edit, MATTERWAVE.md still asks). */

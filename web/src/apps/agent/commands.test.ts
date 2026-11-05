@@ -145,6 +145,34 @@ describe("agent slash commands", () => {
     expect(AGENT_HELP).toContain("/reliability [agentId]");
     expect(AGENT_HELP).toContain("/plan-tools <goal>");
   });
+
+  it("reads /rerank and /tts and documents them in AGENT_HELP", () => {
+    expect(parseAgentCommand("/rerank grt architecture | doc one ; doc two ; doc three")).toEqual({
+      kind: "rerank",
+      query: "grt architecture",
+      documents: ["doc one", "doc two", "doc three"],
+    });
+    expect(parseAgentCommand("/rerank missing separator")).toEqual({
+      kind: "rerank",
+      query: "",
+      documents: [],
+    });
+    expect(parseAgentCommand("/rerank")).toEqual({
+      kind: "rerank",
+      query: "",
+      documents: [],
+    });
+    expect(parseAgentCommand("/tts Hello from MatterWaveAI GRT")).toEqual({
+      kind: "tts",
+      text: "Hello from MatterWaveAI GRT",
+    });
+    expect(parseAgentCommand("/tts")).toEqual({
+      kind: "tts",
+      text: "",
+    });
+    expect(AGENT_HELP).toContain("/rerank <query> | <doc1> ; <doc2>");
+    expect(AGENT_HELP).toContain("/tts <text>");
+  });
 });
 
 describe("@path mentions", () => {
